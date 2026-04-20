@@ -3,62 +3,56 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-export default function Home() {
-  const [wallet1, setWallet1] = useState("");
-  const [wallet2, setWallet2] = useState("");
+export default function HomePage() {
   const router = useRouter();
 
-  const handleCompare = () => {
-    console.log("clicked", wallet1, wallet2);
-    alert("clicked");
+  const [wallet1, setWallet1] = useState("");
+  const [wallet2, setWallet2] = useState("");
 
+  function handleCompare() {
     if (!wallet1 || !wallet2) return;
 
-    router.push(`/compare?wallet1=${wallet1}&wallet2=${wallet2}`);
-  };
+    router.push(
+      `/compare?wallet1=${encodeURIComponent(wallet1)}&wallet2=${encodeURIComponent(wallet2)}`
+    );
+  }
 
   return (
-    <main
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        height: "100vh",
-        gap: "24px",
-        fontFamily: "sans-serif",
-      }}
-    >
-      <h1 style={{ fontSize: "32px" }}>Collector Chemistry</h1>
+    <div className="min-h-screen flex items-center justify-center px-6">
+      <div className="w-full max-w-md">
+        <h1 className="text-2xl font-semibold mb-2 text-center">
+          Collector Chemistry
+        </h1>
 
-      <p style={{ opacity: 0.6 }}>
-        Compare two wallets. See what connects them.
-      </p>
+        <p className="text-sm text-neutral-500 text-center mb-8">
+          Compare two wallets and see where their taste overlaps
+        </p>
 
-      <div style={{ display: "flex", gap: "12px" }}>
-        <input
-          placeholder="Wallet 1"
-          value={wallet1}
-          onChange={(e) => setWallet1(e.target.value)}
-          style={{ padding: "10px", width: "240px" }}
-        />
-        <input
-          placeholder="Wallet 2"
-          value={wallet2}
-          onChange={(e) => setWallet2(e.target.value)}
-          style={{ padding: "10px", width: "240px" }}
-        />
+        <div className="space-y-4">
+          <input
+            type="text"
+            placeholder="Wallet one (0x… or ENS)"
+            value={wallet1}
+            onChange={(e) => setWallet1(e.target.value)}
+            className="w-full border border-neutral-200 rounded-lg px-4 py-3 text-sm"
+          />
+
+          <input
+            type="text"
+            placeholder="Wallet two (0x… or ENS)"
+            value={wallet2}
+            onChange={(e) => setWallet2(e.target.value)}
+            className="w-full border border-neutral-200 rounded-lg px-4 py-3 text-sm"
+          />
+
+          <button
+            onClick={handleCompare}
+            className="w-full bg-black text-white rounded-lg py-3 text-sm"
+          >
+            Compare
+          </button>
+        </div>
       </div>
-
-      <button
-        onClick={handleCompare}
-        style={{
-          padding: "10px 20px",
-          cursor: "pointer",
-        }}
-      >
-        Compare
-      </button>
-    </main>
+    </div>
   );
 }
