@@ -1,804 +1,977 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { FormEvent, useMemo, useState } from "react";
+import "./compare.css";
 
-type OwnedNft = {
-  contractAddress: string;
+type NFT = {
+  contract: {
+    address: string;
+    name?: string;
+  };
   tokenId: string;
-  collectionName: string;
-  nftName: string;
-  imageUrl: string;
-  artist: string;
+  title?: string;
+  description?: string;
+  image?: {
+    cachedUrl?: string;
+    thumbnailUrl?: string;
+    pngUrl?: string;
+    originalUrl?: string;
+  };
+  raw?: {
+    metadata?: {
+      image?: string;
+      image_url?: string;
+    };
+  };
+  contractMetadata?: {
+    name?: string;
+  };
+  metadata?: {
+    attributes?: Array<{
+      trait_type?: string;
+      value?: string;
+    }>;
+  };
+  displayTitle?: string;
+  displayCollectionName?: string;
+  displayArtist?: string;
+  displayImage?: string;
+  acquiredDateA?: string | null;
+  acquiredDateB?: string | null;
 };
 
-type WalletApiResponse = {
-  wallet: string;
-  totalNfts: number;
-  totalCollections: number;
-  collections: string[];
-  collectionPreviews: Record<string, string>;
-  ownedNfts: OwnedNft[];
-  error?: string;
+type CollectorProfile = {
+  archetype: string;
+  level: number;
+  primaryLean: string;
+  secondaryLean: string;
+  profileLine: string;
+  signaturePiece: NFT | null;
 };
 
-type SharedCollection = {
-  contractAddress: string;
-  name: string;
-  imageUrl?: string;
+type WalletSummary = {
+  totalNFTs: number;
+  taste: Record<string, number>;
+  profile: CollectorProfile;
 };
 
-type SharedArtist = {
-  name: string;
+type SharedBucket = {
+  walletA: NFT[];
+  walletB: NFT[];
+  walletACount: number;
+  walletBCount: number;
+  enteredDateA?: string | null;
+  enteredDateB?: string | null;
 };
 
-type HighlightGroup = {
-  id: string;
-  title: string;
-  wallet1Nfts: OwnedNft[];
-  wallet2Nfts: OwnedNft[];
-  wallet1Count: number;
-  wallet2Count: number;
-  totalCount: number;
+type CompareResponse = {
+  walletA: WalletSummary;
+  walletB: WalletSummary;
+  scoring: {
+    chemistryScore: number;
+    label: string;
+    similarityType: string;
+    tasteAlignment: {
+      score: number;
+      label: string;
+    };
+    interpretation: string;
+    breakdown: {
+      exact: number;
+      collections: number;
+      artists: number;
+      taste: number;
+    };
+    summary: {
+      headline: string;
+      body: string;
+    };
+  };
+  shared: {
+    exact: NFT[];
+    exactCount: number;
+    collections: Record<string, SharedBucket>;
+    artists: Record<string, SharedBucket>;
+  };
 };
 
-const DEFAULT_VISIBLE_COLLECTIONS = 5;
-
-function truncateWallet(wallet: string) {
-  if (!wallet) return "";
-  if (wallet.length < 12) return wallet;
-  return `${wallet.slice(0, 6)}…${wallet.slice(-4)}`;
+function shortenAddress(value: string) {
+  if (!value) return "";
+  if (value.length < 14) return value;
+  return `${value.slice(0, 6)}...${value.slice(-4)}`;
 }
 
-function normalizeText(value: string) {
-  return value.trim().toLowerCase();
+function normalizeImageUrl(url?: string) {
+  if (!url) return "";
+  if (url.startsWith("ipfs://ipfs/")) return url.replace("ipfs://ipfs/", "https://ipfs.io/ipfs/");
+  if (url.startsWith("ipfs://")) return url.replace("ipfs://", "https://ipfs.io/ipfs/");
+  if (url.startsWith("ar://")) return url.replace("ar://", "https://arweave.net/");
+  return url;
 }
 
-function pickHighlights(nfts: OwnedNft[], max = 4) {
-  return [...nfts]
-    .sort((a, b) => {
-      const aHasImage = a.imageUrl ? 1 : 0;
-      const bHasImage = b.imageUrl ? 1 : 0;
-
-      if (aHasImage !== bHasImage) return bHasImage - aHasImage;
-
-      const aHasName = a.nftName ? 1 : 0;
-      const bHasName = b.nftName ? 1 : 0;
-
-      if (aHasName !== bHasName) return bHasName - aHasName;
-
-      return (a.nftName || "").localeCompare(b.nftName || "");
-    })
-    .slice(0, max);
+function getNftImage(nft: NFT) {
+  return normalizeImageUrl(
+    nft?.displayImage ||
+      nft?.image?.cachedUrl ||
+      nft?.image?.pngUrl ||
+      nft?.image?.thumbnailUrl ||
+      nft?.image?.originalUrl ||
+      nft?.raw?.metadata?.image ||
+      nft?.raw?.metadata?.image_url ||
+      ""
+  );
 }
 
-function getSharedCollections(
-  wallet1Data: WalletApiResponse | null,
-  wallet2Data: WalletApiResponse | null
-): SharedCollection[] {
-  if (!wallet1Data || !wallet2Data) return [];
+function getCollectionName(nft: NFT) {
+  return (
+    nft?.displayCollectionName ||
+    nft?.contractMetadata?.name ||
+    nft?.contract?.name ||
+    "Unknown collection"
+  );
+}
 
-  const wallet1Contracts = new Map<string, SharedCollection>();
-  const wallet2Contracts = new Map<string, SharedCollection>();
+function getNftTitle(nft: NFT) {
+  return nft?.displayTitle || nft?.title || `#${nft?.tokenId || ""}`;
+}
 
-  wallet1Data.ownedNfts.forEach((nft) => {
-    if (!nft.contractAddress) return;
+function getOpenSeaUrl(nft: NFT) {
+  const address = nft?.contract?.address;
+  const tokenId = nft?.tokenId;
+  if (!address || tokenId === undefined || tokenId === null) return "";
+  return `https://opensea.io/assets/ethereum/${address}/${tokenId}`;
+}
 
-    wallet1Contracts.set(nft.contractAddress, {
-      contractAddress: nft.contractAddress,
-      name: nft.collectionName || "Unknown Collection",
-      imageUrl:
-        nft.imageUrl || wallet1Data.collectionPreviews[nft.collectionName],
-    });
+function safeEntries<T>(obj?: Record<string, T>) {
+  return obj ? Object.entries(obj) : [];
+}
+
+function sortTasteKeys(a: Record<string, number>, b: Record<string, number>) {
+  const keys = new Set([...Object.keys(a || {}), ...Object.keys(b || {})]);
+  return [...keys].sort((x, y) => {
+    if (x === "Other") return 1;
+    if (y === "Other") return -1;
+    const totalY = (a?.[y] || 0) + (b?.[y] || 0);
+    const totalX = (a?.[x] || 0) + (b?.[x] || 0);
+    if (totalY !== totalX) return totalY - totalX;
+    const closenessY = Math.abs((a?.[y] || 0) - (b?.[y] || 0));
+    const closenessX = Math.abs((a?.[x] || 0) - (b?.[x] || 0));
+    return closenessX - closenessY;
   });
-
-  wallet2Data.ownedNfts.forEach((nft) => {
-    if (!nft.contractAddress) return;
-
-    wallet2Contracts.set(nft.contractAddress, {
-      contractAddress: nft.contractAddress,
-      name: nft.collectionName || "Unknown Collection",
-      imageUrl:
-        nft.imageUrl || wallet2Data.collectionPreviews[nft.collectionName],
-    });
-  });
-
-  const shared: SharedCollection[] = [];
-
-  wallet1Contracts.forEach((collection, contractAddress) => {
-    if (wallet2Contracts.has(contractAddress)) {
-      const wallet2Match = wallet2Contracts.get(contractAddress);
-
-      shared.push({
-        contractAddress,
-        name: collection.name || wallet2Match?.name || "Unknown Collection",
-        imageUrl: collection.imageUrl || wallet2Match?.imageUrl,
-      });
-    }
-  });
-
-  return shared;
 }
 
-function isLikelyCollectionLevelArtist(
-  artistName: string,
-  nftsForArtist: OwnedNft[]
-) {
-  const normalizedArtist = normalizeText(artistName);
+function isLikelyValidInput(value: string) {
+  const trimmed = value.trim();
+  const isEthAddress = /^0x[a-fA-F0-9]{40}$/.test(trimmed);
+  const isEns = /^[a-zA-Z0-9-]+\.eth$/.test(trimmed);
+  return isEthAddress || isEns;
+}
 
-  if (!normalizedArtist) return true;
+// Score bar descriptions
+const BREAKDOWN_META: Record<string, string> = {
+  exact: "Same NFTs held by both wallets",
+  collections: "Same collections, different pieces",
+  artists: "Same artists across both wallets",
+  taste: "Similarity in collecting categories",
+};
 
-  const blockedNames = new Set([
-    "6529",
-    "6529 collections",
-    "art blocks",
-    "yuga labs",
-    "proof",
-  ]);
+function NFTCard({ nft, walletTone }: { nft: NFT; walletTone: "a" | "b" }) {
+  const image = getNftImage(nft);
+  const title = getNftTitle(nft);
+  const subtitle = getCollectionName(nft);
+  const href = getOpenSeaUrl(nft);
 
-  if (blockedNames.has(normalizedArtist)) {
-    return true;
-  }
-
-  const collectionNames = new Set(
-    nftsForArtist
-      .map((nft) => normalizeText(nft.collectionName || ""))
-      .filter(Boolean)
+  const content = (
+    <>
+      <div className="compare-nft-image">
+        {image ? (
+          <img
+            src={image}
+            alt={title}
+            loading="lazy"
+            onError={(e) => {
+              e.currentTarget.style.display = "none";
+              const fallback = e.currentTarget.nextElementSibling as HTMLElement | null;
+              if (fallback) fallback.style.display = "grid";
+            }}
+          />
+        ) : null}
+        <div className="compare-image-fallback" style={{ display: image ? "none" : "grid" }}>
+          Image unavailable
+        </div>
+      </div>
+      <div className="compare-nft-meta">
+        <div className="compare-nft-title truncate-2">{title}</div>
+        <div className="compare-nft-subtitle truncate-2">{subtitle}</div>
+      </div>
+    </>
   );
 
-  if (collectionNames.has(normalizedArtist)) {
-    return true;
-  }
-
-  const allCollectionsContainArtist =
-    collectionNames.size > 0 &&
-    Array.from(collectionNames).every((collectionName) =>
-      collectionName.includes(normalizedArtist)
+  if (!href) {
+    return (
+      <article className={`compare-nft-card motion-safe wallet-tone-${walletTone}`}>
+        {content}
+      </article>
     );
-
-  if (allCollectionsContainArtist) {
-    return true;
   }
 
-  return false;
-}
-
-function getSharedArtists(
-  wallet1Data: WalletApiResponse | null,
-  wallet2Data: WalletApiResponse | null
-): SharedArtist[] {
-  if (!wallet1Data || !wallet2Data) return [];
-
-  const wallet1ArtistMap = new Map<string, string>();
-  const wallet2ArtistMap = new Map<string, string>();
-  const wallet1ArtistNfts = new Map<string, OwnedNft[]>();
-  const wallet2ArtistNfts = new Map<string, OwnedNft[]>();
-
-  wallet1Data.ownedNfts.forEach((nft) => {
-    if (!nft.artist) return;
-
-    const normalized = normalizeText(nft.artist);
-    if (!normalized) return;
-
-    if (!wallet1ArtistMap.has(normalized)) {
-      wallet1ArtistMap.set(normalized, nft.artist.trim());
-    }
-
-    const current = wallet1ArtistNfts.get(normalized) || [];
-    current.push(nft);
-    wallet1ArtistNfts.set(normalized, current);
-  });
-
-  wallet2Data.ownedNfts.forEach((nft) => {
-    if (!nft.artist) return;
-
-    const normalized = normalizeText(nft.artist);
-    if (!normalized) return;
-
-    if (!wallet2ArtistMap.has(normalized)) {
-      wallet2ArtistMap.set(normalized, nft.artist.trim());
-    }
-
-    const current = wallet2ArtistNfts.get(normalized) || [];
-    current.push(nft);
-    wallet2ArtistNfts.set(normalized, current);
-  });
-
-  const shared: SharedArtist[] = [];
-
-  wallet1ArtistMap.forEach((originalName, normalized) => {
-    if (!wallet2ArtistMap.has(normalized)) return;
-
-    const wallet1Nfts = wallet1ArtistNfts.get(normalized) || [];
-    const wallet2Nfts = wallet2ArtistNfts.get(normalized) || [];
-    const combinedNfts = [...wallet1Nfts, ...wallet2Nfts];
-
-    if (isLikelyCollectionLevelArtist(originalName, combinedNfts)) {
-      return;
-    }
-
-    shared.push({
-      name: originalName || wallet2ArtistMap.get(normalized) || normalized,
-    });
-  });
-
-  return shared;
-}
-
-function getSharedExactNfts(
-  wallet1Data: WalletApiResponse | null,
-  wallet2Data: WalletApiResponse | null
-): HighlightGroup[] {
-  if (!wallet1Data || !wallet2Data) return [];
-
-  const wallet2Map = new Map<string, OwnedNft>();
-
-  wallet2Data.ownedNfts.forEach((nft) => {
-    if (!nft.contractAddress || !nft.tokenId) return;
-    wallet2Map.set(`${nft.contractAddress}:${nft.tokenId}`, nft);
-  });
-
-  const seen = new Set<string>();
-  const groups: HighlightGroup[] = [];
-
-  wallet1Data.ownedNfts.forEach((nft) => {
-    if (!nft.contractAddress || !nft.tokenId) return;
-
-    const key = `${nft.contractAddress}:${nft.tokenId}`;
-    const wallet2Match = wallet2Map.get(key);
-
-    if (!wallet2Match) return;
-    if (seen.has(key)) return;
-
-    seen.add(key);
-
-    groups.push({
-      id: key,
-      title:
-        nft.nftName ||
-        wallet2Match.nftName ||
-        nft.collectionName ||
-        "Shared NFT",
-      wallet1Nfts: [nft],
-      wallet2Nfts: [wallet2Match],
-      wallet1Count: 1,
-      wallet2Count: 1,
-      totalCount: 2,
-    });
-  });
-
-  return groups
-    .sort((a, b) => a.title.localeCompare(b.title))
-    .slice(0, 8);
-}
-
-function getSharedArtistHighlightGroups(
-  wallet1Data: WalletApiResponse | null,
-  wallet2Data: WalletApiResponse | null,
-  sharedArtists: SharedArtist[]
-): HighlightGroup[] {
-  if (!wallet1Data || !wallet2Data) return [];
-
-  return sharedArtists
-    .map((artist) => {
-      const normalizedArtist = normalizeText(artist.name);
-
-      const wallet1All = wallet1Data.ownedNfts.filter(
-        (nft) => normalizeText(nft.artist || "") === normalizedArtist
-      );
-
-      const wallet2All = wallet2Data.ownedNfts.filter(
-        (nft) => normalizeText(nft.artist || "") === normalizedArtist
-      );
-
-      return {
-        id: `artist:${normalizedArtist}`,
-        title: artist.name,
-        wallet1Nfts: pickHighlights(wallet1All),
-        wallet2Nfts: pickHighlights(wallet2All),
-        wallet1Count: wallet1All.length,
-        wallet2Count: wallet2All.length,
-        totalCount: wallet1All.length + wallet2All.length,
-      };
-    })
-    .filter((group) => group.wallet1Count > 0 && group.wallet2Count > 0)
-    .sort((a, b) => {
-      if (b.totalCount !== a.totalCount) return b.totalCount - a.totalCount;
-      const aMin = Math.min(a.wallet1Count, a.wallet2Count);
-      const bMin = Math.min(b.wallet1Count, b.wallet2Count);
-      if (bMin !== aMin) return bMin - aMin;
-      return a.title.localeCompare(b.title);
-    });
-}
-
-function getSharedCollectionHighlightGroups(
-  wallet1Data: WalletApiResponse | null,
-  wallet2Data: WalletApiResponse | null,
-  sharedCollections: SharedCollection[]
-): HighlightGroup[] {
-  if (!wallet1Data || !wallet2Data) return [];
-
-  return sharedCollections
-    .map((collection) => {
-      const wallet1All = wallet1Data.ownedNfts.filter(
-        (nft) => nft.contractAddress === collection.contractAddress
-      );
-
-      const wallet2All = wallet2Data.ownedNfts.filter(
-        (nft) => nft.contractAddress === collection.contractAddress
-      );
-
-      return {
-        id: `collection:${collection.contractAddress}`,
-        title: collection.name,
-        wallet1Nfts: pickHighlights(wallet1All),
-        wallet2Nfts: pickHighlights(wallet2All),
-        wallet1Count: wallet1All.length,
-        wallet2Count: wallet2All.length,
-        totalCount: wallet1All.length + wallet2All.length,
-      };
-    })
-    .sort((a, b) => {
-      if (b.totalCount !== a.totalCount) return b.totalCount - a.totalCount;
-      const aMin = Math.min(a.wallet1Count, a.wallet2Count);
-      const bMin = Math.min(b.wallet1Count, b.wallet2Count);
-      if (bMin !== aMin) return bMin - aMin;
-      return a.title.localeCompare(b.title);
-    });
-}
-
-function getSnapshotLine(
-  exactCount: number,
-  artistGroups: HighlightGroup[],
-  collectionGroups: HighlightGroup[]
-) {
-  if (exactCount > 0) {
-    const topArtist = artistGroups[0]?.title;
-    const topCollection = collectionGroups[0]?.title;
-
-    if (topArtist) {
-      return `The strongest signal is direct overlap, with additional alignment around ${topArtist}${topCollection ? ` and ${topCollection}` : ""}.`;
-    }
-
-    if (topCollection) {
-      return `The strongest signal is direct overlap, with broader alignment continuing through ${topCollection}.`;
-    }
-
-    return "The strongest signal is direct overlap between the two wallets.";
-  }
-
-  if (artistGroups.length > 0) {
-    const topArtist = artistGroups[0]?.title;
-    const topCollection = collectionGroups[0]?.title;
-
-    if (topCollection) {
-      return `The strongest overlap sits at the artist level, led by ${topArtist}, with additional alignment in ${topCollection}.`;
-    }
-
-    return `The strongest overlap sits at the artist level, led by ${topArtist}.`;
-  }
-
-  if (collectionGroups.length > 0) {
-    const topCollection = collectionGroups[0]?.title;
-    return `The clearest connection shows up at the collection level, led by ${topCollection}.`;
-  }
-
-  return "No direct overlap yet, but this layout is ready to surface stronger signals as richer metadata comes in.";
-}
-
-function SectionMeta({
-  wallet1Count,
-  wallet2Count,
-}: {
-  wallet1Count: number;
-  wallet2Count: number;
-}) {
   return (
-    <p className="text-xs text-neutral-400 mt-1">
-      Wallet One: {wallet1Count} {wallet1Count === 1 ? "piece" : "pieces"} · Wallet Two:{" "}
-      {wallet2Count} {wallet2Count === 1 ? "piece" : "pieces"}
-    </p>
+    <a
+      className={`compare-nft-card motion-safe wallet-tone-${walletTone}`}
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      aria-label={`Open ${title} on OpenSea`}
+      title="Open on OpenSea"
+    >
+      {content}
+    </a>
   );
 }
 
-function NftGrid({ nfts }: { nfts: OwnedNft[] }) {
-  if (nfts.length === 0) {
-    return <p className="text-xs text-neutral-400">No highlights available</p>;
+function SpotlightCard({
+  nft,
+  submittedA,
+  submittedB,
+}: {
+  nft: NFT;
+  submittedA?: string;
+  submittedB?: string;
+}) {
+  const image = getNftImage(nft);
+  const title = getNftTitle(nft);
+  const subtitle = getCollectionName(nft);
+  const href = getOpenSeaUrl(nft);
+
+  const labelA = submittedA ? shortenAddress(submittedA) : "Wallet one";
+  const labelB = submittedB ? shortenAddress(submittedB) : "Wallet two";
+
+  const dateA = nft.acquiredDateA || "Date unknown";
+  const dateB = nft.acquiredDateB || "Date unknown";
+
+  const content = (
+    <>
+      <div className="compare-spotlight-image">
+        {image ? (
+          <img
+            src={image}
+            alt={title}
+            loading="lazy"
+            onError={(e) => {
+              e.currentTarget.style.display = "none";
+              const fallback = e.currentTarget.nextElementSibling as HTMLElement | null;
+              if (fallback) fallback.style.display = "grid";
+            }}
+          />
+        ) : null}
+        <div
+          className="compare-image-fallback compare-image-fallback-large"
+          style={{ display: image ? "none" : "grid" }}
+        >
+          Image unavailable
+        </div>
+      </div>
+      <div className="compare-spotlight-meta">
+        <div className="compare-spotlight-title truncate-2">{title}</div>
+        <div className="compare-spotlight-subtitle truncate-2">{subtitle}</div>
+        <div className="compare-acquired-row compare-mono">
+          <div className="compare-acquired-item">
+            <span className="compare-acquired-label">{labelA}</span>
+            <span className="compare-acquired-date">Acquired {dateA}</span>
+          </div>
+          <div className="compare-acquired-item">
+            <span className="compare-acquired-label">{labelB}</span>
+            <span className="compare-acquired-date">Acquired {dateB}</span>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+
+  if (!href) {
+    return <article className="compare-spotlight-card motion-safe">{content}</article>;
   }
 
   return (
-    <div className="grid grid-cols-2 gap-3">
-      {nfts.map((nft) => (
-        <div
-          key={`${nft.contractAddress}-${nft.tokenId}-${nft.nftName}`}
-          className="space-y-2"
-        >
-          {nft.imageUrl ? (
-            <img
-              src={nft.imageUrl}
-              alt={nft.nftName || nft.collectionName}
-              className="w-full aspect-square rounded-xl object-cover border border-neutral-200 bg-neutral-100"
-            />
-          ) : (
-            <div className="w-full aspect-square rounded-xl border border-neutral-200 bg-neutral-100" />
-          )}
+    <a
+      className="compare-spotlight-card motion-safe"
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      aria-label={`Open ${title} on OpenSea`}
+      title="Open on OpenSea"
+    >
+      {content}
+    </a>
+  );
+}
 
-          <div className="space-y-0.5">
-            <p className="text-xs text-neutral-900 line-clamp-1">
-              {nft.nftName || "Untitled"}
-            </p>
-            <p className="text-[11px] text-neutral-400 line-clamp-1">
-              {nft.collectionName}
-            </p>
+function ScoreBreakdownBars({
+  breakdown,
+}: {
+  breakdown: CompareResponse["scoring"]["breakdown"];
+}) {
+  const items = [
+    { key: "exact", label: "Exact overlap", value: breakdown.exact },
+    { key: "collections", label: "Shared collections", value: breakdown.collections },
+    { key: "artists", label: "Shared artists", value: breakdown.artists },
+    { key: "taste", label: "Taste alignment", value: breakdown.taste },
+  ];
+
+  return (
+    <div className="compare-breakdown-bars">
+      {items.map(({ key, label, value }) => (
+        <div key={key} className="compare-breakdown-row">
+          <div className="compare-breakdown-header">
+            <span className="compare-breakdown-label">{label}</span>
+            <span className="compare-breakdown-value compare-mono">{value}</span>
           </div>
+          <div className="compare-breakdown-track">
+            <div
+              className="compare-breakdown-fill"
+              style={{ width: `${Math.max(value, 0)}%` }}
+            />
+          </div>
+          <div className="compare-breakdown-desc">{BREAKDOWN_META[key]}</div>
         </div>
       ))}
     </div>
   );
 }
 
-function SharedNftSection({ groups }: { groups: HighlightGroup[] }) {
-  return (
-    <section className="mb-12">
-      <h2 className="text-sm uppercase tracking-wide text-neutral-500 mb-4">
-        Shared NFTs
-      </h2>
-
-      {groups.length === 0 ? (
-        <p className="text-sm text-neutral-400">No exact NFT overlap yet</p>
-      ) : (
-        <div className="space-y-8">
-          {groups.map((group) => {
-            const nft = group.wallet1Nfts[0];
-
-            return (
-              <div
-                key={group.id}
-                className="border border-neutral-200 rounded-2xl p-5 sm:p-6"
-              >
-                <div className="mb-4">
-                  <h3 className="text-sm text-neutral-900">{group.title}</h3>
-                  <p className="text-xs text-neutral-400 mt-1">
-                    Exact match · owned by both
-                  </p>
-                </div>
-
-                <div className="max-w-[220px]">
-                  {nft?.imageUrl ? (
-                    <img
-                      src={nft.imageUrl}
-                      alt={nft.nftName || nft.collectionName}
-                      className="w-full aspect-square rounded-xl object-cover border border-neutral-200 bg-neutral-100"
-                    />
-                  ) : (
-                    <div className="w-full aspect-square rounded-xl border border-neutral-200 bg-neutral-100" />
-                  )}
-
-                  <div className="space-y-0.5 mt-3">
-                    <p className="text-xs text-neutral-900 line-clamp-1">
-                      {nft?.nftName || "Untitled"}
-                    </p>
-                    <p className="text-[11px] text-neutral-400 line-clamp-1">
-                      {nft?.collectionName}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function HighlightSection({
-  title,
-  groups,
-  wallet1Label,
-  wallet2Label,
-  emptyText,
+function CollectorProfileCard({
+  label,
+  wallet,
+  submitted,
+  tone,
 }: {
-  title: string;
-  groups: HighlightGroup[];
-  wallet1Label: string;
-  wallet2Label: string;
-  emptyText: string;
+  label: string;
+  wallet: WalletSummary;
+  submitted: string;
+  tone: "a" | "b";
 }) {
+  const piece = wallet.profile.signaturePiece;
+  const pieceImage = piece ? getNftImage(piece) : "";
+  const pieceTitle = piece ? getNftTitle(piece) : "";
+  const pieceCollection = piece ? getCollectionName(piece) : "";
+  const pieceHref = piece ? getOpenSeaUrl(piece) : "";
+
   return (
-    <section className="mb-12">
-      <h2 className="text-sm uppercase tracking-wide text-neutral-500 mb-4">
-        {title}
-      </h2>
+    <article className={`panel compare-profile-card wallet-tone-${tone}`}>
+      <div className="compare-profile-header">
+        <div>
+          <div className="eyebrow">{label}</div>
+          <h3 className="compare-profile-archetype">{wallet.profile.archetype}</h3>
+          <p className="compare-profile-line">{wallet.profile.profileLine}</p>
+        </div>
+        <div className="compare-profile-level">
+          <span className="compare-profile-level-label">Level</span>
+          <span className="compare-profile-level-value compare-mono">
+            {wallet.profile.level}
+          </span>
+        </div>
+      </div>
 
-      {groups.length === 0 ? (
-        <p className="text-sm text-neutral-400">{emptyText}</p>
-      ) : (
-        <div className="space-y-8">
-          {groups.map((group) => (
-            <div
-              key={group.id}
-              className="border border-neutral-200 rounded-2xl p-4 sm:p-5"
-            >
-              <div className="mb-4">
-                <h3 className="text-sm text-neutral-900">{group.title}</h3>
-                <SectionMeta
-                  wallet1Count={group.wallet1Count}
-                  wallet2Count={group.wallet2Count}
+      <div className="compare-profile-identity">
+        <div className="compare-profile-address-label">{shortenAddress(submitted)}</div>
+        <div className="compare-profile-address-full">{submitted}</div>
+      </div>
+
+      <div className="compare-profile-stats">
+        <div className="compare-profile-stat">
+          <span className="compare-profile-stat-label">Primary</span>
+          <span className="compare-profile-stat-value">{wallet.profile.primaryLean}</span>
+        </div>
+        <div className="compare-profile-stat">
+          <span className="compare-profile-stat-label">Secondary</span>
+          <span className="compare-profile-stat-value">{wallet.profile.secondaryLean}</span>
+        </div>
+        <div className="compare-profile-stat">
+          <span className="compare-profile-stat-label">Holdings</span>
+          <span className="compare-profile-stat-value compare-mono">{wallet.totalNFTs}</span>
+        </div>
+      </div>
+
+      <div className="compare-profile-piece-head">
+        <span className="compare-profile-piece-kicker">Signature piece</span>
+      </div>
+
+      {piece ? (
+        pieceHref ? (
+          <a
+            className={`compare-profile-piece wallet-tone-${tone}`}
+            href={pieceHref}
+            target="_blank"
+            rel="noreferrer"
+            title="Open on OpenSea"
+          >
+            <div className="compare-profile-piece-image">
+              {pieceImage ? (
+                <img
+                  src={pieceImage}
+                  alt={pieceTitle}
+                  loading="lazy"
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none";
+                    const fallback = e.currentTarget.nextElementSibling as HTMLElement | null;
+                    if (fallback) fallback.style.display = "grid";
+                  }}
                 />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-neutral-500 mb-3">
-                    {wallet1Label}
-                  </p>
-                  <NftGrid nfts={group.wallet1Nfts} />
-                </div>
-
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-neutral-500 mb-3">
-                    {wallet2Label}
-                  </p>
-                  <NftGrid nfts={group.wallet2Nfts} />
-                </div>
+              ) : null}
+              <div
+                className="compare-image-fallback"
+                style={{ display: pieceImage ? "none" : "grid" }}
+              >
+                Image unavailable
               </div>
             </div>
-          ))}
-        </div>
+            <div className="compare-profile-piece-meta">
+              <div className="compare-profile-piece-title truncate-2">{pieceTitle}</div>
+              <div className="compare-profile-piece-subtitle truncate-2">{pieceCollection}</div>
+            </div>
+          </a>
+        ) : (
+          <div className={`compare-profile-piece wallet-tone-${tone}`}>
+            <div className="compare-profile-piece-image">
+              {pieceImage ? (
+                <img
+                  src={pieceImage}
+                  alt={pieceTitle}
+                  loading="lazy"
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none";
+                    const fallback = e.currentTarget.nextElementSibling as HTMLElement | null;
+                    if (fallback) fallback.style.display = "grid";
+                  }}
+                />
+              ) : null}
+              <div
+                className="compare-image-fallback"
+                style={{ display: pieceImage ? "none" : "grid" }}
+              >
+                Image unavailable
+              </div>
+            </div>
+            <div className="compare-profile-piece-meta">
+              <div className="compare-profile-piece-title truncate-2">{pieceTitle}</div>
+              <div className="compare-profile-piece-subtitle truncate-2">{pieceCollection}</div>
+            </div>
+          </div>
+        )
+      ) : (
+        <div className="compare-empty">No signature piece available yet.</div>
       )}
-    </section>
+    </article>
   );
 }
 
 export default function ComparePage() {
-  const searchParams = useSearchParams();
-  const wallet1 = searchParams.get("wallet1") || "";
-  const wallet2 = searchParams.get("wallet2") || "";
-
-  const [wallet1Data, setWallet1Data] = useState<WalletApiResponse | null>(null);
-  const [wallet2Data, setWallet2Data] = useState<WalletApiResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [walletA, setWalletA] = useState("");
+  const [walletB, setWalletB] = useState("");
+  const [submittedA, setSubmittedA] = useState("");
+  const [submittedB, setSubmittedB] = useState("");
+  const [data, setData] = useState<CompareResponse | null>(null);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [showAllCollections, setShowAllCollections] = useState(false);
 
-  useEffect(() => {
-    async function fetchWallets() {
-      if (!wallet1 || !wallet2) {
-        setError("Missing wallet1 or wallet2 in the URL.");
-        setLoading(false);
-        return;
-      }
+  const tasteKeys = useMemo(() => {
+    if (!data) return [];
+    return sortTasteKeys(data.walletA.taste, data.walletB.taste);
+  }, [data]);
 
-      try {
-        setLoading(true);
-        setError("");
+  const sharedCollections = useMemo(() => safeEntries(data?.shared?.collections), [data]);
+  const sharedArtists = useMemo(() => safeEntries(data?.shared?.artists), [data]);
+  const sharedExact = data?.shared?.exact || [];
+  const exactCount = data?.shared?.exactCount || 0;
 
-        const [res1, res2] = await Promise.all([
-          fetch(`/api/wallet?wallet=${encodeURIComponent(wallet1)}`),
-          fetch(`/api/wallet?wallet=${encodeURIComponent(wallet2)}`),
-        ]);
+  async function runCompare(e?: FormEvent) {
+    e?.preventDefault();
 
-        const data1: WalletApiResponse = await res1.json();
-        const data2: WalletApiResponse = await res2.json();
-
-        if (!res1.ok) {
-          throw new Error(data1.error || "Failed to load wallet 1");
-        }
-
-        if (!res2.ok) {
-          throw new Error(data2.error || "Failed to load wallet 2");
-        }
-
-        setWallet1Data(data1);
-        setWallet2Data(data2);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Something went wrong");
-      } finally {
-        setLoading(false);
-      }
+    if (!walletA.trim() || !walletB.trim()) {
+      setError("Enter two wallet addresses or ENS names to compare.");
+      return;
     }
 
-    fetchWallets();
-  }, [wallet1, wallet2]);
+    if (!isLikelyValidInput(walletA) || !isLikelyValidInput(walletB)) {
+      setError("Enter a valid Ethereum address or ENS name.");
+      return;
+    }
 
-  const sharedCollections = useMemo(() => {
-    return getSharedCollections(wallet1Data, wallet2Data);
-  }, [wallet1Data, wallet2Data]);
+    try {
+      setLoading(true);
+      setError("");
+      setData(null);
 
-  const sharedArtists = useMemo(() => {
-    return getSharedArtists(wallet1Data, wallet2Data);
-  }, [wallet1Data, wallet2Data]);
+      const url = `/api/compare?walletA=${encodeURIComponent(walletA.trim())}&walletB=${encodeURIComponent(walletB.trim())}`;
+      const res = await fetch(url);
+      const contentType = res.headers.get("content-type") || "";
 
-  const sharedExactNfts = useMemo(() => {
-    return getSharedExactNfts(wallet1Data, wallet2Data);
-  }, [wallet1Data, wallet2Data]);
+      if (!contentType.includes("application/json")) {
+        const text = await res.text();
+        throw new Error(`API returned non-JSON response: ${text.slice(0, 120)}`);
+      }
 
-  const sharedArtistGroups = useMemo(() => {
-    return getSharedArtistHighlightGroups(wallet1Data, wallet2Data, sharedArtists);
-  }, [wallet1Data, wallet2Data, sharedArtists]);
+      const json = await res.json();
 
-  const sharedCollectionGroups = useMemo(() => {
-    return getSharedCollectionHighlightGroups(
-      wallet1Data,
-      wallet2Data,
-      sharedCollections
-    );
-  }, [wallet1Data, wallet2Data, sharedCollections]);
+      if (!res.ok) {
+        throw new Error(json?.error || "Something went wrong.");
+      }
 
-  const visibleCollectionGroups = useMemo(() => {
-    if (showAllCollections) return sharedCollectionGroups;
-    return sharedCollectionGroups.slice(0, DEFAULT_VISIBLE_COLLECTIONS);
-  }, [sharedCollectionGroups, showAllCollections]);
-
-  const hiddenCollectionCount = Math.max(
-    sharedCollectionGroups.length - DEFAULT_VISIBLE_COLLECTIONS,
-    0
-  );
-
-  const snapshotLine = useMemo(() => {
-    return getSnapshotLine(
-      sharedExactNfts.length,
-      sharedArtistGroups,
-      sharedCollectionGroups
-    );
-  }, [sharedExactNfts.length, sharedArtistGroups, sharedCollectionGroups]);
-
-  if (loading) {
-    return (
-      <div className="max-w-6xl mx-auto px-6 py-12 text-neutral-900">
-        <p className="text-sm text-neutral-500">Loading comparison…</p>
-      </div>
-    );
+      setData(json);
+      setSubmittedA(walletA.trim());
+      setSubmittedB(walletB.trim());
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to compare wallets.";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  if (error) {
-    return (
-      <div className="max-w-6xl mx-auto px-6 py-12 text-neutral-900">
-        <h1 className="text-2xl font-semibold tracking-tight mb-4">Compare</h1>
-        <p className="text-sm text-red-600">{error}</p>
-      </div>
-    );
+  function resetAll() {
+    setWalletA("");
+    setWalletB("");
+    setSubmittedA("");
+    setSubmittedB("");
+    setData(null);
+    setError("");
+    setLoading(false);
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-12 text-neutral-900">
-      <div className="mb-10">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-          <div className="border border-neutral-200 rounded-2xl p-4">
-            <p className="text-xs uppercase tracking-wide text-neutral-500 mb-2">
-              Wallet One
+    <main className="compare-page">
+      <div className="page-shell stack-lg">
+        <section className="compare-hero">
+          <div className="compare-hero-copy">
+            <div className="eyebrow">Collector Chemistry</div>
+            <h1 className="title-xl compare-hero-title">
+              What you collect is a reflection of you.
+            </h1>
+            <p className="compare-hero-text">
+              For the first time, that reflection is visible. Compare two wallets to
+              see where taste, curiosity, and identity start to overlap.
             </p>
-            <p className="text-sm text-neutral-900 break-all">
-              {truncateWallet(wallet1)}
-            </p>
-            {wallet1Data && (
-              <p className="text-xs text-neutral-400 mt-2">
-                {wallet1Data.totalNfts} NFTs · {wallet1Data.totalCollections} collections
-              </p>
-            )}
           </div>
 
-          <div className="border border-neutral-200 rounded-2xl p-4">
-            <p className="text-xs uppercase tracking-wide text-neutral-500 mb-2">
-              Wallet Two
-            </p>
-            <p className="text-sm text-neutral-900 break-all">
-              {truncateWallet(wallet2)}
-            </p>
-            {wallet2Data && (
-              <p className="text-xs text-neutral-400 mt-2">
-                {wallet2Data.totalNfts} NFTs · {wallet2Data.totalCollections} collections
-              </p>
-            )}
+          <div className="accent-rule" />
+
+          <form className="compare-form" onSubmit={runCompare}>
+            <div className="compare-inputs">
+              <div className="compare-input-wrap">
+                <label className="compare-label" htmlFor="walletA">Wallet one</label>
+                <input
+                  id="walletA"
+                  className="input"
+                  placeholder="0x... or ENS"
+                  value={walletA}
+                  onChange={(e) => setWalletA(e.target.value)}
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                />
+              </div>
+              <div className="compare-input-wrap">
+                <label className="compare-label" htmlFor="walletB">Wallet two</label>
+                <input
+                  id="walletB"
+                  className="input"
+                  placeholder="0x... or ENS"
+                  value={walletB}
+                  onChange={(e) => setWalletB(e.target.value)}
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                />
+              </div>
+            </div>
+
+            <div className="compare-actions">
+              <button type="submit" className="btn compare-btn-primary">
+                {loading ? "Comparing..." : "Compare wallets"}
+              </button>
+              <button type="button" className="btn compare-btn-secondary" onClick={resetAll}>
+                Reset
+              </button>
+            </div>
+
+            <p className="compare-note">Enter an Ethereum wallet or ENS name.</p>
+          </form>
+        </section>
+
+        {loading && (
+          <div className="compare-loading">
+            Pulling holdings, mapping overlap, and scoring chemistry...
           </div>
-        </div>
+        )}
 
-        <h1 className="text-2xl font-semibold tracking-tight">Shared Ground</h1>
-        <p className="text-sm text-neutral-500 mt-2">
-          Exact matches first, then shared artists and shared collections.
-        </p>
-      </div>
+        {error && <div className="compare-error">{error}</div>}
 
-      <section className="mb-12 border border-neutral-200 rounded-2xl p-4 sm:p-5">
-        <h2 className="text-sm uppercase tracking-wide text-neutral-500 mb-4">
-          Connection Snapshot
-        </h2>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-          <div>
-            <p className="text-2xl font-semibold tracking-tight">
-              {sharedExactNfts.length}
-            </p>
-            <p className="text-sm text-neutral-500">Shared NFTs</p>
-          </div>
-
-          <div>
-            <p className="text-2xl font-semibold tracking-tight">
-              {sharedArtistGroups.length}
-            </p>
-            <p className="text-sm text-neutral-500">Shared artists</p>
-          </div>
-
-          <div>
-            <p className="text-2xl font-semibold tracking-tight">
-              {sharedCollectionGroups.length}
-            </p>
-            <p className="text-sm text-neutral-500">Shared collections</p>
-          </div>
-        </div>
-
-        <p className="text-sm text-neutral-700">{snapshotLine}</p>
-      </section>
-
-      <SharedNftSection groups={sharedExactNfts} />
-
-      <HighlightSection
-        title="Shared Artists"
-        groups={sharedArtistGroups}
-        wallet1Label="Wallet One"
-        wallet2Label="Wallet Two"
-        emptyText="No shared artists surfaced yet"
-      />
-
-      <section className="mb-12">
-        <h2 className="text-sm uppercase tracking-wide text-neutral-500 mb-4">
-          Shared Collections
-        </h2>
-
-        {sharedCollectionGroups.length === 0 ? (
-          <p className="text-sm text-neutral-400">No direct collection overlap yet</p>
-        ) : (
-          <>
-            <div className="space-y-8">
-              {visibleCollectionGroups.map((group) => (
-                <div
-                  key={group.id}
-                  className="border border-neutral-200 rounded-2xl p-4 sm:p-5"
-                >
-                  <div className="mb-4">
-                    <h3 className="text-sm text-neutral-900">{group.title}</h3>
-                    <SectionMeta
-                      wallet1Count={group.wallet1Count}
-                      wallet2Count={group.wallet2Count}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                    <div>
-                      <p className="text-xs uppercase tracking-wide text-neutral-500 mb-3">
-                        Wallet One
-                      </p>
-                      <NftGrid nfts={group.wallet1Nfts} />
+        {data && (
+          <div className="compare-results">
+            <section className="compare-overview">
+              {/* Wallet summary cards */}
+              <div className="compare-overview-grid">
+                <article className="panel compare-wallet-card wallet-tone-a">
+                  <div className="compare-wallet-top">
+                    <div className="compare-wallet-id">
+                      <div className="eyebrow">Wallet one</div>
+                      <div className="compare-wallet-name">{shortenAddress(submittedA)}</div>
+                      <div className="compare-wallet-address">{submittedA}</div>
                     </div>
+                    <div className="compare-wallet-count">
+                      <div className="compare-wallet-count-value compare-mono">{data.walletA.totalNFTs}</div>
+                      <div className="compare-wallet-count-label">Holdings indexed</div>
+                    </div>
+                  </div>
+                </article>
 
-                    <div>
-                      <p className="text-xs uppercase tracking-wide text-neutral-500 mb-3">
-                        Wallet Two
-                      </p>
-                      <NftGrid nfts={group.wallet2Nfts} />
+                <article className="panel compare-wallet-card wallet-tone-b">
+                  <div className="compare-wallet-top">
+                    <div className="compare-wallet-id">
+                      <div className="eyebrow">Wallet two</div>
+                      <div className="compare-wallet-name">{shortenAddress(submittedB)}</div>
+                      <div className="compare-wallet-address">{submittedB}</div>
+                    </div>
+                    <div className="compare-wallet-count">
+                      <div className="compare-wallet-count-value compare-mono">{data.walletB.totalNFTs}</div>
+                      <div className="compare-wallet-count-label">Holdings indexed</div>
+                    </div>
+                  </div>
+                </article>
+              </div>
+
+              {/* Collector profile cards */}
+              <div className="compare-profile-grid">
+                <CollectorProfileCard
+                  label="Collector profile"
+                  wallet={data.walletA}
+                  submitted={submittedA}
+                  tone="a"
+                />
+                <CollectorProfileCard
+                  label="Collector profile"
+                  wallet={data.walletB}
+                  submitted={submittedB}
+                  tone="b"
+                />
+              </div>
+
+              {/* Chemistry score */}
+              <article className="panel compare-chemistry-card">
+                <div className="compare-chemistry-top">
+                  <div>
+                    <div className="eyebrow">Chemistry score</div>
+                    <div className="compare-chemistry-value compare-mono">
+                      {data.scoring.chemistryScore}
+                    </div>
+                    <div className="compare-chemistry-label">
+                      {data.scoring.similarityType}
                     </div>
                   </div>
                 </div>
-              ))}
-            </div>
 
-            {hiddenCollectionCount > 0 && (
-              <div className="mt-6">
-                <button
-                  type="button"
-                  onClick={() => setShowAllCollections((prev) => !prev)}
-                  className="text-sm text-neutral-700 underline underline-offset-4"
-                >
-                  {showAllCollections
-                    ? "Show fewer shared collections"
-                    : `Show ${hiddenCollectionCount} more shared collections`}
-                </button>
+                <div className="compare-chemistry-summary">
+                  <h2 className="compare-summary-title">What this says</h2>
+                  <p className="compare-summary-text">{data.scoring.summary.body}</p>
+                </div>
+
+                <ScoreBreakdownBars breakdown={data.scoring.breakdown} />
+              </article>
+
+              {/* Stat summary row */}
+              <div className="compare-stats-row">
+                <article className="panel-subtle compare-stat-card">
+                  <div className="compare-stat-kicker">Exact shared NFTs</div>
+                  <div className="compare-stat-value compare-mono">{exactCount}</div>
+                  <div className="compare-stat-copy">They both chose this.</div>
+                </article>
+                <article className="panel-subtle compare-stat-card">
+                  <div className="compare-stat-kicker">Shared collections</div>
+                  <div className="compare-stat-value compare-mono">{sharedCollections.length}</div>
+                  <div className="compare-stat-copy">They collect in the same worlds.</div>
+                </article>
+                <article className="panel-subtle compare-stat-card">
+                  <div className="compare-stat-kicker">Shared artists</div>
+                  <div className="compare-stat-value compare-mono">{sharedArtists.length}</div>
+                  <div className="compare-stat-copy">They're drawn to the same artists.</div>
+                </article>
               </div>
+            </section>
+
+            {/* Taste DNA */}
+            <section className="panel compare-section">
+              <div className="compare-section-head">
+                <div className="eyebrow">Taste DNA</div>
+                <h2 className="compare-section-title">How each wallet leans</h2>
+                <p className="compare-section-text">Not how much they own — how they think.</p>
+              </div>
+
+              {tasteKeys.length > 0 ? (
+                <div className="compare-bars">
+                  <div className="compare-bar-legend">
+                    <span className="wallet-a">Wallet one</span>
+                    <span className="wallet-b">Wallet two</span>
+                  </div>
+
+                  {tasteKeys.map((key) => {
+                    const left = data.walletA.taste[key] || 0;
+                    const right = data.walletB.taste[key] || 0;
+
+                    return (
+                      <div key={key} className="compare-bar-row">
+                        <div className="compare-bar-top">
+                          <div className="compare-bar-left compare-mono wallet-a">{left}%</div>
+                          <div className="compare-bar-label">{key}</div>
+                          <div className="compare-bar-right compare-mono wallet-b">{right}%</div>
+                        </div>
+                        <div className="compare-bar-track">
+                          <div className="compare-bar-side left">
+                            <div className="compare-bar-fill" style={{ width: `${Math.max(left, 0)}%` }} />
+                          </div>
+                          <div className="compare-bar-side right">
+                            <div className="compare-bar-fill" style={{ width: `${Math.max(right, 0)}%` }} />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="compare-empty">No taste profile available yet.</div>
+              )}
+            </section>
+
+            {/* Exact overlap */}
+            {sharedExact.length > 0 && (
+              <section className="panel compare-section">
+                <div className="compare-section-head">
+                  <div className="eyebrow">Exact overlap</div>
+                  <h2 className="compare-section-title">They both hold this</h2>
+                  <p className="compare-section-text">The clearest overlap.</p>
+                </div>
+
+                <div className={`compare-exact-grid ${sharedExact.length === 1 ? "single" : ""}`}>
+                  {sharedExact.slice(0, 8).map((nft) => {
+                    const key = `${nft.contract.address}-${nft.tokenId}`;
+                    return (
+                      <SpotlightCard
+                        key={key}
+                        nft={nft}
+                        submittedA={submittedA}
+                        submittedB={submittedB}
+                      />
+                    );
+                  })}
+                </div>
+              </section>
             )}
-          </>
+
+            {/* Shared collections */}
+            {sharedCollections.length > 0 && (
+              <section className="panel compare-section">
+                <div className="compare-section-head">
+                  <div className="eyebrow">Shared collections</div>
+                  <h2 className="compare-section-title">Same worlds, different pieces</h2>
+                  <p className="compare-section-text">Different pieces, same taste.</p>
+                </div>
+
+                <div className="compare-group-list">
+                  {sharedCollections.map(([name, bucket]) => (
+                    <article key={name} className="panel-subtle compare-group-card">
+                      <div className="compare-group-head">
+                        <div className="compare-group-title-wrap">
+                          <h3 className="compare-group-title">{name}</h3>
+                          <div className="compare-group-entry-dates compare-mono">
+                            <span>
+                              {shortenAddress(submittedA)} entered{" "}
+                              <strong>{bucket.enteredDateA || "Date unknown"}</strong>
+                            </span>
+                            <span className="compare-entry-divider">·</span>
+                            <span>
+                              {shortenAddress(submittedB)} entered{" "}
+                              <strong>{bucket.enteredDateB || "Date unknown"}</strong>
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="compare-group-columns">
+                        <div className="compare-column compare-column-a">
+                          <div className="compare-column-head">
+                            <div className="compare-column-title">
+                              Wallet one
+                              <span className="compare-column-address">
+                                {shortenAddress(submittedA)}
+                              </span>
+                            </div>
+                            <div className="compare-column-meta compare-mono">
+                              {bucket.walletA.length} shown · {bucket.walletACount} total
+                            </div>
+                          </div>
+
+                          {bucket.walletA.length > 0 ? (
+                            <>
+                              <div className="compare-nft-grid">
+                                {bucket.walletA.map((nft) => (
+                                  <NFTCard
+                                    key={`${nft.contract.address}-${nft.tokenId}-a`}
+                                    nft={nft}
+                                    walletTone="a"
+                                  />
+                                ))}
+                              </div>
+                              {bucket.walletACount > bucket.walletA.length && (
+                                <div className="compare-more-pill compare-mono">
+                                  +{bucket.walletACount - bucket.walletA.length} more
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <div className="compare-empty">No NFTs to show.</div>
+                          )}
+                        </div>
+
+                        <div className="compare-column compare-column-b">
+                          <div className="compare-column-head">
+                            <div className="compare-column-title">
+                              Wallet two
+                              <span className="compare-column-address">
+                                {shortenAddress(submittedB)}
+                              </span>
+                            </div>
+                            <div className="compare-column-meta compare-mono">
+                              {bucket.walletB.length} shown · {bucket.walletBCount} total
+                            </div>
+                          </div>
+
+                          {bucket.walletB.length > 0 ? (
+                            <>
+                              <div className="compare-nft-grid">
+                                {bucket.walletB.map((nft) => (
+                                  <NFTCard
+                                    key={`${nft.contract.address}-${nft.tokenId}-b`}
+                                    nft={nft}
+                                    walletTone="b"
+                                  />
+                                ))}
+                              </div>
+                              {bucket.walletBCount > bucket.walletB.length && (
+                                <div className="compare-more-pill compare-mono">
+                                  +{bucket.walletBCount - bucket.walletB.length} more
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <div className="compare-empty">No NFTs to show.</div>
+                          )}
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Shared artists */}
+            {sharedArtists.length > 0 && (
+              <section className="panel compare-section">
+                <div className="compare-section-head">
+                  <div className="eyebrow">Shared artists</div>
+                  <h2 className="compare-section-title">Drawn to the same artists</h2>
+                  <p className="compare-section-text">
+                    Sometimes the strongest overlap sits beneath the collection name.
+                  </p>
+                </div>
+
+                <div className="compare-group-list">
+                  {sharedArtists.map(([name, bucket]) => (
+                    <article key={name} className="panel-subtle compare-group-card">
+                      <div className="compare-group-head">
+                        <div className="compare-group-title-wrap">
+                          <h3 className="compare-group-title compare-group-title-lower">{name}</h3>
+                          <div className="compare-group-meta">Shared artist</div>
+                        </div>
+                      </div>
+
+                      <div className="compare-group-columns">
+                        <div className="compare-column compare-column-a">
+                          <div className="compare-column-head">
+                            <div className="compare-column-title">
+                              Wallet one
+                              <span className="compare-column-address">
+                                {shortenAddress(submittedA)}
+                              </span>
+                            </div>
+                            <div className="compare-column-meta compare-mono">
+                              {bucket.walletA.length} shown · {bucket.walletACount} total
+                            </div>
+                          </div>
+
+                          {bucket.walletA.length > 0 ? (
+                            <>
+                              <div className="compare-nft-grid">
+                                {bucket.walletA.map((nft) => (
+                                  <NFTCard
+                                    key={`${nft.contract.address}-${nft.tokenId}-artist-a`}
+                                    nft={nft}
+                                    walletTone="a"
+                                  />
+                                ))}
+                              </div>
+                              {bucket.walletACount > bucket.walletA.length && (
+                                <div className="compare-more-pill compare-mono">
+                                  +{bucket.walletACount - bucket.walletA.length} more
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <div className="compare-empty">No NFTs to show.</div>
+                          )}
+                        </div>
+
+                        <div className="compare-column compare-column-b">
+                          <div className="compare-column-head">
+                            <div className="compare-column-title">
+                              Wallet two
+                              <span className="compare-column-address">
+                                {shortenAddress(submittedB)}
+                              </span>
+                            </div>
+                            <div className="compare-column-meta compare-mono">
+                              {bucket.walletB.length} shown · {bucket.walletBCount} total
+                            </div>
+                          </div>
+
+                          {bucket.walletB.length > 0 ? (
+                            <>
+                              <div className="compare-nft-grid">
+                                {bucket.walletB.map((nft) => (
+                                  <NFTCard
+                                    key={`${nft.contract.address}-${nft.tokenId}-artist-b`}
+                                    nft={nft}
+                                    walletTone="b"
+                                  />
+                                ))}
+                              </div>
+                              {bucket.walletBCount > bucket.walletB.length && (
+                                <div className="compare-more-pill compare-mono">
+                                  +{bucket.walletBCount - bucket.walletB.length} more
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <div className="compare-empty">No NFTs to show.</div>
+                          )}
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
+          </div>
         )}
-      </section>
-    </div>
+      </div>
+    </main>
   );
 }
