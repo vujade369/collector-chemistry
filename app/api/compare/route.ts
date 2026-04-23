@@ -1,3 +1,4 @@
+// app/api/compare/route.ts
 import { NextResponse } from "next/server";
 
 const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY;
@@ -84,7 +85,12 @@ type CollectorProfile = {
   primaryLean: string;
   secondaryLean: string;
   profileLine: string;
-  signaturePiece: NFT | null;
+  topCollection: {
+    source: "collection" | "artist";
+    name: string;
+    ownedCount: number;
+    previewImages: string[];
+  } | null;
 };
 
 type WalletSummary = {
@@ -1454,31 +1460,59 @@ function buildProfileLine(
   return `A wallet centered most strongly around ${primaryLean.toLowerCase()}.`;
 }
 
-function chooseSignaturePiece(nfts: NFT[], taste: TasteMap) {
-  if (!nfts.length) return null;
+function pickMostOwnedGroup(grouped: Record<string, NFT[]>) {
+  const ranked = Object.entries(grouped)
+    .filter(([name, items]) => !!name.trim() && items.length > 0)
+    .sort((a, b) => b[1].length - a[1].length);
 
-  const topCategories = getTopTasteEntries(taste, 2).map(([key]) => key);
-  let best: NFT | null = null;
-  let bestScore = -1;
+  return ranked[0] || null;
+}
 
-  for (const nft of nfts.slice(0, 250)) {
-    const category = classify(nft);
-    let score = 0;
+async function buildTopCollectionSignal(
+  nfts: NFT[],
+  cache: Map<string, Promise<NFT>>
+) {
+  const topCollection = pickMostOwnedGroup(groupByCollection(nfts));
 
-    if (category === topCategories[0]) score += 6;
-    if (category === topCategories[1]) score += 3;
-    if (getExistingImage(nft)) score += 3;
-    if (!isWeakTitle(nft.title)) score += 2;
-    if (getArtistName(nft) !== "unknown") score += 1;
-    if (category !== "Other") score += 1;
+  if (topCollection) {
+    const [name, items] = topCollection;
+    const enriched = await Promise.all(
+      items.slice(0, 8).map((nft) => enrichNFT(nft, cache))
+    );
+    const previewImages = enriched
+      .map((nft) => getExistingImage(nft))
+      .filter(Boolean)
+      .slice(0, 2);
 
-    if (score > bestScore) {
-      bestScore = score;
-      best = nft;
-    }
+    return {
+      source: "collection" as const,
+      name,
+      ownedCount: items.length,
+      previewImages,
+    };
   }
 
-  return best || nfts[0];
+  const artistBuckets = groupByArtist(nfts);
+  delete artistBuckets.unknown;
+  const topArtist = pickMostOwnedGroup(artistBuckets);
+
+  if (!topArtist) return null;
+
+  const [name, items] = topArtist;
+  const enriched = await Promise.all(
+    items.slice(0, 8).map((nft) => enrichNFT(nft, cache))
+  );
+  const previewImages = enriched
+    .map((nft) => getExistingImage(nft))
+    .filter(Boolean)
+    .slice(0, 2);
+
+  return {
+    source: "artist" as const,
+    name,
+    ownedCount: items.length,
+    previewImages,
+  };
 }
 
 async function buildWalletProfile(
@@ -1498,10 +1532,7 @@ async function buildWalletProfile(
   const level = computeLevel(nfts.length, diversity);
   const profileLine = buildProfileLine(primaryLean, secondaryLean, nfts.length);
 
-  const signatureCandidate = chooseSignaturePiece(nfts, taste);
-  const signaturePiece = signatureCandidate
-    ? await enrichNFT(signatureCandidate, cache)
-    : null;
+  const topCollection = await buildTopCollectionSignal(nfts, cache);
 
   return {
     archetype,
@@ -1509,7 +1540,7 @@ async function buildWalletProfile(
     primaryLean,
     secondaryLean,
     profileLine,
-    signaturePiece,
+    topCollection,
   };
 }
 

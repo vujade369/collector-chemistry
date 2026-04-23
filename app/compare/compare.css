@@ -1,3 +1,4 @@
+/* app/compare/compare.css */
 .compare-page {
   padding: 40px 0 72px;
 }
@@ -101,6 +102,42 @@
 .compare-overview {
   display: grid;
   gap: 14px;
+}
+
+.compare-relationship-summary {
+  padding: 20px;
+  display: grid;
+  gap: 14px;
+}
+
+.compare-relationship-meta {
+  display: grid;
+  gap: 14px;
+}
+
+.compare-relationship-bullets {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.compare-relationship-score {
+  display: grid;
+  gap: 4px;
+}
+
+.compare-relationship-interpretation {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.compare-overlap-proof .compare-breakdown-bars {
+  margin-top: 2px;
 }
 
 .compare-overview-grid {
@@ -352,6 +389,31 @@
   line-height: 1.4;
 }
 
+.compare-profile-piece-support {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.compare-profile-piece-count {
+  color: var(--text);
+}
+
+.compare-profile-preview-row {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.compare-profile-preview-thumb {
+  width: 34px;
+  height: 34px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
 .compare-chemistry-card {
   padding: 20px;
   display: grid;
@@ -458,6 +520,23 @@
 .compare-bars {
   display: grid;
   gap: 16px;
+}
+
+.compare-section-compact {
+  padding: 16px;
+  gap: 12px;
+}
+
+.compare-section-compact .compare-bars {
+  gap: 12px;
+}
+
+.compare-section-compact .compare-bar-row {
+  gap: 6px;
+}
+
+.compare-section-compact .compare-bar-side {
+  height: 8px;
 }
 
 .compare-bar-legend {
@@ -775,6 +854,22 @@
   font-size: 11px;
 }
 
+.compare-show-more {
+  width: fit-content;
+}
+
+.compare-divergence-list {
+  display: grid;
+  gap: 10px;
+}
+
+.compare-divergence-item {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
 @media (min-width: 720px) {
   .compare-inputs {
     grid-template-columns: 1fr 1fr;
@@ -787,6 +882,11 @@
 
   .compare-stats-row {
     grid-template-columns: repeat(3, 1fr);
+  }
+
+  .compare-relationship-meta {
+    grid-template-columns: 180px 1fr;
+    align-items: start;
   }
 }
 
