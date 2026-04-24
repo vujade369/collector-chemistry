@@ -47,6 +47,9 @@ type CollectorProfile = {
   primaryLean: string;
   secondaryLean: string;
   profileLine: string;
+  collectorIdentityLabel: string;
+  dominantCategory: string;
+  secondaryCategory: string;
   topCollection: {
     source: "collection" | "artist";
     name: string;
@@ -82,6 +85,10 @@ type CompareResponse = {
       label: string;
     };
     interpretation: string;
+    pairInterpretation: {
+      headline: string;
+      summary: string;
+    };
     breakdown: {
       exact: number;
       collections: number;
@@ -173,7 +180,6 @@ function isLikelyValidInput(value: string) {
   return isEthAddress || isEns;
 }
 
-// Score bar descriptions
 const BREAKDOWN_META: Record<string, string> = {
   exact: "Same NFTs held by both wallets",
   collections: "Same collections, different pieces",
@@ -252,8 +258,8 @@ function SpotlightCard({
   const labelA = submittedA ? shortenAddress(submittedA) : "Wallet one";
   const labelB = submittedB ? shortenAddress(submittedB) : "Wallet two";
 
-  const dateA = nft.acquiredDateA || "Date unknown";
-  const dateB = nft.acquiredDateB || "Date unknown";
+  const dateA = nft.acquiredDateA || "Date not available";
+  const dateB = nft.acquiredDateB || "Date not available";
 
   const content = (
     <>
@@ -466,21 +472,6 @@ function scoreLabel(score: number) {
   return "Strong alignment";
 }
 
-function buildRelationshipHeadline(
-  summaryHeadline?: string,
-  sharedCollectionsCount = 0,
-  sharedArtistsCount = 0
-) {
-  if (summaryHeadline) return summaryHeadline;
-  if (sharedCollectionsCount >= 3 || sharedArtistsCount >= 3) {
-    return "You and this collector share clear overlap across similar worlds.";
-  }
-  if (sharedCollectionsCount > 0 || sharedArtistsCount > 0) {
-    return "There is overlap here, even if each wallet expresses it differently.";
-  }
-  return "These wallets currently move through different collecting worlds.";
-}
-
 function buildDivergenceLines(
   tasteA: Record<string, number>,
   tasteB: Record<string, number>,
@@ -492,12 +483,7 @@ function buildDivergenceLines(
     .map((key) => {
       const left = tasteA?.[key] || 0;
       const right = tasteB?.[key] || 0;
-      return {
-        key,
-        left,
-        right,
-        diff: Math.abs(left - right),
-      };
+      return { key, left, right, diff: Math.abs(left - right) };
     })
     .filter((item) => item.diff >= 8)
     .sort((a, b) => b.diff - a.diff)
@@ -529,24 +515,23 @@ export default function ComparePage() {
     () =>
       safeEntries(data?.shared?.collections).sort(
         (a, b) =>
-          b[1].walletACount +
-          b[1].walletBCount -
-          (a[1].walletACount + a[1].walletBCount)
+          b[1].walletACount + b[1].walletBCount - (a[1].walletACount + a[1].walletBCount)
       ),
     [data]
   );
+
   const sharedArtists = useMemo(
     () =>
       safeEntries(data?.shared?.artists).sort(
         (a, b) =>
-          b[1].walletACount +
-          b[1].walletBCount -
-          (a[1].walletACount + a[1].walletBCount)
+          b[1].walletACount + b[1].walletBCount - (a[1].walletACount + a[1].walletBCount)
       ),
     [data]
   );
+
   const sharedExact = data?.shared?.exact || [];
   const exactCount = data?.shared?.exactCount || 0;
+
   const divergenceLines = useMemo(() => {
     if (!data) return [];
     return buildDivergenceLines(
@@ -556,6 +541,7 @@ export default function ComparePage() {
       "Wallet two"
     );
   }, [data]);
+
   const [showMoreCollections, setShowMoreCollections] = useState(false);
   const [showMoreArtists, setShowMoreArtists] = useState(false);
 
@@ -687,18 +673,33 @@ export default function ComparePage() {
 
         {data && (
           <div className="compare-results">
+
+            {/* ── Identity pair — first thing eyes land on ── */}
             <section className="panel compare-relationship-summary">
-              <div className="compare-section-head">
-                <div className="eyebrow">Collector relationship</div>
-                <h2 className="compare-section-title">
-                  {buildRelationshipHeadline(
-                    data.scoring.summary.headline,
-                    sharedCollections.length,
-                    sharedArtists.length
-                  )}
-                </h2>
-                <p className="compare-section-text">{data.scoring.summary.body}</p>
+              <div className="compare-identity-pair">
+                <div className="compare-identity-item compare-identity-a">
+                  <div className="compare-identity-address compare-mono">
+                    {shortenAddress(submittedA)}
+                  </div>
+                  <div className="compare-identity-label">
+                    {data.walletA.profile.collectorIdentityLabel}
+                  </div>
+                </div>
+                <div className="compare-identity-divider">vs</div>
+                <div className="compare-identity-item compare-identity-b">
+                  <div className="compare-identity-address compare-mono">
+                    {shortenAddress(submittedB)}
+                  </div>
+                  <div className="compare-identity-label">
+                    {data.walletB.profile.collectorIdentityLabel}
+                  </div>
+                </div>
               </div>
+
+              <p className="compare-pair-connective">
+                {data.scoring.pairInterpretation.headline}
+              </p>
+
               <div className="compare-relationship-meta">
                 <div className="compare-relationship-score">
                   <div className="compare-chemistry-value compare-mono">
@@ -714,11 +715,13 @@ export default function ComparePage() {
                   {exactCount > 0 ? <li>Exact same NFTs: {exactCount}</li> : null}
                 </ul>
               </div>
+
               <p className="compare-relationship-interpretation">
-                {data.scoring.interpretation}
+                {data.scoring.pairInterpretation.summary}
               </p>
             </section>
 
+            {/* ── Overlap proof ── */}
             <section className="panel compare-section compare-overlap-proof">
               <div className="compare-section-head">
                 <div className="eyebrow">Overlap proof</div>
@@ -727,6 +730,7 @@ export default function ComparePage() {
               <ScoreBreakdownBars breakdown={data.scoring.breakdown} />
             </section>
 
+            {/* ── Exact overlap ── */}
             {sharedExact.length > 0 && (
               <section className="panel compare-section">
                 <div className="compare-section-head">
@@ -734,7 +738,6 @@ export default function ComparePage() {
                   <h2 className="compare-section-title">You both chose this</h2>
                   <p className="compare-section-text">The clearest direct intersection.</p>
                 </div>
-
                 <div className={`compare-exact-grid ${sharedExact.length === 1 ? "single" : ""}`}>
                   {sharedExact.slice(0, 8).map((nft) => {
                     const key = `${nft.contract.address}-${nft.tokenId}`;
@@ -751,6 +754,7 @@ export default function ComparePage() {
               </section>
             )}
 
+            {/* ── Shared collections ── */}
             {sharedCollections.length > 0 && (
               <section className="panel compare-section">
                 <div className="compare-section-head">
@@ -770,12 +774,12 @@ export default function ComparePage() {
                             <div className="compare-group-entry-dates compare-mono">
                               <span>
                                 {shortenAddress(submittedA)} entered{" "}
-                                <strong>{bucket.enteredDateA || "Date unknown"}</strong>
+                                <strong>{bucket.enteredDateA || "Date not available"}</strong>
                               </span>
                               <span className="compare-entry-divider">·</span>
                               <span>
                                 {shortenAddress(submittedB)} entered{" "}
-                                <strong>{bucket.enteredDateB || "Date unknown"}</strong>
+                                <strong>{bucket.enteredDateB || "Date not available"}</strong>
                               </span>
                             </div>
                           </div>
@@ -794,7 +798,6 @@ export default function ComparePage() {
                                 {bucket.walletA.length} shown · {bucket.walletACount} total
                               </div>
                             </div>
-
                             {bucket.walletA.length > 0 ? (
                               <>
                                 <div className="compare-nft-grid">
@@ -829,7 +832,6 @@ export default function ComparePage() {
                                 {bucket.walletB.length} shown · {bucket.walletBCount} total
                               </div>
                             </div>
-
                             {bucket.walletB.length > 0 ? (
                               <>
                                 <div className="compare-nft-grid">
@@ -867,6 +869,7 @@ export default function ComparePage() {
               </section>
             )}
 
+            {/* ── Shared artists ── */}
             {sharedArtists.length > 0 && (
               <section className="panel compare-section">
                 <div className="compare-section-head">
@@ -902,7 +905,6 @@ export default function ComparePage() {
                                 {bucket.walletA.length} shown · {bucket.walletACount} total
                               </div>
                             </div>
-
                             {bucket.walletA.length > 0 ? (
                               <>
                                 <div className="compare-nft-grid">
@@ -937,7 +939,6 @@ export default function ComparePage() {
                                 {bucket.walletB.length} shown · {bucket.walletBCount} total
                               </div>
                             </div>
-
                             {bucket.walletB.length > 0 ? (
                               <>
                                 <div className="compare-nft-grid">
@@ -975,6 +976,7 @@ export default function ComparePage() {
               </section>
             )}
 
+            {/* ── Where paths split ── */}
             <section className="panel compare-section">
               <div className="compare-section-head">
                 <div className="eyebrow">Where you diverge</div>
@@ -994,6 +996,7 @@ export default function ComparePage() {
               </div>
             </section>
 
+            {/* ── Collector profiles ── */}
             <section className="compare-overview">
               <div className="compare-overview-grid">
                 <article className="panel compare-wallet-card wallet-tone-a">
@@ -1041,6 +1044,7 @@ export default function ComparePage() {
               </div>
             </section>
 
+            {/* ── Taste map ── */}
             <section className="panel compare-section compare-section-compact">
               <div className="compare-section-head">
                 <div className="eyebrow">Taste map</div>
@@ -1054,11 +1058,9 @@ export default function ComparePage() {
                     <span className="wallet-a">Wallet one</span>
                     <span className="wallet-b">Wallet two</span>
                   </div>
-
                   {tasteKeys.map((key) => {
                     const left = data.walletA.taste[key] || 0;
                     const right = data.walletB.taste[key] || 0;
-
                     return (
                       <div key={key} className="compare-bar-row">
                         <div className="compare-bar-top">
@@ -1082,6 +1084,7 @@ export default function ComparePage() {
                 <div className="compare-empty">No taste profile available yet.</div>
               )}
             </section>
+
           </div>
         )}
       </div>

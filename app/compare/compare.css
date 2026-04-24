@@ -1017,3 +1017,71 @@
 .compare-entry-divider {
   color: rgba(255, 255, 255, 0.2);
 }
+
+/* ─── Collector identity pair (top of results) ─────────────────────── */
+
+.compare-identity-pair {
+  display: grid;
+  gap: 12px;
+}
+
+.compare-identity-item {
+  display: grid;
+  gap: 6px;
+}
+
+.compare-identity-address {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.compare-identity-label {
+  font-size: 22px;
+  font-weight: 650;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.compare-identity-a .compare-identity-label {
+  color: #a78bfa;
+}
+
+.compare-identity-b .compare-identity-label {
+  color: #4ade80;
+}
+
+.compare-identity-divider {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.2);
+  padding: 4px 0;
+}
+
+.compare-pair-connective {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--text);
+  font-weight: 500;
+  max-width: 60ch;
+}
+
+@media (min-width: 720px) {
+  .compare-identity-pair {
+    grid-template-columns: 1fr auto 1fr;
+    align-items: start;
+    gap: 20px;
+  }
+
+  .compare-identity-divider {
+    padding: 28px 0 0;
+    text-align: center;
+  }
+
+  .compare-identity-b {
+    text-align: right;
+  }
+}

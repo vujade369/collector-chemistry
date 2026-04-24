@@ -1,12 +1,10 @@
 // app/api/compare/route.ts
 import { NextResponse } from "next/server";
+import { fetchWalletNFTs } from "@/lib/fetchWalletNFTs";
+import { buildWalletProfile as buildCoreWalletProfile, type WalletProfileNFT } from "@/lib/walletProfile";
 
 const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY;
 const OPENSEA_API_KEY = process.env.OPENSEA_API_KEY;
-
-const BASE_URL = ALCHEMY_API_KEY
-  ? `https://eth-mainnet.g.alchemy.com/nft/v3/${ALCHEMY_API_KEY}`
-  : "";
 
 const OPENSEA_BASE_URL = "https://api.opensea.io/api/v2";
 
@@ -85,6 +83,22 @@ type CollectorProfile = {
   primaryLean: string;
   secondaryLean: string;
   profileLine: string;
+  collectorIdentityLabel: string;
+  dominantCategory: string;
+  secondaryCategory: string;
+  categoryDistribution: Array<{
+    category: string;
+    percentage: number;
+    count: number;
+  }>;
+  otherPercentage: number;
+  categoryConfidence: "High" | "Medium" | "Low";
+  categorySourceBreakdown: {
+    opensea: number;
+    metadata: number;
+    keyword: number;
+    other: number;
+  };
   topCollection: {
     source: "collection" | "artist";
     name: string;
@@ -207,7 +221,6 @@ type OpenSeaNftEventsResponse = {
 
 const PREVIEW_LIMIT = 4;
 const EXACT_LIMIT = 8;
-
 
 const OPENSEA_TIMEOUT_MS = 1800;
 const OPENSEA_MAX_ACCOUNT_ITEMS = 60;
@@ -546,6 +559,53 @@ async function buildWalletMastery(
   return { highestBounty, questStarted };
 }
 
+function buildPairInterpretation(params: {
+  profileA: CollectorProfile;
+  profileB: CollectorProfile;
+}) {
+  const { profileA, profileB } = params;
+  const usableA =
+    profileA.dominantCategory !== "other" && profileA.categoryConfidence !== "Low";
+  const usableB =
+    profileB.dominantCategory !== "other" && profileB.categoryConfidence !== "Low";
+
+  const normalizeCategory = (value: string) => value.replace(/_/g, " ").toLowerCase();
+
+  if (usableA && usableB) {
+    const categoryA = normalizeCategory(profileA.dominantCategory);
+    const categoryB = normalizeCategory(profileB.dominantCategory);
+
+    if (categoryA === categoryB) {
+      return {
+        headline: `Both collectors move through ${categoryA} culture in different ways.`,
+        summary:
+          "The chemistry comes from shared category grounding shaped by each wallet's collection patterns.",
+      };
+    }
+
+    return {
+      headline: `One collector leans ${categoryA} while the other leans ${categoryB}.`,
+      summary:
+        "The connection is adjacent rather than direct with each wallet expressing a distinct collecting lane.",
+    };
+  }
+
+  const shortenIdentity = (label: string) =>
+    label
+      .split(" ")
+      .slice(0, 3)
+      .join(" ");
+
+  const shortA = shortenIdentity(profileA.collectorIdentityLabel);
+  const shortB = shortenIdentity(profileB.collectorIdentityLabel);
+
+  return {
+    headline: `${shortA} and ${shortB} with limited direct overlap.`,
+    summary:
+      "This read leans on collector behavior and visible holdings more than confident category signals.",
+  };
+}
+
 async function fetchNftAcquiredDate(
   nft: NFT,
   walletAddress: string
@@ -672,7 +732,6 @@ async function fetchCollectionEntryDates(
 
   return result;
 }
-
 
 function clamp(value: number, min = 0, max = 1) {
   return Math.max(min, Math.min(max, value));
@@ -835,45 +894,7 @@ function getArtistName(nft: NFT) {
 }
 
 async function fetchNFTs(owner: string): Promise<NFT[]> {
-  if (!ALCHEMY_API_KEY || !BASE_URL) {
-    throw new Error("Missing ALCHEMY_API_KEY");
-  }
-
-  const allNfts: NFT[] = [];
-  let pageKey: string | undefined = undefined;
-
-  do {
-    const params = new URLSearchParams({
-      owner,
-      withMetadata: "true",
-      pageSize: "100",
-    });
-
-    if (pageKey) {
-      params.set("pageKey", pageKey);
-    }
-
-    const url = `${BASE_URL}/getNFTsForOwner?${params.toString()}`;
-    const res = await fetch(url, { cache: "no-store" });
-
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(
-        `Alchemy request failed: ${res.status} ${text.slice(0, 180)}`
-      );
-    }
-
-    const data = await res.json();
-
-    const pageNfts = (data.ownedNfts || []).filter(
-      (nft: NFT) => nft?.spamInfo?.isSpam !== "true"
-    );
-
-    allNfts.push(...pageNfts);
-    pageKey = data.pageKey;
-  } while (pageKey);
-
-  return allNfts;
+  return fetchWalletNFTs<NFT>(owner, ALCHEMY_API_KEY);
 }
 
 async function fetchOpenSeaAsset(
@@ -1515,7 +1536,7 @@ async function buildTopCollectionSignal(
   };
 }
 
-async function buildWalletProfile(
+async function buildCollectorCardProfile(
   nfts: NFT[],
   taste: TasteMap,
   cache: Map<string, Promise<NFT>>
@@ -1540,6 +1561,18 @@ async function buildWalletProfile(
     primaryLean,
     secondaryLean,
     profileLine,
+    collectorIdentityLabel: "Exploratory collector across emerging and uncategorized work",
+    dominantCategory: "other",
+    secondaryCategory: "other",
+    categoryDistribution: [],
+    otherPercentage: 100,
+    categoryConfidence: "Low",
+    categorySourceBreakdown: {
+      opensea: 0,
+      metadata: 0,
+      keyword: 0,
+      other: 0,
+    },
     topCollection,
   };
 }
@@ -1694,10 +1727,13 @@ export async function GET(req: Request) {
       sharedCollectionCandidatesB
     );
 
-    const [profileA, profileB, sharedExact, sharedCollections, sharedArtists] =
+    const coreProfileA = buildCoreWalletProfile(nftsA as WalletProfileNFT[]);
+    const coreProfileB = buildCoreWalletProfile(nftsB as WalletProfileNFT[]);
+
+    const [profileCardA, profileCardB, sharedExact, sharedCollections, sharedArtists] =
       await Promise.all([
-        buildWalletProfile(nftsA, tasteA, enrichCache),
-        buildWalletProfile(nftsB, tasteB, enrichCache),
+        buildCollectorCardProfile(nftsA, tasteA, enrichCache),
+        buildCollectorCardProfile(nftsB, tasteB, enrichCache),
         enrichSharedExactWithAcquiredDates(
           sharedExactRaw.slice(0, EXACT_LIMIT),
           walletA,
@@ -1707,6 +1743,30 @@ export async function GET(req: Request) {
         enrichSharedBuckets(sharedCollectionsRaw, enrichCache, collectionEntryDates),
         enrichSharedBuckets(sharedArtistsRaw, enrichCache),
       ]);
+
+    const profileA: CollectorProfile = {
+      ...profileCardA,
+      collectorIdentityLabel: coreProfileA.collectorIdentityLabel,
+      dominantCategory: coreProfileA.dominantCategory,
+      secondaryCategory: coreProfileA.secondaryCategory,
+      categoryDistribution: coreProfileA.categoryDistribution,
+      otherPercentage: coreProfileA.otherPercentage,
+      categoryConfidence: coreProfileA.categoryConfidence,
+      categorySourceBreakdown: coreProfileA.categorySourceBreakdown,
+    };
+
+    const profileB: CollectorProfile = {
+      ...profileCardB,
+      collectorIdentityLabel: coreProfileB.collectorIdentityLabel,
+      dominantCategory: coreProfileB.dominantCategory,
+      secondaryCategory: coreProfileB.secondaryCategory,
+      categoryDistribution: coreProfileB.categoryDistribution,
+      otherPercentage: coreProfileB.otherPercentage,
+      categoryConfidence: coreProfileB.categoryConfidence,
+      categorySourceBreakdown: coreProfileB.categorySourceBreakdown,
+    };
+
+    const pairInterpretation = buildPairInterpretation({ profileA, profileB });
 
     const walletAResponse: WalletSummary = {
       totalNFTs: nftsA.length,
@@ -1733,6 +1793,7 @@ export async function GET(req: Request) {
           label: labelFromTasteAlignment(Math.round(tasteScore * 100)),
         },
         interpretation,
+        pairInterpretation,
         breakdown: {
           exact: Math.round(exactScore * 100),
           collections: Math.round(collectionsScore * 100),
