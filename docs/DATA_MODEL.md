@@ -34,3 +34,18 @@
 * sharedArtists[]
 * wallet1TopCollection
 * wallet2TopCollection
+
+## Profile API Response
+
+Default:
+{
+  wallet: string;
+  profile: WalletProfile;
+}
+
+Debug (optional via ?debug=1):
+{
+  wallet: string;
+  profile: WalletProfile;
+  debug: object;
+}
