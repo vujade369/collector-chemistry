@@ -571,50 +571,130 @@ async function buildWalletMastery(
   return { highestBounty, questStarted };
 }
 
-function buildPairInterpretation(params: {
-  profileA: CollectorProfile;
-  profileB: CollectorProfile;
-}) {
-  const { profileA, profileB } = params;
-  const usableA =
-    profileA.dominantCategory !== "other" && profileA.categoryConfidence !== "Low";
-  const usableB =
-    profileB.dominantCategory !== "other" && profileB.categoryConfidence !== "Low";
+type ProfileCategoryDistribution = CollectorProfile["categoryDistribution"];
+type ProfileTopCollection = { name?: string; collectionName?: string };
 
-  const normalizeCategory = (value: string) => value.replace(/_/g, " ").toLowerCase();
+function getChemistryLabel(score: number) {
+  if (score >= 80) return "Strong Signal";
+  if (score >= 60) return "Kindred";
+  if (score >= 40) return "Interesting Tension";
+  return "Distant But Related";
+}
 
-  if (usableA && usableB) {
-    const categoryA = normalizeCategory(profileA.dominantCategory);
-    const categoryB = normalizeCategory(profileB.dominantCategory);
+function getOrientationIdentity(
+  categoryDistribution: ProfileCategoryDistribution,
+  topCollections: ProfileTopCollection[]
+) {
+  const ranked = categoryDistribution
+    .filter((entry) => entry.category !== "other" && entry.percentage > 0)
+    .sort((a, b) => b.percentage - a.percentage);
+  const primary = ranked[0];
+  const activeLanes = ranked.filter((entry) => entry.percentage >= 12).length;
+  const collectionAnchor = topCollections[0]?.name || topCollections[0]?.collectionName || "";
 
-    if (categoryA === categoryB) {
-      return {
-        headline: `Both collectors move through ${categoryA} culture in different ways.`,
-        summary:
-          "The chemistry comes from shared category grounding shaped by each wallet's collection patterns.",
-      };
+  if (!primary || primary.percentage < 20) {
+    if (collectionAnchor) {
+      return `a curiosity-led collector who follows a personal thread through groups like ${collectionAnchor}`;
     }
-
-    return {
-      headline: `One collector leans ${categoryA} while the other leans ${categoryB}.`,
-      summary:
-        "The connection is adjacent rather than direct with each wallet expressing a distinct collecting lane.",
-    };
+    return "a curiosity-led collector who follows instinct more than a single lane";
   }
 
-  const shortenIdentity = (label: string) =>
-    label
-      .split(" ")
-      .slice(0, 3)
-      .join(" ");
+  if (primary.percentage >= 55) {
+    if (collectionAnchor) {
+      return `a signature-driven collector who keeps returning to a core obsession, including ${collectionAnchor}`;
+    }
+    return "a signature-driven collector who keeps returning to one core obsession";
+  }
 
-  const shortA = shortenIdentity(profileA.collectorIdentityLabel);
-  const shortB = shortenIdentity(profileB.collectorIdentityLabel);
+  if (activeLanes >= 3) {
+    if (collectionAnchor) {
+      return `an exploratory collector who moves between scenes while staying coherent, with anchors like ${collectionAnchor}`;
+    }
+    return "an exploratory collector who moves between scenes while staying coherent";
+  }
+
+  if (collectionAnchor) {
+    return `a selective collector with a steady center and a few clear anchors, including ${collectionAnchor}`;
+  }
+
+  return "a selective collector with a steady center and a few clear anchors";
+}
+
+function getRelationshipDynamic(
+  categoryDistributionA: ProfileCategoryDistribution,
+  categoryDistributionB: ProfileCategoryDistribution
+) {
+  const topA = categoryDistributionA
+    .filter((entry) => entry.category !== "other")
+    .sort((a, b) => b.percentage - a.percentage)[0];
+  const topB = categoryDistributionB
+    .filter((entry) => entry.category !== "other")
+    .sort((a, b) => b.percentage - a.percentage)[0];
+
+  if (!topA || !topB) return "Parallel Intuition";
+
+  const samePrimary = topA.category === topB.category;
+  const percentGap = Math.abs((topA.percentage || 0) - (topB.percentage || 0));
+
+  if (samePrimary && percentGap <= 15) return "Shared Frequency";
+  if (samePrimary) return "Same Compass, Different Intensity";
+
+  const categoryGap = Math.abs((topA.percentage || 0) - (topB.percentage || 0));
+  if (categoryGap <= 10) return "Different Doors, Same House";
+
+  return "Productive Contrast";
+}
+
+function buildPairInterpretation(params: {
+  categoryDistributionA: ProfileCategoryDistribution;
+  categoryDistributionB: ProfileCategoryDistribution;
+  topCollectionsA: ProfileTopCollection[];
+  topCollectionsB: ProfileTopCollection[];
+  sharedCollectionCount: number;
+  sharedArtistCount: number;
+  sharedExactCount: number;
+  chemistryScore: number;
+}) {
+  const {
+    categoryDistributionA,
+    categoryDistributionB,
+    topCollectionsA,
+    topCollectionsB,
+    sharedCollectionCount,
+    sharedArtistCount,
+    sharedExactCount,
+    chemistryScore,
+  } = params;
+
+  const chemistryLabel = getChemistryLabel(chemistryScore);
+  const relationshipDynamic = getRelationshipDynamic(
+    categoryDistributionA,
+    categoryDistributionB
+  );
+  const orientationA = getOrientationIdentity(categoryDistributionA, topCollectionsA);
+  const orientationB = getOrientationIdentity(categoryDistributionB, topCollectionsB);
+
+  const connectiveSignals = sharedCollectionCount + sharedArtistCount + sharedExactCount;
+  const gapLine =
+    connectiveSignals === 0
+      ? "At first glance they can look far apart, because their paths rarely meet in the exact same places."
+      : connectiveSignals <= 3
+      ? "At first glance there is some distance between them, and that distance is real."
+      : "At first glance they do not mirror each other one-to-one, and that difference matters.";
+
+  const sharedInstinctLine =
+    relationshipDynamic === "Shared Frequency" ||
+    relationshipDynamic === "Same Compass, Different Intensity"
+      ? "What links them is a similar instinct for what feels culturally alive, even when the depth of commitment differs."
+      : relationshipDynamic === "Different Doors, Same House"
+      ? "What links them is not identical taste, but a shared instinct for work that carries a clear point of view."
+      : relationshipDynamic === "Productive Contrast"
+      ? "What links them is a compatible tension, where each collector sharpens what the other is already searching for."
+      : "What links them is a parallel instinct for signal over noise, even without obvious overlap.";
 
   return {
-    headline: `${shortA} and ${shortB} with limited direct overlap.`,
-    summary:
-      "This read leans on collector behavior and visible holdings more than confident category signals.",
+    headline: `${relationshipDynamic} (${chemistryLabel})`,
+    summary: `${orientationA}. ${orientationB}. ${gapLine} ${sharedInstinctLine}`,
   };
 }
 
@@ -1857,7 +1937,16 @@ export async function GET(req: Request) {
       categorySourceBreakdown: coreProfileB.categorySourceBreakdown,
     };
 
-    const pairInterpretation = buildPairInterpretation({ profileA, profileB });
+    const pairInterpretation = buildPairInterpretation({
+      categoryDistributionA: profileA.categoryDistribution,
+      categoryDistributionB: profileB.categoryDistribution,
+      topCollectionsA: coreProfileA.topCollections,
+      topCollectionsB: coreProfileB.topCollections,
+      sharedCollectionCount: Object.keys(filteredSharedCollections).length,
+      sharedArtistCount: Object.keys(filteredSharedArtists).length,
+      sharedExactCount: sharedExactRaw.length,
+      chemistryScore,
+    });
 
     const walletAResponse: WalletSummary = {
       totalNFTs: nftsA.length,

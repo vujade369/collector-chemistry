@@ -26,6 +26,15 @@ Read:
 
 If a task requires touching more files than expected → STOP and explain.
 
+## Product interpretation rules
+
+- The comparison is a mirror, not a match.
+- Prioritize interpretation over raw data presentation.
+- Do not reduce results to summaries of overlap.
+- The goal is to reveal something true about the collector, not just show what two wallets share.
+- The "why this match" section is the emotional core of the product.
+- Scoring should support interpretation, not dominate it.
+
 ## Coding rules
 
 * Preserve working logic
