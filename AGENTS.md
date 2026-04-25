@@ -14,6 +14,7 @@ Read:
 
 ## Strict file limits
 
+* If a task does not name files, ask which files to modify before making changes.
 * Only modify files explicitly listed in the task
 * Do NOT create new files unless you explain why first
 * Do NOT refactor large files unless asked

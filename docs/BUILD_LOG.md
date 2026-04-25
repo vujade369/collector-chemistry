@@ -27,6 +27,7 @@
 * Date or time-based NFT pipeline behavior may be unreliable
 * Profile page is not yet fully built
 * route.ts and page.tsx are too large and should not be expanded casually
+* npm run lint currently fails due to pre-existing issues, including app/api/test/route.ts using any
 
 ## Next Focus
 
