@@ -297,6 +297,18 @@ function formatDateShort(timestamp?: string | null) {
   });
 }
 
+function sanitizeDateLabel(value?: string | null) {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const date = new Date(trimmed);
+  if (Number.isNaN(date.getTime())) return null;
+  if (date.getUTCFullYear() < 2010) return null;
+
+  return trimmed;
+}
+
 function getDaysSince(timestamp?: string | null) {
   if (!timestamp) return null;
   const date = new Date(timestamp);
@@ -637,7 +649,7 @@ async function fetchNftAcquiredDate(
       );
       if (toAddress === target) {
         const timestamp = event.event_timestamp || null;
-        return timestamp ? formatDateShort(timestamp) : null;
+        return sanitizeDateLabel(timestamp ? formatDateShort(timestamp) : null);
       }
     }
 
@@ -724,8 +736,8 @@ async function fetchCollectionEntryDates(
       ]);
 
       result.set(normalizedName, {
-        dateA: rawDateA ? formatDateShort(rawDateA) : null,
-        dateB: rawDateB ? formatDateShort(rawDateB) : null,
+        dateA: sanitizeDateLabel(rawDateA ? formatDateShort(rawDateA) : null),
+        dateB: sanitizeDateLabel(rawDateB ? formatDateShort(rawDateB) : null),
       });
     })
   );
@@ -747,6 +759,29 @@ function normalizeText(value: string) {
     .trim()
     .replace(/[^\w\s/#-]/g, " ")
     .replace(/\s+/g, " ");
+}
+
+function humanizeCollectionName(value?: string | null) {
+  if (!value) return "";
+
+  const withSpaces = value
+    .trim()
+    .replace(/[-_]+/g, " ")
+    .replace(/([0-9])([A-Za-z])/g, "$1 $2")
+    .replace(/([A-Za-z])([0-9])/g, "$1 $2")
+    .replace(/\s+/g, " ");
+
+  if (!withSpaces) return "";
+
+  return withSpaces
+    .split(" ")
+    .map((word) => {
+      if (!word) return "";
+      if (word === word.toUpperCase()) return word;
+      if (/\d/.test(word) && word.length <= 4) return word.toUpperCase();
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(" ");
 }
 
 function normalizeImageUrl(url?: string) {
@@ -785,10 +820,14 @@ function getExistingImage(nft: NFT) {
 }
 
 function getCollectionName(nft: NFT) {
+  const slugFallback = humanizeCollectionName(nft.displayCollectionSlug);
+
   return (
     nft.displayCollectionName ||
     nft.contractMetadata?.name?.trim() ||
     nft.contract?.name?.trim() ||
+    slugFallback ||
+    humanizeCollectionName(nft.contract.address) ||
     nft.contract.address
   );
 }
@@ -958,7 +997,13 @@ async function fetchOpenSeaAsset(
 }
 
 function mergeDisplayMetadata(nft: NFT, resolved: ResolvedDisplayMetadata): NFT {
-  const collectionName = resolved.collectionName || getCollectionName(nft);
+  const collectionName =
+    resolved.collectionName ||
+    nft.displayCollectionName ||
+    nft.contractMetadata?.name?.trim() ||
+    nft.contract?.name?.trim() ||
+    humanizeCollectionName(resolved.collectionSlug || nft.displayCollectionSlug) ||
+    getCollectionName(nft);
   const imageUrl = resolved.imageUrl || getExistingImage(nft);
   const title = pickBestTitle(nft, resolved);
   const artist =
@@ -1090,6 +1135,49 @@ async function enrichSharedBuckets(
   );
 
   return Object.fromEntries(entries);
+}
+
+const ENS_CONTRACTS = new Set([
+  "0x57f1887a8bf19b14fc0df6fd9b2acc9af147ea85",
+  "0xd4416b13d2b3a9abae7acd5d6c2bbdbe25686401",
+]);
+
+const NAME_SERVICE_TERMS = [
+  "ens",
+  "ethereum name service",
+  "namewrapper",
+  "basenames",
+  "domain",
+  "domains",
+];
+
+function isLikelyNameServiceCollection(value?: string | null) {
+  const normalized = normalizeText(String(value || ""));
+  if (!normalized) return false;
+  return NAME_SERVICE_TERMS.some((term) => normalized.includes(term));
+}
+
+function bucketLooksLikeNameService(key: string, bucket: SharedBucket) {
+  if (isLikelyNameServiceCollection(key)) return true;
+
+  const allNfts = [...bucket.walletA, ...bucket.walletB];
+  return allNfts.some((nft) => {
+    const address = normalizeAddress(nft.contract?.address);
+    if (ENS_CONTRACTS.has(address)) return true;
+
+    return (
+      isLikelyNameServiceCollection(nft.displayCollectionName) ||
+      isLikelyNameServiceCollection(nft.displayCollectionSlug) ||
+      isLikelyNameServiceCollection(nft.contractMetadata?.name) ||
+      isLikelyNameServiceCollection(nft.contract?.name)
+    );
+  });
+}
+
+function filterNameServiceBuckets(buckets: Record<string, SharedBucket>) {
+  return Object.fromEntries(
+    Object.entries(buckets).filter(([key, bucket]) => !bucketLooksLikeNameService(key, bucket))
+  );
 }
 
 function groupByCollection(nfts: NFT[]) {
@@ -1744,6 +1832,9 @@ export async function GET(req: Request) {
         enrichSharedBuckets(sharedArtistsRaw, enrichCache),
       ]);
 
+    const filteredSharedCollections = filterNameServiceBuckets(sharedCollections);
+    const filteredSharedArtists = filterNameServiceBuckets(sharedArtists);
+
     const profileA: CollectorProfile = {
       ...profileCardA,
       collectorIdentityLabel: coreProfileA.collectorIdentityLabel,
@@ -1805,8 +1896,8 @@ export async function GET(req: Request) {
       shared: {
         exact: sharedExact,
         exactCount: sharedExactRaw.length,
-        collections: sharedCollections,
-        artists: sharedArtists,
+        collections: filteredSharedCollections,
+        artists: filteredSharedArtists,
       },
     });
   } catch (err) {

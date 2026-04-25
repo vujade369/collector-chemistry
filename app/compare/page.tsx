@@ -35,6 +35,7 @@ type NFT = {
   };
   displayTitle?: string;
   displayCollectionName?: string;
+  displayCollectionSlug?: string;
   displayArtist?: string;
   displayImage?: string;
   acquiredDateA?: string | null;
@@ -136,12 +137,56 @@ function getNftImage(nft: NFT) {
 }
 
 function getCollectionName(nft: NFT) {
+  const slugFallback = humanizeCollectionName(nft?.displayCollectionSlug);
   return (
     nft?.displayCollectionName ||
     nft?.contractMetadata?.name ||
     nft?.contract?.name ||
+    slugFallback ||
     "Unknown collection"
   );
+}
+
+function humanizeCollectionName(value?: string | null) {
+  if (!value) return "";
+
+  const withSpaces = value
+    .trim()
+    .replace(/[-_]+/g, " ")
+    .replace(/([0-9])([A-Za-z])/g, "$1 $2")
+    .replace(/([A-Za-z])([0-9])/g, "$1 $2")
+    .replace(/\s+/g, " ");
+
+  if (!withSpaces) return "";
+
+  return withSpaces
+    .split(" ")
+    .map((word) => {
+      if (!word) return "";
+      if (word === word.toUpperCase()) return word;
+      if (/\d/.test(word) && word.length <= 4) return word.toUpperCase();
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(" ");
+}
+
+function sanitizeDisplayDate(value?: string | null) {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const blocked = new Set([
+    "date not available",
+    "date unknown",
+    "entered date not available",
+  ]);
+  if (blocked.has(trimmed.toLowerCase())) return null;
+
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return null;
+  if (parsed.getUTCFullYear() < 2010) return null;
+
+  return trimmed;
 }
 
 function getNftTitle(nft: NFT) {
@@ -258,8 +303,9 @@ function SpotlightCard({
   const labelA = submittedA ? shortenAddress(submittedA) : "Wallet one";
   const labelB = submittedB ? shortenAddress(submittedB) : "Wallet two";
 
-  const dateA = nft.acquiredDateA || "Date not available";
-  const dateB = nft.acquiredDateB || "Date not available";
+  const dateA = sanitizeDisplayDate(nft.acquiredDateA);
+  const dateB = sanitizeDisplayDate(nft.acquiredDateB);
+  const hasAcquiredDates = Boolean(dateA || dateB);
 
   const content = (
     <>
@@ -286,16 +332,22 @@ function SpotlightCard({
       <div className="compare-spotlight-meta">
         <div className="compare-spotlight-title truncate-2">{title}</div>
         <div className="compare-spotlight-subtitle truncate-2">{subtitle}</div>
-        <div className="compare-acquired-row compare-mono">
-          <div className="compare-acquired-item">
-            <span className="compare-acquired-label">{labelA}</span>
-            <span className="compare-acquired-date">Acquired {dateA}</span>
+        {hasAcquiredDates ? (
+          <div className="compare-acquired-row compare-mono">
+            {dateA ? (
+              <div className="compare-acquired-item">
+                <span className="compare-acquired-label">{labelA}</span>
+                <span className="compare-acquired-date">Acquired {dateA}</span>
+              </div>
+            ) : null}
+            {dateB ? (
+              <div className="compare-acquired-item">
+                <span className="compare-acquired-label">{labelB}</span>
+                <span className="compare-acquired-date">Acquired {dateB}</span>
+              </div>
+            ) : null}
           </div>
-          <div className="compare-acquired-item">
-            <span className="compare-acquired-label">{labelB}</span>
-            <span className="compare-acquired-date">Acquired {dateB}</span>
-          </div>
-        </div>
+        ) : null}
       </div>
     </>
   );
@@ -766,96 +818,103 @@ export default function ComparePage() {
                 <div className="compare-group-list">
                   {sharedCollections
                     .slice(0, showMoreCollections ? sharedCollections.length : 3)
-                    .map(([name, bucket]) => (
-                      <article key={name} className="panel-subtle compare-group-card">
-                        <div className="compare-group-head">
-                          <div className="compare-group-title-wrap">
-                            <h3 className="compare-group-title">{name}</h3>
-                            <div className="compare-group-entry-dates compare-mono">
-                              <span>
-                                {shortenAddress(submittedA)} entered{" "}
-                                <strong>{bucket.enteredDateA || "Date not available"}</strong>
-                              </span>
-                              <span className="compare-entry-divider">·</span>
-                              <span>
-                                {shortenAddress(submittedB)} entered{" "}
-                                <strong>{bucket.enteredDateB || "Date not available"}</strong>
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="compare-group-columns">
-                          <div className="compare-column compare-column-a">
-                            <div className="compare-column-head">
-                              <div className="compare-column-title">
-                                Wallet one
-                                <span className="compare-column-address">
-                                  {shortenAddress(submittedA)}
-                                </span>
-                              </div>
-                              <div className="compare-column-meta compare-mono">
-                                {bucket.walletA.length} shown · {bucket.walletACount} total
-                              </div>
-                            </div>
-                            {bucket.walletA.length > 0 ? (
-                              <>
-                                <div className="compare-nft-grid">
-                                  {bucket.walletA.map((nft) => (
-                                    <NFTCard
-                                      key={`${nft.contract.address}-${nft.tokenId}-a`}
-                                      nft={nft}
-                                      walletTone="a"
-                                    />
-                                  ))}
+                    .map(([name, bucket]) => {
+                      const enteredDateA = sanitizeDisplayDate(bucket.enteredDateA);
+                      const enteredDateB = sanitizeDisplayDate(bucket.enteredDateB);
+                      const displayName = humanizeCollectionName(name) || name;
+                      return (
+                        <article key={name} className="panel-subtle compare-group-card">
+                          <div className="compare-group-head">
+                            <div className="compare-group-title-wrap">
+                              <h3 className="compare-group-title">{displayName}</h3>
+                              {enteredDateA && enteredDateB ? (
+                                <div className="compare-group-entry-dates compare-mono">
+                                  <span>
+                                    {shortenAddress(submittedA)} entered{" "}
+                                    <strong>{enteredDateA}</strong>
+                                  </span>
+                                  <span className="compare-entry-divider">·</span>
+                                  <span>
+                                    {shortenAddress(submittedB)} entered{" "}
+                                    <strong>{enteredDateB}</strong>
+                                  </span>
                                 </div>
-                                {bucket.walletACount > bucket.walletA.length && (
-                                  <div className="compare-more-pill compare-mono">
-                                    +{bucket.walletACount - bucket.walletA.length} more
-                                  </div>
-                                )}
-                              </>
-                            ) : (
-                              <div className="compare-empty">No NFTs to show.</div>
-                            )}
+                              ) : null}
+                            </div>
                           </div>
 
-                          <div className="compare-column compare-column-b">
-                            <div className="compare-column-head">
-                              <div className="compare-column-title">
-                                Wallet two
-                                <span className="compare-column-address">
-                                  {shortenAddress(submittedB)}
-                                </span>
-                              </div>
-                              <div className="compare-column-meta compare-mono">
-                                {bucket.walletB.length} shown · {bucket.walletBCount} total
-                              </div>
-                            </div>
-                            {bucket.walletB.length > 0 ? (
-                              <>
-                                <div className="compare-nft-grid">
-                                  {bucket.walletB.map((nft) => (
-                                    <NFTCard
-                                      key={`${nft.contract.address}-${nft.tokenId}-b`}
-                                      nft={nft}
-                                      walletTone="b"
-                                    />
-                                  ))}
+                          <div className="compare-group-columns">
+                            <div className="compare-column compare-column-a">
+                              <div className="compare-column-head">
+                                <div className="compare-column-title">
+                                  Wallet one
+                                  <span className="compare-column-address">
+                                    {shortenAddress(submittedA)}
+                                  </span>
                                 </div>
-                                {bucket.walletBCount > bucket.walletB.length && (
-                                  <div className="compare-more-pill compare-mono">
-                                    +{bucket.walletBCount - bucket.walletB.length} more
+                                <div className="compare-column-meta compare-mono">
+                                  {bucket.walletA.length} shown · {bucket.walletACount} total
+                                </div>
+                              </div>
+                              {bucket.walletA.length > 0 ? (
+                                <>
+                                  <div className="compare-nft-grid">
+                                    {bucket.walletA.map((nft) => (
+                                      <NFTCard
+                                        key={`${nft.contract.address}-${nft.tokenId}-a`}
+                                        nft={nft}
+                                        walletTone="a"
+                                      />
+                                    ))}
                                   </div>
-                                )}
-                              </>
-                            ) : (
-                              <div className="compare-empty">No NFTs to show.</div>
-                            )}
+                                  {bucket.walletACount > bucket.walletA.length && (
+                                    <div className="compare-more-pill compare-mono">
+                                      +{bucket.walletACount - bucket.walletA.length} more
+                                    </div>
+                                  )}
+                                </>
+                              ) : (
+                                <div className="compare-empty">No NFTs to show.</div>
+                              )}
+                            </div>
+
+                            <div className="compare-column compare-column-b">
+                              <div className="compare-column-head">
+                                <div className="compare-column-title">
+                                  Wallet two
+                                  <span className="compare-column-address">
+                                    {shortenAddress(submittedB)}
+                                  </span>
+                                </div>
+                                <div className="compare-column-meta compare-mono">
+                                  {bucket.walletB.length} shown · {bucket.walletBCount} total
+                                </div>
+                              </div>
+                              {bucket.walletB.length > 0 ? (
+                                <>
+                                  <div className="compare-nft-grid">
+                                    {bucket.walletB.map((nft) => (
+                                      <NFTCard
+                                        key={`${nft.contract.address}-${nft.tokenId}-b`}
+                                        nft={nft}
+                                        walletTone="b"
+                                      />
+                                    ))}
+                                  </div>
+                                  {bucket.walletBCount > bucket.walletB.length && (
+                                    <div className="compare-more-pill compare-mono">
+                                      +{bucket.walletBCount - bucket.walletB.length} more
+                                    </div>
+                                  )}
+                                </>
+                              ) : (
+                                <div className="compare-empty">No NFTs to show.</div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </article>
-                    ))}
+                        </article>
+                      );
+                    })}
                 </div>
                 {sharedCollections.length > 3 ? (
                   <button
