@@ -225,7 +225,7 @@ type OpenSeaNftEventsResponse = {
 const PREVIEW_LIMIT = 4;
 const EXACT_LIMIT = 8;
 
-const OPENSEA_TIMEOUT_MS = 5000;
+const OPENSEA_TIMEOUT_MS = 1800;
 const OPENSEA_MAX_ACCOUNT_ITEMS = 60;
 const OPENSEA_MAX_BOUNTY_LOOKUPS = 15;
 const OPENSEA_MAX_EVENT_PAGES = 6;
@@ -515,10 +515,7 @@ async function fetchCollectionInboundTimestamp(
         event.to_address || event.winner_account?.address
       );
       if (toAddress === target) {
-        const raw = event.event_timestamp;
-const timestamp = typeof raw === "number"
-  ? new Date(raw * 1000).toISOString()
-  : (raw || event.sent_at || null);
+        const timestamp = event.event_timestamp || event.sent_at || null;
         if (timestamp && (!oldest || new Date(timestamp) < new Date(oldest))) {
           oldest = timestamp;
         }
@@ -753,11 +750,8 @@ async function fetchNftAcquiredDate(
         event.to_address || event.winner_account?.address
       );
       if (toAddress === target) {
-        const raw = event.event_timestamp;
-const timestamp = typeof raw === "number"
-  ? new Date(raw * 1000).toISOString()
-  : (raw || null);
-return sanitizeDateLabel(timestamp ? formatDateShort(timestamp) : null);
+        const timestamp = event.event_timestamp || null;
+        return sanitizeDateLabel(timestamp ? formatDateShort(timestamp) : null);
       }
     }
 
@@ -772,15 +766,16 @@ async function enrichSharedExactWithAcquiredDates(
   nfts: NFT[],
   walletA: string,
   walletB: string,
-  cache: Map<string, Promise<NFT>>
+  cache: Map<string, Promise<NFT>>,
+  slugContractCache: Map<string, string>
 ): Promise<NFT[]> {
   const enriched = await enrichDisplayedNFTs(nfts, cache);
 
   return Promise.all(
     enriched.map(async (nft) => {
       const [acquiredDateA, acquiredDateB] = await Promise.all([
-        fetchNftAcquiredDate(nft, walletA),
-        fetchNftAcquiredDate(nft, walletB),
+        fetchNftAcquiredDate(nft, walletA, slugContractCache),
+        fetchNftAcquiredDate(nft, walletB, slugContractCache),
       ]);
 
       const { acquiredAt: _removed, ...nftClean } = nft as NFT & { acquiredAt?: unknown };
@@ -1910,6 +1905,7 @@ export async function GET(req: Request) {
     });
 
     const enrichCache = new Map<string, Promise<NFT>>();
+    const slugContractCache = new Map<string, string>();
     const sharedCollectionNames = Object.keys(sharedCollectionsRaw);
 
     const [sharedCollectionCandidatesA, sharedCollectionCandidatesB] =
