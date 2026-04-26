@@ -729,6 +729,7 @@ async function fetchNftAcquiredDate(
 
   let contract = nft.contract.address;
   const slug = String(nft.displayCollectionSlug || "").trim();
+  console.log("FETCH_ACQUIRED_DATE", { slug, contract, tokenId: nft.tokenId });
   if (slug) {
     const cached = slugContractCache.get(slug);
     if (cached) {
