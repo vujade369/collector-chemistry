@@ -232,31 +232,6 @@ function scoreLabel(score: number) {
   return "Strong alignment";
 }
 
-function buildDivergenceLines(
-  tasteA: Record<string, number>,
-  tasteB: Record<string, number>,
-  labelA: string,
-  labelB: string
-) {
-  const keys = new Set([...Object.keys(tasteA || {}), ...Object.keys(tasteB || {})]);
-  const ranked = [...keys]
-    .map((key) => {
-      const left = tasteA?.[key] || 0;
-      const right = tasteB?.[key] || 0;
-      return { key, left, right, diff: Math.abs(left - right) };
-    })
-    .filter((item) => item.diff >= 8)
-    .sort((a, b) => b.diff - a.diff)
-    .slice(0, 3);
-
-  return ranked.map((item) => {
-    if (item.left > item.right) {
-      return `${labelA} leans ${item.key.toLowerCase()}, while ${labelB} gives less weight there.`;
-    }
-    return `${labelB} leans ${item.key.toLowerCase()}, while ${labelA} gives less weight there.`;
-  });
-}
-
 const SPECTRUM_COLORS = [
   { color: "#ff0080", bg: "#1a0814", border: "#ff008055" },
   { color: "#00b0ff", bg: "#0a0e1a", border: "#00b0ff55" },
@@ -270,7 +245,6 @@ function getSpectrumColor(index: number) {
   return SPECTRUM_COLORS[index % SPECTRUM_COLORS.length];
 }
 
-// ── Large avatar for the hero card ──────────────────────────────────
 function Avatar({
   address,
   tone,
@@ -301,7 +275,6 @@ function Avatar({
   );
 }
 
-// ── Mini avatar label — replaces "Wallet one / Wallet two" throughout ──
 function WalletLabel({
   address,
   tone,
@@ -538,12 +511,6 @@ function CollectorProfileCard({
           </h3>
           <p className="compare-profile-line">{wallet.profile.profileLine}</p>
         </div>
-        <div className="compare-profile-level">
-          <span className="compare-profile-level-label">Level</span>
-          <span className="compare-profile-level-value compare-mono">
-            {wallet.profile.level}
-          </span>
-        </div>
       </div>
 
       <div className="compare-profile-identity">
@@ -667,16 +634,7 @@ export default function ComparePage() {
   );
 
   const sharedExact = data?.shared?.exact || [];
-
-  const divergenceLines = useMemo(() => {
-    if (!data) return [];
-    return buildDivergenceLines(
-      data.walletA.taste,
-      data.walletB.taste,
-      shortenAddress(submittedA),
-      shortenAddress(submittedB)
-    );
-  }, [data, submittedA, submittedB]);
+  const exactCount = data?.shared?.exactCount || 0;
 
   const overlapTasteTags = useMemo(() => {
     if (!data) return [];
@@ -822,7 +780,6 @@ export default function ComparePage() {
 
                 <div className="cc-score-center">
                   <p className="cc-score-eyebrow">chemistry</p>
-                  <p className="cc-score-value">{data.scoring.chemistryScore}</p>
                   <p className="cc-score-label">{scoreLabel(data.scoring.chemistryScore)}</p>
                 </div>
 
@@ -1095,24 +1052,6 @@ export default function ComparePage() {
                 )}
               </section>
             )}
-
-            {/* ── Where paths split ── */}
-            <section className="panel compare-section">
-              <div className="compare-section-head">
-                <div className="eyebrow">Where you diverge</div>
-                <h2 className="compare-section-title">Where your paths split</h2>
-              </div>
-              <div className="compare-divergence-list">
-                {divergenceLines.map((line) => (
-                  <p key={line} className="compare-divergence-item">{line}</p>
-                ))}
-                {divergenceLines.length === 0 && (
-                  <div className="compare-empty">
-                    Differences are subtle. Both wallets distribute taste in a similar way.
-                  </div>
-                )}
-              </div>
-            </section>
 
             {/* ── Collector profiles ── */}
             <section className="compare-overview">
