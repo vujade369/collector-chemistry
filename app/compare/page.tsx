@@ -1,8 +1,9 @@
 // app/compare/page.tsx
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
-import "./compare.css";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import "./compare/compare.css";
 
 type NFT = {
   contract: {
@@ -63,6 +64,8 @@ type WalletSummary = {
   totalNFTs: number;
   taste: Record<string, number>;
   profile: CollectorProfile;
+  pfpUrl?: string | null;
+  bannerUrl?: string | null;
 };
 
 type SharedBucket = {
@@ -149,16 +152,13 @@ function getCollectionName(nft: NFT) {
 
 function humanizeCollectionName(value?: string | null) {
   if (!value) return "";
-
   const withSpaces = value
     .trim()
     .replace(/[-_]+/g, " ")
     .replace(/([0-9])([A-Za-z])/g, "$1 $2")
     .replace(/([A-Za-z])([0-9])/g, "$1 $2")
     .replace(/\s+/g, " ");
-
   if (!withSpaces) return "";
-
   return withSpaces
     .split(" ")
     .map((word) => {
@@ -174,18 +174,11 @@ function sanitizeDisplayDate(value?: string | null) {
   if (!value) return null;
   const trimmed = value.trim();
   if (!trimmed) return null;
-
-  const blocked = new Set([
-    "date not available",
-    "date unknown",
-    "entered date not available",
-  ]);
+  const blocked = new Set(["date not available", "date unknown", "entered date not available"]);
   if (blocked.has(trimmed.toLowerCase())) return null;
-
   const parsed = new Date(trimmed);
   if (Number.isNaN(parsed.getTime())) return null;
   if (parsed.getUTCFullYear() < 2010) return null;
-
   return trimmed;
 }
 
@@ -231,6 +224,118 @@ const BREAKDOWN_META: Record<string, string> = {
   artists: "Same artists across both wallets",
   taste: "Similarity in collecting categories",
 };
+
+function scoreLabel(score: number) {
+  if (score < 25) return "Very different";
+  if (score < 50) return "Some overlap";
+  if (score < 75) return "Shared taste";
+  return "Strong alignment";
+}
+
+function buildDivergenceLines(
+  tasteA: Record<string, number>,
+  tasteB: Record<string, number>,
+  labelA: string,
+  labelB: string
+) {
+  const keys = new Set([...Object.keys(tasteA || {}), ...Object.keys(tasteB || {})]);
+  const ranked = [...keys]
+    .map((key) => {
+      const left = tasteA?.[key] || 0;
+      const right = tasteB?.[key] || 0;
+      return { key, left, right, diff: Math.abs(left - right) };
+    })
+    .filter((item) => item.diff >= 8)
+    .sort((a, b) => b.diff - a.diff)
+    .slice(0, 3);
+
+  return ranked.map((item) => {
+    if (item.left > item.right) {
+      return `${labelA} leans ${item.key.toLowerCase()}, while ${labelB} gives less weight there.`;
+    }
+    return `${labelB} leans ${item.key.toLowerCase()}, while ${labelA} gives less weight there.`;
+  });
+}
+
+const SPECTRUM_COLORS = [
+  { color: "#ff0080", bg: "#1a0814", border: "#ff008055" },
+  { color: "#00b0ff", bg: "#0a0e1a", border: "#00b0ff55" },
+  { color: "#00e676", bg: "#0a1a0e", border: "#00e67655" },
+  { color: "#7c4dff", bg: "#0e0a1a", border: "#7c4dff55" },
+  { color: "#ffcc00", bg: "#1a1000", border: "#ffcc0055" },
+  { color: "#ff4500", bg: "#1a0a00", border: "#ff450055" },
+];
+
+function getSpectrumColor(index: number) {
+  return SPECTRUM_COLORS[index % SPECTRUM_COLORS.length];
+}
+
+// ── Large avatar for the hero card ──────────────────────────────────
+function Avatar({
+  address,
+  tone,
+  pfpUrl,
+}: {
+  address: string;
+  tone: "a" | "b";
+  pfpUrl?: string | null;
+}) {
+  const [imgError, setImgError] = useState(false);
+  const initial = address ? address.slice(0, 1).toUpperCase() : "?";
+  const borderColor = tone === "a" ? "#ff0080" : "#00b0ff";
+  const bgColor = tone === "a" ? "#1a0814" : "#0a0e1a";
+  const textColor = tone === "a" ? "#ff0080" : "#00b0ff";
+  const showImage = pfpUrl && !imgError;
+
+  return (
+    <div
+      className="cc-avatar"
+      style={{ background: bgColor, border: `1.5px solid ${borderColor}` }}
+    >
+      {showImage ? (
+        <img src={pfpUrl} alt={address} onError={() => setImgError(true)} />
+      ) : (
+        <span style={{ color: textColor }}>{initial}</span>
+      )}
+    </div>
+  );
+}
+
+// ── Mini avatar label — replaces "Wallet one / Wallet two" throughout ──
+function WalletLabel({
+  address,
+  tone,
+  pfpUrl,
+}: {
+  address: string;
+  tone: "a" | "b";
+  pfpUrl?: string | null;
+}) {
+  const [imgError, setImgError] = useState(false);
+  const initial = address ? address.slice(0, 1).toUpperCase() : "?";
+  const borderColor = tone === "a" ? "#ff0080" : "#00b0ff";
+  const bgColor = tone === "a" ? "#1a0814" : "#0a0e1a";
+  const textColor = tone === "a" ? "#ff0080" : "#00b0ff";
+  const showImage = pfpUrl && !imgError;
+
+  return (
+    <div className="cc-wallet-label">
+      <div
+        className="cc-wallet-label-avatar"
+        style={{ background: bgColor, border: `1px solid ${borderColor}` }}
+      >
+        {showImage ? (
+          <img src={pfpUrl} alt={address} onError={() => setImgError(true)} />
+        ) : (
+          <span style={{ color: textColor, fontSize: "9px", fontWeight: 500 }}>
+            {initial}
+          </span>
+        )}
+      </div>
+      <span className="cc-wallet-label-address">{shortenAddress(address)}</span>
+    </div>
+  );
+}
 
 function NFTCard({ nft, walletTone }: { nft: NFT; walletTone: "a" | "b" }) {
   const image = getNftImage(nft);
@@ -299,10 +404,8 @@ function SpotlightCard({
   const title = getNftTitle(nft);
   const subtitle = getCollectionName(nft);
   const href = getOpenSeaUrl(nft);
-
   const labelA = submittedA ? shortenAddress(submittedA) : "Wallet one";
   const labelB = submittedB ? shortenAddress(submittedB) : "Wallet two";
-
   const dateA = sanitizeDisplayDate(nft.acquiredDateA);
   const dateB = sanitizeDisplayDate(nft.acquiredDateB);
   const hasAcquiredDates = Boolean(dateA || dateB);
@@ -404,15 +507,15 @@ function ScoreBreakdownBars({
 }
 
 function CollectorProfileCard({
-  label,
   wallet,
   submitted,
   tone,
+  pfpUrl,
 }: {
-  label: string;
   wallet: WalletSummary;
   submitted: string;
   tone: "a" | "b";
+  pfpUrl?: string | null;
 }) {
   const topCollection = wallet.profile.topCollection;
   const previewImages = (topCollection?.previewImages || [])
@@ -429,8 +532,10 @@ function CollectorProfileCard({
     <article className={`panel compare-profile-card wallet-tone-${tone}`}>
       <div className="compare-profile-header">
         <div>
-          <div className="eyebrow">{label}</div>
-          <h3 className="compare-profile-archetype">{wallet.profile.archetype}</h3>
+          <WalletLabel address={submitted} tone={tone} pfpUrl={pfpUrl} />
+          <h3 className="compare-profile-archetype" style={{ marginTop: "10px" }}>
+            {wallet.profile.archetype}
+          </h3>
           <p className="compare-profile-line">{wallet.profile.profileLine}</p>
         </div>
         <div className="compare-profile-level">
@@ -442,7 +547,6 @@ function CollectorProfileCard({
       </div>
 
       <div className="compare-profile-identity">
-        <div className="compare-profile-address-label">{shortenAddress(submitted)}</div>
         <div className="compare-profile-address-full">{submitted}</div>
       </div>
 
@@ -488,9 +592,7 @@ function CollectorProfileCard({
             </div>
           </div>
           <div className="compare-profile-piece-meta">
-            <div className="compare-profile-piece-title truncate-2">
-              {topCollection.name}
-            </div>
+            <div className="compare-profile-piece-title truncate-2">{topCollection.name}</div>
             <div className="compare-profile-piece-support">{topCollectionSupport}</div>
             <div className="compare-profile-piece-subtitle truncate-2">
               <span className="compare-profile-piece-count compare-mono">
@@ -517,38 +619,6 @@ function CollectorProfileCard({
   );
 }
 
-function scoreLabel(score: number) {
-  if (score < 25) return "Very different";
-  if (score < 50) return "Some overlap";
-  if (score < 75) return "Shared taste";
-  return "Strong alignment";
-}
-
-function buildDivergenceLines(
-  tasteA: Record<string, number>,
-  tasteB: Record<string, number>,
-  labelA: string,
-  labelB: string
-) {
-  const keys = new Set([...Object.keys(tasteA || {}), ...Object.keys(tasteB || {})]);
-  const ranked = [...keys]
-    .map((key) => {
-      const left = tasteA?.[key] || 0;
-      const right = tasteB?.[key] || 0;
-      return { key, left, right, diff: Math.abs(left - right) };
-    })
-    .filter((item) => item.diff >= 8)
-    .sort((a, b) => b.diff - a.diff)
-    .slice(0, 3);
-
-  return ranked.map((item) => {
-    if (item.left > item.right) {
-      return `${labelA} leans ${item.key.toLowerCase()}, while ${labelB} gives less weight there.`;
-    }
-    return `${labelB} leans ${item.key.toLowerCase()}, while ${labelA} gives less weight there.`;
-  });
-}
-
 export default function ComparePage() {
   const [walletA, setWalletA] = useState("");
   const [walletB, setWalletB] = useState("");
@@ -557,6 +627,21 @@ export default function ComparePage() {
   const [data, setData] = useState<CompareResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showMoreCollections, setShowMoreCollections] = useState(false);
+  const [showMoreArtists, setShowMoreArtists] = useState(false);
+
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const a = searchParams.get("walletA") || "";
+    const b = searchParams.get("walletB") || "";
+    if (a && b && isLikelyValidInput(a) && isLikelyValidInput(b)) {
+      setWalletA(a);
+      setWalletB(b);
+      setTimeout(() => { runCompareWith(a, b); }, 0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const tasteKeys = useMemo(() => {
     if (!data) return [];
@@ -582,57 +667,45 @@ export default function ComparePage() {
   );
 
   const sharedExact = data?.shared?.exact || [];
-  const exactCount = data?.shared?.exactCount || 0;
 
   const divergenceLines = useMemo(() => {
     if (!data) return [];
     return buildDivergenceLines(
       data.walletA.taste,
       data.walletB.taste,
-      "Wallet one",
-      "Wallet two"
+      shortenAddress(submittedA),
+      shortenAddress(submittedB)
     );
-  }, [data]);
+  }, [data, submittedA, submittedB]);
 
-  const [showMoreCollections, setShowMoreCollections] = useState(false);
-  const [showMoreArtists, setShowMoreArtists] = useState(false);
+  const overlapTasteTags = useMemo(() => {
+    if (!data) return [];
+    return tasteKeys
+      .filter((key) => {
+        const a = data.walletA.taste[key] || 0;
+        const b = data.walletB.taste[key] || 0;
+        return a > 0 && b > 0 && key !== "Other";
+      })
+      .slice(0, 6);
+  }, [data, tasteKeys]);
 
-  async function runCompare(e?: FormEvent) {
-    e?.preventDefault();
-
-    if (!walletA.trim() || !walletB.trim()) {
-      setError("Enter two wallet addresses or ENS names to compare.");
-      return;
-    }
-
-    if (!isLikelyValidInput(walletA) || !isLikelyValidInput(walletB)) {
-      setError("Enter a valid Ethereum address or ENS name.");
-      return;
-    }
-
+  async function runCompareWith(a: string, b: string) {
     try {
       setLoading(true);
       setError("");
       setData(null);
-
-      const url = `/api/compare?walletA=${encodeURIComponent(walletA.trim())}&walletB=${encodeURIComponent(walletB.trim())}`;
+      const url = `/api/compare?walletA=${encodeURIComponent(a)}&walletB=${encodeURIComponent(b)}`;
       const res = await fetch(url);
       const contentType = res.headers.get("content-type") || "";
-
       if (!contentType.includes("application/json")) {
         const text = await res.text();
         throw new Error(`API returned non-JSON response: ${text.slice(0, 120)}`);
       }
-
       const json = await res.json();
-
-      if (!res.ok) {
-        throw new Error(json?.error || "Something went wrong.");
-      }
-
+      if (!res.ok) throw new Error(json?.error || "Something went wrong.");
       setData(json);
-      setSubmittedA(walletA.trim());
-      setSubmittedB(walletB.trim());
+      setSubmittedA(a);
+      setSubmittedB(b);
       setShowMoreCollections(false);
       setShowMoreArtists(false);
     } catch (err) {
@@ -641,6 +714,19 @@ export default function ComparePage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function runCompare(e?: FormEvent) {
+    e?.preventDefault();
+    if (!walletA.trim() || !walletB.trim()) {
+      setError("Enter two wallet addresses or ENS names to compare.");
+      return;
+    }
+    if (!isLikelyValidInput(walletA) || !isLikelyValidInput(walletB)) {
+      setError("Enter a valid Ethereum address or ENS name.");
+      return;
+    }
+    await runCompareWith(walletA.trim(), walletB.trim());
   }
 
   function resetAll() {
@@ -655,30 +741,29 @@ export default function ComparePage() {
     setShowMoreArtists(false);
   }
 
+  const canCompare = isLikelyValidInput(walletA) && isLikelyValidInput(walletB);
+
   return (
     <main className="compare-page">
-      <div className="page-shell stack-lg">
-        <section className="compare-hero">
-          <div className="compare-hero-copy">
-            <div className="eyebrow">Collector Chemistry</div>
-            <h1 className="title-xl compare-hero-title">
-              What you collect is a reflection of you.
-            </h1>
-            <p className="compare-hero-text">
-              For the first time, that reflection is visible. Compare two wallets to
-              see where taste, curiosity, and identity start to overlap.
+      <div className="cc-shell">
+
+        {/* ── Input form ── */}
+        <section className="cc-input-section">
+          <div className="cc-input-header">
+            <p className="cc-eyebrow">Collector Chemistry</p>
+            <h1 className="cc-hero-title">Compare two collectors.</h1>
+            <p className="cc-hero-sub">
+              Paste two wallet addresses or ENS names to see where their taste overlaps.
             </p>
           </div>
 
-          <div className="accent-rule" />
-
-          <form className="compare-form" onSubmit={runCompare}>
-            <div className="compare-inputs">
-              <div className="compare-input-wrap">
-                <label className="compare-label" htmlFor="walletA">Wallet one</label>
+          <form className="cc-form" onSubmit={runCompare}>
+            <div className="cc-inputs">
+              <div className="cc-input-wrap">
+                <label className="cc-label" htmlFor="walletA">Collector one</label>
                 <input
                   id="walletA"
-                  className="input"
+                  className="cc-input"
                   placeholder="0x... or ENS"
                   value={walletA}
                   onChange={(e) => setWalletA(e.target.value)}
@@ -687,11 +772,11 @@ export default function ComparePage() {
                   spellCheck={false}
                 />
               </div>
-              <div className="compare-input-wrap">
-                <label className="compare-label" htmlFor="walletB">Wallet two</label>
+              <div className="cc-input-wrap">
+                <label className="cc-label" htmlFor="walletB">Collector two</label>
                 <input
                   id="walletB"
-                  className="input"
+                  className="cc-input"
                   placeholder="0x... or ENS"
                   value={walletB}
                   onChange={(e) => setWalletB(e.target.value)}
@@ -702,84 +787,111 @@ export default function ComparePage() {
               </div>
             </div>
 
-            <div className="compare-actions">
-              <button type="submit" className="btn compare-btn-primary">
-                {loading ? "Comparing..." : "Compare wallets"}
+            <div className="cc-form-actions">
+              <button type="submit" className="cc-btn-primary" disabled={!canCompare || loading}>
+                {loading ? "Comparing..." : "Compare"}
               </button>
-              <button type="button" className="btn compare-btn-secondary" onClick={resetAll}>
-                Reset
-              </button>
+              {(submittedA || submittedB) && (
+                <button type="button" className="cc-btn-ghost" onClick={resetAll}>
+                  Reset
+                </button>
+              )}
             </div>
 
-            <p className="compare-note">Enter an Ethereum wallet or ENS name.</p>
+            {error && <p className="cc-error">{error}</p>}
+            {loading && (
+              <p className="cc-loading">
+                Pulling holdings, mapping overlap, and scoring chemistry...
+              </p>
+            )}
           </form>
         </section>
 
-        {loading && (
-          <div className="compare-loading">
-            Pulling holdings, mapping overlap, and scoring chemistry...
-          </div>
-        )}
-
-        {error && <div className="compare-error">{error}</div>}
-
+        {/* ── Results ── */}
         {data && (
-          <div className="compare-results">
+          <div className="cc-results">
 
-            {/* ── Identity pair — first thing eyes land on ── */}
-            <section className="panel compare-relationship-summary">
-              <div className="compare-identity-pair">
-                <div className="compare-identity-item compare-identity-a">
-                  <div className="compare-identity-address compare-mono">
-                    {shortenAddress(submittedA)}
-                  </div>
-                  <div className="compare-identity-label">
-                    {data.walletA.profile.collectorIdentityLabel}
-                  </div>
+            {/* ── Hero card ── */}
+            <section className="cc-hero-card">
+              <div className="cc-identity-row">
+                <div className="cc-identity cc-identity-a">
+                  <Avatar address={submittedA} tone="a" pfpUrl={data.walletA.pfpUrl} />
+                  <p className="cc-identity-name">{shortenAddress(submittedA)}</p>
+                  <p className="cc-identity-sub">{data.walletA.profile.archetype}</p>
                 </div>
-                <div className="compare-identity-divider">vs</div>
-                <div className="compare-identity-item compare-identity-b">
-                  <div className="compare-identity-address compare-mono">
-                    {shortenAddress(submittedB)}
-                  </div>
-                  <div className="compare-identity-label">
-                    {data.walletB.profile.collectorIdentityLabel}
-                  </div>
+
+                <div className="cc-score-center">
+                  <p className="cc-score-eyebrow">chemistry</p>
+                  <p className="cc-score-value">{data.scoring.chemistryScore}</p>
+                  <p className="cc-score-label">{scoreLabel(data.scoring.chemistryScore)}</p>
+                </div>
+
+                <div className="cc-identity cc-identity-b">
+                  <Avatar address={submittedB} tone="b" pfpUrl={data.walletB.pfpUrl} />
+                  <p className="cc-identity-name">{shortenAddress(submittedB)}</p>
+                  <p className="cc-identity-sub">{data.walletB.profile.archetype}</p>
                 </div>
               </div>
 
-              <p className="compare-pair-connective">
-                {data.scoring.pairInterpretation.headline}
-              </p>
-
-              <div className="compare-relationship-meta">
-                <div className="compare-relationship-score">
-                  <div className="compare-chemistry-value compare-mono">
-                    {data.scoring.chemistryScore}
-                  </div>
-                  <div className="compare-chemistry-label">
-                    {scoreLabel(data.scoring.chemistryScore)}
-                  </div>
+              <div className="cc-stat-trio">
+                <div className="cc-stat cc-stat-pink">
+                  <span className="cc-stat-value">{sharedCollections.length}</span>
+                  <span className="cc-stat-label">shared collections</span>
                 </div>
-                <ul className="compare-relationship-bullets">
-                  <li>Shared collections: {sharedCollections.length}</li>
-                  <li>Shared artists: {sharedArtists.length}</li>
-                  {exactCount > 0 ? <li>Exact same NFTs: {exactCount}</li> : null}
-                </ul>
+                <div className="cc-stat cc-stat-blue">
+                  <span className="cc-stat-value">{sharedArtists.length}</span>
+                  <span className="cc-stat-label">shared artists</span>
+                </div>
+                <div className="cc-stat cc-stat-purple">
+                  <span className="cc-stat-value">{overlapTasteTags.length}</span>
+                  <span className="cc-stat-label">taste signals</span>
+                </div>
               </div>
 
-              <p className="compare-relationship-interpretation">
-                {data.scoring.pairInterpretation.summary}
-              </p>
-            </section>
+              {sharedCollections.length > 0 && (
+                <div className="cc-collection-bars">
+                  {sharedCollections.slice(0, 4).map(([name, bucket]) => {
+                    const displayName = humanizeCollectionName(name) || name;
+                    const totalA = bucket.walletACount;
+                    const totalB = bucket.walletBCount;
+                    const max = Math.max(totalA, totalB, 1);
+                    return (
+                      <div key={name} className="cc-bar-row">
+                        <p className="cc-bar-name">{displayName}</p>
+                        <div className="cc-bar-track-wrap">
+                          <div className="cc-bar-track">
+                            <div className="cc-bar-fill cc-bar-a" style={{ width: `${(totalA / max) * 100}%` }} />
+                          </div>
+                          <div className="cc-bar-track">
+                            <div className="cc-bar-fill cc-bar-b" style={{ width: `${(totalB / max) * 100}%` }} />
+                          </div>
+                        </div>
+                        <p className="cc-bar-counts">{totalA} · {totalB}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
-            {/* ── Overlap proof ── */}
-            <section className="panel compare-section compare-overlap-proof">
-              <div className="compare-section-head">
-                <div className="eyebrow">Overlap proof</div>
-                <h2 className="compare-section-title">Where your overlap becomes visible</h2>
+              <div className="cc-editorial-footer">
+                <p className="cc-editorial-text">{data.scoring.pairInterpretation.summary}</p>
+                {overlapTasteTags.length > 0 && (
+                  <div className="cc-tag-row">
+                    {overlapTasteTags.map((tag, i) => {
+                      const spec = getSpectrumColor(i);
+                      return (
+                        <span
+                          key={tag}
+                          className="cc-tag"
+                          style={{ color: spec.color, background: spec.bg, border: `1px solid ${spec.border}` }}
+                        >
+                          {tag}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-              <ScoreBreakdownBars breakdown={data.scoring.breakdown} />
             </section>
 
             {/* ── Exact overlap ── */}
@@ -791,17 +903,14 @@ export default function ComparePage() {
                   <p className="compare-section-text">The clearest direct intersection.</p>
                 </div>
                 <div className={`compare-exact-grid ${sharedExact.length === 1 ? "single" : ""}`}>
-                  {sharedExact.slice(0, 8).map((nft) => {
-                    const key = `${nft.contract.address}-${nft.tokenId}`;
-                    return (
-                      <SpotlightCard
-                        key={key}
-                        nft={nft}
-                        submittedA={submittedA}
-                        submittedB={submittedB}
-                      />
-                    );
-                  })}
+                  {sharedExact.slice(0, 8).map((nft) => (
+                    <SpotlightCard
+                      key={`${nft.contract.address}-${nft.tokenId}`}
+                      nft={nft}
+                      submittedA={submittedA}
+                      submittedB={submittedB}
+                    />
+                  ))}
                 </div>
               </section>
             )}
@@ -814,7 +923,6 @@ export default function ComparePage() {
                   <h2 className="compare-section-title">Different pieces, same world</h2>
                   <p className="compare-section-text">Similar gravity, different selections.</p>
                 </div>
-
                 <div className="compare-group-list">
                   {sharedCollections
                     .slice(0, showMoreCollections ? sharedCollections.length : 3)
@@ -829,29 +937,17 @@ export default function ComparePage() {
                               <h3 className="compare-group-title">{displayName}</h3>
                               {enteredDateA && enteredDateB ? (
                                 <div className="compare-group-entry-dates compare-mono">
-                                  <span>
-                                    {shortenAddress(submittedA)} entered{" "}
-                                    <strong>{enteredDateA}</strong>
-                                  </span>
+                                  <span>{shortenAddress(submittedA)} entered <strong>{enteredDateA}</strong></span>
                                   <span className="compare-entry-divider">·</span>
-                                  <span>
-                                    {shortenAddress(submittedB)} entered{" "}
-                                    <strong>{enteredDateB}</strong>
-                                  </span>
+                                  <span>{shortenAddress(submittedB)} entered <strong>{enteredDateB}</strong></span>
                                 </div>
                               ) : null}
                             </div>
                           </div>
-
                           <div className="compare-group-columns">
                             <div className="compare-column compare-column-a">
                               <div className="compare-column-head">
-                                <div className="compare-column-title">
-                                  Wallet one
-                                  <span className="compare-column-address">
-                                    {shortenAddress(submittedA)}
-                                  </span>
-                                </div>
+                                <WalletLabel address={submittedA} tone="a" pfpUrl={data.walletA.pfpUrl} />
                                 <div className="compare-column-meta compare-mono">
                                   {bucket.walletA.length} shown · {bucket.walletACount} total
                                 </div>
@@ -860,11 +956,7 @@ export default function ComparePage() {
                                 <>
                                   <div className="compare-nft-grid">
                                     {bucket.walletA.map((nft) => (
-                                      <NFTCard
-                                        key={`${nft.contract.address}-${nft.tokenId}-a`}
-                                        nft={nft}
-                                        walletTone="a"
-                                      />
+                                      <NFTCard key={`${nft.contract.address}-${nft.tokenId}-a`} nft={nft} walletTone="a" />
                                     ))}
                                   </div>
                                   {bucket.walletACount > bucket.walletA.length && (
@@ -877,15 +969,9 @@ export default function ComparePage() {
                                 <div className="compare-empty">No NFTs to show.</div>
                               )}
                             </div>
-
                             <div className="compare-column compare-column-b">
                               <div className="compare-column-head">
-                                <div className="compare-column-title">
-                                  Wallet two
-                                  <span className="compare-column-address">
-                                    {shortenAddress(submittedB)}
-                                  </span>
-                                </div>
+                                <WalletLabel address={submittedB} tone="b" pfpUrl={data.walletB.pfpUrl} />
                                 <div className="compare-column-meta compare-mono">
                                   {bucket.walletB.length} shown · {bucket.walletBCount} total
                                 </div>
@@ -894,11 +980,7 @@ export default function ComparePage() {
                                 <>
                                   <div className="compare-nft-grid">
                                     {bucket.walletB.map((nft) => (
-                                      <NFTCard
-                                        key={`${nft.contract.address}-${nft.tokenId}-b`}
-                                        nft={nft}
-                                        walletTone="b"
-                                      />
+                                      <NFTCard key={`${nft.contract.address}-${nft.tokenId}-b`} nft={nft} walletTone="b" />
                                     ))}
                                   </div>
                                   {bucket.walletBCount > bucket.walletB.length && (
@@ -916,15 +998,15 @@ export default function ComparePage() {
                       );
                     })}
                 </div>
-                {sharedCollections.length > 3 ? (
+                {sharedCollections.length > 3 && (
                   <button
                     type="button"
                     className="btn compare-btn-secondary compare-show-more"
-                    onClick={() => setShowMoreCollections((value) => !value)}
+                    onClick={() => setShowMoreCollections((v) => !v)}
                   >
                     {showMoreCollections ? "Show less" : `Show more (${sharedCollections.length - 3})`}
                   </button>
-                ) : null}
+                )}
               </section>
             )}
 
@@ -938,7 +1020,6 @@ export default function ComparePage() {
                     Sometimes the strongest overlap sits beneath the collection name.
                   </p>
                 </div>
-
                 <div className="compare-group-list">
                   {sharedArtists
                     .slice(0, showMoreArtists ? sharedArtists.length : 3)
@@ -950,16 +1031,10 @@ export default function ComparePage() {
                             <div className="compare-group-meta">Shared artist</div>
                           </div>
                         </div>
-
                         <div className="compare-group-columns">
                           <div className="compare-column compare-column-a">
                             <div className="compare-column-head">
-                              <div className="compare-column-title">
-                                Wallet one
-                                <span className="compare-column-address">
-                                  {shortenAddress(submittedA)}
-                                </span>
-                              </div>
+                              <WalletLabel address={submittedA} tone="a" pfpUrl={data.walletA.pfpUrl} />
                               <div className="compare-column-meta compare-mono">
                                 {bucket.walletA.length} shown · {bucket.walletACount} total
                               </div>
@@ -968,11 +1043,7 @@ export default function ComparePage() {
                               <>
                                 <div className="compare-nft-grid">
                                   {bucket.walletA.map((nft) => (
-                                    <NFTCard
-                                      key={`${nft.contract.address}-${nft.tokenId}-artist-a`}
-                                      nft={nft}
-                                      walletTone="a"
-                                    />
+                                    <NFTCard key={`${nft.contract.address}-${nft.tokenId}-artist-a`} nft={nft} walletTone="a" />
                                   ))}
                                 </div>
                                 {bucket.walletACount > bucket.walletA.length && (
@@ -985,15 +1056,9 @@ export default function ComparePage() {
                               <div className="compare-empty">No NFTs to show.</div>
                             )}
                           </div>
-
                           <div className="compare-column compare-column-b">
                             <div className="compare-column-head">
-                              <div className="compare-column-title">
-                                Wallet two
-                                <span className="compare-column-address">
-                                  {shortenAddress(submittedB)}
-                                </span>
-                              </div>
+                              <WalletLabel address={submittedB} tone="b" pfpUrl={data.walletB.pfpUrl} />
                               <div className="compare-column-meta compare-mono">
                                 {bucket.walletB.length} shown · {bucket.walletBCount} total
                               </div>
@@ -1002,11 +1067,7 @@ export default function ComparePage() {
                               <>
                                 <div className="compare-nft-grid">
                                   {bucket.walletB.map((nft) => (
-                                    <NFTCard
-                                      key={`${nft.contract.address}-${nft.tokenId}-artist-b`}
-                                      nft={nft}
-                                      walletTone="b"
-                                    />
+                                    <NFTCard key={`${nft.contract.address}-${nft.tokenId}-artist-b`} nft={nft} walletTone="b" />
                                   ))}
                                 </div>
                                 {bucket.walletBCount > bucket.walletB.length && (
@@ -1023,15 +1084,15 @@ export default function ComparePage() {
                       </article>
                     ))}
                 </div>
-                {sharedArtists.length > 3 ? (
+                {sharedArtists.length > 3 && (
                   <button
                     type="button"
                     className="btn compare-btn-secondary compare-show-more"
-                    onClick={() => setShowMoreArtists((value) => !value)}
+                    onClick={() => setShowMoreArtists((v) => !v)}
                   >
                     {showMoreArtists ? "Show less" : `Show more (${sharedArtists.length - 3})`}
                   </button>
-                ) : null}
+                )}
               </section>
             )}
 
@@ -1043,15 +1104,13 @@ export default function ComparePage() {
               </div>
               <div className="compare-divergence-list">
                 {divergenceLines.map((line) => (
-                  <p key={line} className="compare-divergence-item">
-                    {line}
-                  </p>
+                  <p key={line} className="compare-divergence-item">{line}</p>
                 ))}
-                {divergenceLines.length === 0 ? (
+                {divergenceLines.length === 0 && (
                   <div className="compare-empty">
                     Differences are subtle. Both wallets distribute taste in a similar way.
                   </div>
-                ) : null}
+                )}
               </div>
             </section>
 
@@ -1061,9 +1120,8 @@ export default function ComparePage() {
                 <article className="panel compare-wallet-card wallet-tone-a">
                   <div className="compare-wallet-top">
                     <div className="compare-wallet-id">
-                      <div className="eyebrow">Wallet one</div>
-                      <div className="compare-wallet-name">{shortenAddress(submittedA)}</div>
-                      <div className="compare-wallet-address">{submittedA}</div>
+                      <WalletLabel address={submittedA} tone="a" pfpUrl={data.walletA.pfpUrl} />
+                      <div className="compare-wallet-address" style={{ marginTop: "6px" }}>{submittedA}</div>
                     </div>
                     <div className="compare-wallet-count">
                       <div className="compare-wallet-count-value compare-mono">{data.walletA.totalNFTs}</div>
@@ -1071,13 +1129,11 @@ export default function ComparePage() {
                     </div>
                   </div>
                 </article>
-
                 <article className="panel compare-wallet-card wallet-tone-b">
                   <div className="compare-wallet-top">
                     <div className="compare-wallet-id">
-                      <div className="eyebrow">Wallet two</div>
-                      <div className="compare-wallet-name">{shortenAddress(submittedB)}</div>
-                      <div className="compare-wallet-address">{submittedB}</div>
+                      <WalletLabel address={submittedB} tone="b" pfpUrl={data.walletB.pfpUrl} />
+                      <div className="compare-wallet-address" style={{ marginTop: "6px" }}>{submittedB}</div>
                     </div>
                     <div className="compare-wallet-count">
                       <div className="compare-wallet-count-value compare-mono">{data.walletB.totalNFTs}</div>
@@ -1086,19 +1142,18 @@ export default function ComparePage() {
                   </div>
                 </article>
               </div>
-
               <div className="compare-profile-grid">
                 <CollectorProfileCard
-                  label="Collector profile"
                   wallet={data.walletA}
                   submitted={submittedA}
                   tone="a"
+                  pfpUrl={data.walletA.pfpUrl}
                 />
                 <CollectorProfileCard
-                  label="Collector profile"
                   wallet={data.walletB}
                   submitted={submittedB}
                   tone="b"
+                  pfpUrl={data.walletB.pfpUrl}
                 />
               </div>
             </section>
@@ -1108,14 +1163,15 @@ export default function ComparePage() {
               <div className="compare-section-head">
                 <div className="eyebrow">Taste map</div>
                 <h2 className="compare-section-title">Where your taste lives</h2>
-                <p className="compare-section-text">Not how much you own. How each wallet tends to think.</p>
+                <p className="compare-section-text">
+                  Not how much you own. How each wallet tends to think.
+                </p>
               </div>
-
               {tasteKeys.length > 0 ? (
                 <div className="compare-bars">
                   <div className="compare-bar-legend">
-                    <span className="wallet-a">Wallet one</span>
-                    <span className="wallet-b">Wallet two</span>
+                    <WalletLabel address={submittedA} tone="a" pfpUrl={data.walletA.pfpUrl} />
+                    <WalletLabel address={submittedB} tone="b" pfpUrl={data.walletB.pfpUrl} />
                   </div>
                   {tasteKeys.map((key) => {
                     const left = data.walletA.taste[key] || 0;

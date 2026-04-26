@@ -111,6 +111,8 @@ type WalletSummary = {
   totalNFTs: number;
   taste: TasteMap;
   profile: CollectorProfile;
+  pfpUrl?: string | null;
+  bannerUrl?: string | null;
 };
 
 type OpenSeaTrait = {
@@ -393,6 +395,25 @@ async function fetchOpenSeaAccountInventory(address: string): Promise<OpenSeaAcc
   }
 
   return items.slice(0, OPENSEA_MAX_ACCOUNT_ITEMS);
+}
+
+async function fetchOpenSeaProfile(address: string): Promise<{
+  pfpUrl: string | null;
+  bannerUrl: string | null;
+}> {
+  if (!OPENSEA_API_KEY) return { pfpUrl: null, bannerUrl: null };
+
+  const data = await fetchOpenSeaJson<{
+    profile_image_url?: string | null;
+    banner_image_url?: string | null;
+  }>(`/accounts/${address}`, {});
+
+  console.log("OPENSEA_PROFILE", { address, data });  // add this line
+
+  return {
+    pfpUrl: data?.profile_image_url || null,
+    bannerUrl: data?.banner_image_url || null,
+  };
 }
 
 async function fetchBestOfferForItem(
@@ -1813,10 +1834,12 @@ export async function GET(req: Request) {
   }
 
   try {
-    const [nftsA, nftsB] = await Promise.all([
-      fetchNFTs(walletA),
-      fetchNFTs(walletB),
-    ]);
+  const [nftsA, nftsB, profileA_os, profileB_os] = await Promise.all([
+  fetchNFTs(walletA),
+  fetchNFTs(walletB),
+  fetchOpenSeaProfile(walletA),
+  fetchOpenSeaProfile(walletB),
+]);
 
     const tasteA = buildTasteDNA(nftsA);
     const tasteB = buildTasteDNA(nftsB);
@@ -1948,17 +1971,21 @@ export async function GET(req: Request) {
       chemistryScore,
     });
 
-    const walletAResponse: WalletSummary = {
-      totalNFTs: nftsA.length,
-      taste: tasteA,
-      profile: profileA,
-    };
+const walletAResponse: WalletSummary = {
+  totalNFTs: nftsA.length,
+  taste: tasteA,
+  profile: profileA,
+  pfpUrl: profileA_os.pfpUrl,
+  bannerUrl: profileA_os.bannerUrl,
+};
 
-    const walletBResponse: WalletSummary = {
-      totalNFTs: nftsB.length,
-      taste: tasteB,
-      profile: profileB,
-    };
+const walletBResponse: WalletSummary = {
+  totalNFTs: nftsB.length,
+  taste: tasteB,
+  profile: profileB,
+  pfpUrl: profileB_os.pfpUrl,
+  bannerUrl: profileB_os.bannerUrl,
+};
 
     return NextResponse.json({
       walletA: walletAResponse,
