@@ -3,7 +3,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import "./compare/compare.css";
+import "./compare.css";
 
 type NFT = {
   contract: {
