@@ -51,6 +51,7 @@ type NFT = {
   displayCollectionSlug?: string;
   displayArtist?: string;
   displayImage?: string;
+  acquiredAt?: string | null;
   acquiredDateA?: string | null;
   acquiredDateB?: string | null;
 };
@@ -191,7 +192,7 @@ type OpenSeaBestOfferResponse = {
 };
 
 type OpenSeaCollectionEvent = {
-  event_timestamp?: string;
+  event_timestamp?: string | number;
   sent_at?: string;
   to_address?: string;
   winner_account?: { address?: string };
@@ -209,7 +210,7 @@ type OpenSeaCollectionEventsResponse = {
 };
 
 type OpenSeaNftEvent = {
-  event_timestamp?: string;
+  event_timestamp?: string | number;
   from_address?: string;
   to_address?: string;
   winner_account?: { address?: string };
@@ -224,7 +225,7 @@ type OpenSeaNftEventsResponse = {
 const PREVIEW_LIMIT = 4;
 const EXACT_LIMIT = 8;
 
-const OPENSEA_TIMEOUT_MS = 1800;
+const OPENSEA_TIMEOUT_MS = 5000;
 const OPENSEA_MAX_ACCOUNT_ITEMS = 60;
 const OPENSEA_MAX_BOUNTY_LOOKUPS = 15;
 const OPENSEA_MAX_EVENT_PAGES = 6;
@@ -408,7 +409,7 @@ async function fetchOpenSeaProfile(address: string): Promise<{
     banner_image_url?: string | null;
   }>(`/accounts/${address}`, {});
 
-  console.log("OPENSEA_PROFILE", { address, data });  // add this line
+  console.log("OPENSEA_PROFILE", { address, data });
 
   return {
     pfpUrl: data?.profile_image_url || null,
@@ -514,7 +515,10 @@ async function fetchCollectionInboundTimestamp(
         event.to_address || event.winner_account?.address
       );
       if (toAddress === target) {
-        const timestamp = event.event_timestamp || event.sent_at || null;
+        const raw = event.event_timestamp;
+const timestamp = typeof raw === "number"
+  ? new Date(raw * 1000).toISOString()
+  : (raw || event.sent_at || null);
         if (timestamp && (!oldest || new Date(timestamp) < new Date(oldest))) {
           oldest = timestamp;
         }
@@ -749,8 +753,11 @@ async function fetchNftAcquiredDate(
         event.to_address || event.winner_account?.address
       );
       if (toAddress === target) {
-        const timestamp = event.event_timestamp || null;
-        return sanitizeDateLabel(timestamp ? formatDateShort(timestamp) : null);
+        const raw = event.event_timestamp;
+const timestamp = typeof raw === "number"
+  ? new Date(raw * 1000).toISOString()
+  : (raw || null);
+return sanitizeDateLabel(timestamp ? formatDateShort(timestamp) : null);
       }
     }
 
@@ -776,8 +783,11 @@ async function enrichSharedExactWithAcquiredDates(
         fetchNftAcquiredDate(nft, walletB),
       ]);
 
+      const { acquiredAt: _removed, ...nftClean } = nft as NFT & { acquiredAt?: unknown };
+
       return {
-        ...nft,
+        ...nftClean,
+        acquiredAt: null,
         acquiredDateA,
         acquiredDateB,
       };
@@ -810,8 +820,6 @@ async function buildSharedCollectionCandidates(
   return [...candidateMap.values()].sort((a, b) => (b.floorPrice ?? -1) - (a.floorPrice ?? -1));
 }
 
-// Fetches the date each wallet first entered each shared collection.
-// Returns a map of collectionName -> { dateA, dateB }
 async function fetchCollectionEntryDates(
   walletA: string,
   walletB: string,
@@ -820,7 +828,6 @@ async function fetchCollectionEntryDates(
 ): Promise<Map<string, { dateA: string | null; dateB: string | null }>> {
   const result = new Map<string, { dateA: string | null; dateB: string | null }>();
 
-  // Build a slug lookup for each wallet keyed by normalized name
   const slugMapA = new Map(candidatesA.map((c) => [normalizeText(c.name), c.slug]));
   const slugMapB = new Map(candidatesB.map((c) => [normalizeText(c.name), c.slug]));
 
@@ -1113,8 +1120,11 @@ function mergeDisplayMetadata(nft: NFT, resolved: ResolvedDisplayMetadata): NFT 
     extractArtistFromTraits(nft.raw?.metadata?.attributes) ||
     inferArtistFromText(nft);
 
+  const { acquiredAt: _removed, ...nftClean } = nft as NFT & { acquiredAt?: unknown };
+
   return {
-    ...nft,
+    ...nftClean,
+    acquiredAt: null,
     title,
     description:
       nft.description ||
@@ -1226,8 +1236,8 @@ async function enrichSharedBuckets(
         key,
         {
           ...bucket,
-          walletA,
-          walletB,
+          walletA: walletA.map(({ acquiredAt: _, ...nft }) => ({ ...nft, acquiredAt: null })),
+          walletB: walletB.map(({ acquiredAt: _, ...nft }) => ({ ...nft, acquiredAt: null })),
           enteredDateA: dates?.dateA ?? null,
           enteredDateB: dates?.dateB ?? null,
         },
@@ -1440,8 +1450,8 @@ function buildSharedBuckets(
     if (excludeUnknown && key === "unknown") return;
 
     result[key] = {
-      walletA: groupedA[key].slice(0, PREVIEW_LIMIT),
-      walletB: groupedB[key].slice(0, PREVIEW_LIMIT),
+      walletA: groupedA[key].slice(0, PREVIEW_LIMIT).map(({ acquiredAt: _, ...nft }) => ({ ...nft, acquiredAt: null })),
+      walletB: groupedB[key].slice(0, PREVIEW_LIMIT).map(({ acquiredAt: _, ...nft }) => ({ ...nft, acquiredAt: null })),
       walletACount: groupedA[key].length,
       walletBCount: groupedB[key].length,
     };
@@ -1539,7 +1549,6 @@ function labelFromScore(score: number) {
   return "Limited overlap";
 }
 
-// --- NEW: Taste alignment label ---
 function labelFromTasteAlignment(score: number) {
   if (score >= 85) return "Very high";
   if (score >= 70) return "High";
@@ -1548,7 +1557,6 @@ function labelFromTasteAlignment(score: number) {
   return "Low";
 }
 
-// --- NEW: Similarity type — readable framing for zero-overlap comparisons ---
 function buildSimilarityType(params: {
   totalA: number;
   totalB: number;
@@ -1573,7 +1581,6 @@ function buildSimilarityType(params: {
   return "Light adjacency";
 }
 
-// --- NEW: Interpretation line — human-readable summary of why two wallets align ---
 function buildInterpretationLine(params: {
   totalA: number;
   totalB: number;
@@ -1834,12 +1841,12 @@ export async function GET(req: Request) {
   }
 
   try {
-  const [nftsA, nftsB, profileA_os, profileB_os] = await Promise.all([
-  fetchNFTs(walletA),
-  fetchNFTs(walletB),
-  fetchOpenSeaProfile(walletA),
-  fetchOpenSeaProfile(walletB),
-]);
+    const [nftsA, nftsB, profileA_os, profileB_os] = await Promise.all([
+      fetchNFTs(walletA),
+      fetchNFTs(walletB),
+      fetchOpenSeaProfile(walletA),
+      fetchOpenSeaProfile(walletB),
+    ]);
 
     const tasteA = buildTasteDNA(nftsA);
     const tasteB = buildTasteDNA(nftsB);
@@ -1971,21 +1978,21 @@ export async function GET(req: Request) {
       chemistryScore,
     });
 
-const walletAResponse: WalletSummary = {
-  totalNFTs: nftsA.length,
-  taste: tasteA,
-  profile: profileA,
-  pfpUrl: profileA_os.pfpUrl,
-  bannerUrl: profileA_os.bannerUrl,
-};
+    const walletAResponse: WalletSummary = {
+      totalNFTs: nftsA.length,
+      taste: tasteA,
+      profile: profileA,
+      pfpUrl: profileA_os.pfpUrl,
+      bannerUrl: profileA_os.bannerUrl,
+    };
 
-const walletBResponse: WalletSummary = {
-  totalNFTs: nftsB.length,
-  taste: tasteB,
-  profile: profileB,
-  pfpUrl: profileB_os.pfpUrl,
-  bannerUrl: profileB_os.bannerUrl,
-};
+    const walletBResponse: WalletSummary = {
+      totalNFTs: nftsB.length,
+      taste: tasteB,
+      profile: profileB,
+      pfpUrl: profileB_os.pfpUrl,
+      bannerUrl: profileB_os.bannerUrl,
+    };
 
     return NextResponse.json({
       walletA: walletAResponse,
