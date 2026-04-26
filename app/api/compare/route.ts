@@ -727,50 +727,65 @@ async function fetchNftAcquiredDate(
 ): Promise<string | null> {
   if (!OPENSEA_API_KEY) return null;
 
-  let contract = nft.contract.address;
-  const slug = String(nft.displayCollectionSlug || "").trim();
-  console.log("FETCH_ACQUIRED_DATE", { slug, contract, tokenId: nft.tokenId });
-  if (slug) {
-    const cached = slugContractCache.get(slug);
-    if (cached) {
-      contract = cached;
-    } else {
-      const data = await fetchOpenSeaJson<{ nfts?: Array<{ contract?: string }> }>(
-        `/collection/${slug}/nfts?limit=1`,
-        {}
-      );
-      const resolved = data?.nfts?.[0]?.contract;
-      if (resolved) {
-        slugContractCache.set(slug, resolved);
-        contract = resolved;
-      }
-    }
-  }
   const identifier = String(nft.tokenId);
+  const contractAddress = normalizeAddress(nft.contract.address);
   const target = normalizeAddress(walletAddress);
+
+  // Build a lookup map from all inbound transfer events for this wallet.
+  // We fetch once per wallet (not once per NFT) and match by contract + tokenId.
+  // Events come back newest-first so we keep updating to find the earliest (oldest).
+  type EventNft = { contract?: string; identifier?: string | number };
+  type AccountEvent = {
+    event_timestamp?: string | number;
+    from_address?: string;
+    to_address?: string;
+    nft?: EventNft;
+    next?: string | null;
+  };
+  type AccountEventsResponse = {
+    asset_events?: AccountEvent[];
+    events?: AccountEvent[];
+    next?: string | null;
+  };
+
+  const acquiredMap = new Map<string, { timestamp: number; fromAddress: string }>();
   let next = "";
 
   for (let page = 0; page < OPENSEA_MAX_EVENT_PAGES; page += 1) {
     const params = new URLSearchParams({
       limit: String(OPENSEA_EVENT_PAGE_LIMIT),
-      event_type: "sale",
+      event_type: "transfer",
     });
-    params.append("event_type", "transfer");
     if (next) params.set("next", next);
 
-    const data = await fetchOpenSeaJson<OpenSeaNftEventsResponse>(
-      `/events/chain/ethereum/contract/${contract}/nfts/${identifier}?${params.toString()}`,
+    const data = await fetchOpenSeaJson<AccountEventsResponse>(
+      `/events/accounts/${target}?${params.toString()}`,
       { events: [], asset_events: [], next: null }
     );
 
     const events = data.events || data.asset_events || [];
+
     for (const event of events) {
-      const toAddress = normalizeAddress(
-        event.to_address || event.winner_account?.address
-      );
-      if (toAddress === target) {
-        const timestamp = event.event_timestamp || null;
-        return sanitizeDateLabel(timestamp ? formatDateShort(timestamp) : null);
+      const toAddr = normalizeAddress(event.to_address || "");
+      if (toAddr !== target) continue;
+
+      const eventNft = event.nft;
+      if (!eventNft) continue;
+
+      const eventContract = normalizeAddress(String(eventNft.contract || ""));
+      const eventIdentifier = String(eventNft.identifier || "");
+      const key = eventContract + ":" + eventIdentifier;
+
+      const raw = event.event_timestamp;
+      const ts = typeof raw === "number" ? raw : null;
+      if (ts === null) continue;
+
+      const existing = acquiredMap.get(key);
+      if (!existing || ts < existing.timestamp) {
+        acquiredMap.set(key, {
+          timestamp: ts,
+          fromAddress: normalizeAddress(event.from_address || ""),
+        });
       }
     }
 
@@ -778,7 +793,12 @@ async function fetchNftAcquiredDate(
     if (!next || !events.length) break;
   }
 
-  return null;
+  const lookupKey = contractAddress + ":" + identifier;
+  const match = acquiredMap.get(lookupKey);
+  if (!match) return null;
+
+  const isoTimestamp = new Date(match.timestamp * 1000).toISOString();
+  return sanitizeDateLabel(formatDateShort(isoTimestamp));
 }
 
 async function enrichSharedExactWithAcquiredDates(
