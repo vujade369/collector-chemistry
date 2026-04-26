@@ -225,7 +225,7 @@ type OpenSeaNftEventsResponse = {
 const PREVIEW_LIMIT = 4;
 const EXACT_LIMIT = 8;
 
-const OPENSEA_TIMEOUT_MS = 5000;
+const OPENSEA_TIMEOUT_MS = 1800;
 const OPENSEA_MAX_ACCOUNT_ITEMS = 60;
 const OPENSEA_MAX_BOUNTY_LOOKUPS = 15;
 const OPENSEA_MAX_EVENT_PAGES = 6;
@@ -722,29 +722,11 @@ function buildPairInterpretation(params: {
 
 async function fetchNftAcquiredDate(
   nft: NFT,
-  walletAddress: string,
-  slugContractCache: Map<string, string>
+  walletAddress: string
 ): Promise<string | null> {
   if (!OPENSEA_API_KEY) return null;
 
-  let contract = nft.contract.address;
-  const slug = String(nft.displayCollectionSlug || "").trim();
-  if (slug) {
-    const cached = slugContractCache.get(slug);
-    if (cached) {
-      contract = cached;
-    } else {
-      const data = await fetchOpenSeaJson<{ nfts?: Array<{ contract?: string }> }>(
-        `/collection/${slug}/nfts?limit=1`,
-        {}
-      );
-      const resolved = data?.nfts?.[0]?.contract;
-      if (resolved) {
-        slugContractCache.set(slug, resolved);
-        contract = resolved;
-      }
-    }
-  }
+  const contract = nft.contract.address;
   const identifier = String(nft.tokenId);
   const target = normalizeAddress(walletAddress);
   let next = "";
@@ -1950,8 +1932,7 @@ export async function GET(req: Request) {
           sharedExactRaw.slice(0, EXACT_LIMIT),
           walletA,
           walletB,
-          enrichCache,
-          slugContractCache
+          enrichCache
         ),
         enrichSharedBuckets(sharedCollectionsRaw, enrichCache, collectionEntryDates),
         enrichSharedBuckets(sharedArtistsRaw, enrichCache),
