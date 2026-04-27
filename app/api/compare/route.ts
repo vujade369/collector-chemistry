@@ -289,6 +289,12 @@ function normalizeAddress(value?: string) {
   return String(value || "").toLowerCase();
 }
 
+function clearAcquiredAt(nft: NFT): NFT {
+  const clean = { ...nft };
+  delete clean.acquiredAt;
+  return { ...clean, acquiredAt: null };
+}
+
 function formatDateShort(timestamp?: string | null) {
   if (!timestamp) return "—";
   const date = new Date(timestamp);
@@ -350,9 +356,6 @@ function inferEthFromBestOffer(data: OpenSeaBestOfferResponse) {
 function getCollectionSlugFromAccountItem(item: OpenSeaAccountNFT) {
   if (typeof item.collection === "object" && item.collection?.slug) {
     return item.collection.slug;
-  }
-  if (typeof item.collection === "string" && item.collection) {
-    return item.collection;
   }
   if (item.collection_slug) return item.collection_slug;
   return "";
@@ -538,69 +541,6 @@ async function fetchCollectionInboundTimestamp(
   return oldest;
 }
 
-async function computeQuestStarted(
-  walletAddress: string,
-  sharedCollectionCandidates: Array<{ name: string; slug: string; floorPrice?: number | null }>
-): Promise<MarketStat> {
-  if (!sharedCollectionCandidates.length) {
-    return {
-      label: "Quest started",
-      value: "—",
-      sublabel: "No shared collection realm found",
-    };
-  }
-
-  const uniqueCandidates = sharedCollectionCandidates
-    .filter((item) => item.slug)
-    .sort((a, b) => (b.floorPrice ?? -1) - (a.floorPrice ?? -1))
-    .slice(0, 5);
-
-  if (!uniqueCandidates.length) {
-    return {
-      label: "Quest started",
-      value: "—",
-      sublabel: "Shared collections missing OpenSea slugs",
-    };
-  }
-
-  const timestamps = await Promise.all(
-    uniqueCandidates.map(async (item) => ({
-      ...item,
-      timestamp: await fetchCollectionInboundTimestamp(item.slug, walletAddress),
-    }))
-  );
-
-  const grounded = timestamps
-    .filter((item) => item.timestamp)
-    .sort((a, b) => new Date(String(a.timestamp)).getTime() - new Date(String(b.timestamp)).getTime());
-
-  const picked = grounded[0] || timestamps[0];
-  if (!picked?.timestamp) {
-    return {
-      label: "Quest started",
-      value: picked?.name || "—",
-      sublabel: "Shared realm found, date still loading",
-    };
-  }
-
-  return {
-    label: "Quest started",
-    value: `${picked.name} · ${formatDateShort(picked.timestamp)}`,
-    sublabel: `${getDaysSince(picked.timestamp) ?? 0}d in realm`,
-  };
-}
-
-async function buildWalletMastery(
-  walletAddress: string,
-  sharedCollectionCandidates: Array<{ name: string; slug: string; floorPrice?: number | null }>
-): Promise<WalletMastery> {
-  const [highestBounty, questStarted] = await Promise.all([
-    computeHighestBounty(walletAddress),
-    computeQuestStarted(walletAddress, sharedCollectionCandidates),
-  ]);
-
-  return { highestBounty, questStarted };
-}
 
 type ProfileCategoryDistribution = CollectorProfile["categoryDistribution"];
 type ProfileTopCollection = { name?: string; collectionName?: string };
@@ -729,27 +669,17 @@ function buildPairInterpretation(params: {
   };
 }
 
-async function fetchNftAcquiredDate(
-  nft: NFT,
-  walletAddress: string,
-  slugContractCache: Map<string, string>
-): Promise<string | null> {
-  if (!OPENSEA_API_KEY) return null;
+async function buildWalletAcquiredMap(
+  walletAddress: string
+): Promise<Map<string, { timestamp: number; fromAddress: string }>> {
+  if (!OPENSEA_API_KEY) return new Map();
 
-  const identifier = String(nft.tokenId);
-  const contractAddress = normalizeAddress(nft.contract.address);
-  const target = normalizeAddress(walletAddress);
-
-  // Build a lookup map from all inbound transfer events for this wallet.
-  // We fetch once per wallet (not once per NFT) and match by contract + tokenId.
-  // Events come back newest-first so we keep updating to find the earliest (oldest).
   type EventNft = { contract?: string; identifier?: string | number };
   type AccountEvent = {
     event_timestamp?: string | number;
     from_address?: string;
     to_address?: string;
     nft?: EventNft;
-    next?: string | null;
   };
   type AccountEventsResponse = {
     asset_events?: AccountEvent[];
@@ -758,6 +688,7 @@ async function fetchNftAcquiredDate(
   };
 
   const acquiredMap = new Map<string, { timestamp: number; fromAddress: string }>();
+  const target = normalizeAddress(walletAddress);
   let next = "";
 
   for (let page = 0; page < OPENSEA_MAX_EVENT_PAGES; page += 1) {
@@ -775,24 +706,24 @@ async function fetchNftAcquiredDate(
     const events = data.events || data.asset_events || [];
 
     for (const event of events) {
-      const toAddr = normalizeAddress(event.to_address || "");
-      if (toAddr !== target) continue;
+      if (normalizeAddress(event.to_address) !== target) continue;
 
       const eventNft = event.nft;
       if (!eventNft) continue;
 
-      const eventContract = normalizeAddress(String(eventNft.contract || ""));
-      const eventIdentifier = String(eventNft.identifier || "");
-      const key = eventContract + ":" + eventIdentifier;
+      const contract = normalizeAddress(String(eventNft.contract || ""));
+      const identifier = String(eventNft.identifier || "");
+      if (!contract || !identifier) continue;
 
-      const raw = event.event_timestamp;
-      const ts = typeof raw === "number" ? raw : null;
-      if (ts === null) continue;
+      const key = `${contract}:${identifier}`;
+      const rawTimestamp = event.event_timestamp;
+      const timestamp = typeof rawTimestamp === "number" ? rawTimestamp : Number(rawTimestamp);
+      if (!Number.isFinite(timestamp) || timestamp <= 0) continue;
 
       const existing = acquiredMap.get(key);
-      if (!existing || ts < existing.timestamp) {
+      if (!existing || timestamp < existing.timestamp) {
         acquiredMap.set(key, {
-          timestamp: ts,
+          timestamp,
           fromAddress: normalizeAddress(event.from_address || ""),
         });
       }
@@ -802,8 +733,15 @@ async function fetchNftAcquiredDate(
     if (!next || !events.length) break;
   }
 
-  const lookupKey = contractAddress + ":" + identifier;
-  const match = acquiredMap.get(lookupKey);
+  return acquiredMap;
+}
+
+function fetchNftAcquiredDate(
+  nft: NFT,
+  acquiredMap: Map<string, { timestamp: number; fromAddress: string }>
+): string | null {
+  const key = `${normalizeAddress(nft.contract?.address)}:${String(nft.tokenId)}`;
+  const match = acquiredMap.get(key);
   if (!match) return null;
 
   const isoTimestamp = new Date(match.timestamp * 1000).toISOString();
@@ -812,89 +750,23 @@ async function fetchNftAcquiredDate(
 
 async function enrichSharedExactWithAcquiredDates(
   nfts: NFT[],
-  walletA: string,
-  walletB: string,
-  cache: Map<string, Promise<NFT>>,
-  slugContractCache: Map<string, string>
+  acquiredMapA: Map<string, { timestamp: number; fromAddress: string }>,
+  acquiredMapB: Map<string, { timestamp: number; fromAddress: string }>,
+  cache: Map<string, Promise<NFT>>
 ): Promise<NFT[]> {
   const enriched = await enrichDisplayedNFTs(nfts, cache);
 
-  return Promise.all(
-    enriched.map(async (nft) => {
-      const [acquiredDateA, acquiredDateB] = await Promise.all([
-        fetchNftAcquiredDate(nft, walletA, slugContractCache),
-        fetchNftAcquiredDate(nft, walletB, slugContractCache),
-      ]);
-
-      const { acquiredAt: _removed, ...nftClean } = nft as NFT & { acquiredAt?: unknown };
-
-      return {
-        ...nftClean,
-        acquiredAt: null,
-        acquiredDateA,
-        acquiredDateB,
-      };
-    })
-  );
+  return enriched.map((nft) => {
+    const acquiredDateA = fetchNftAcquiredDate(nft, acquiredMapA);
+    const acquiredDateB = fetchNftAcquiredDate(nft, acquiredMapB);
+    return {
+      ...clearAcquiredAt(nft),
+      acquiredDateA,
+      acquiredDateB,
+    };
+  });
 }
 
-async function buildSharedCollectionCandidates(
-  walletAddress: string,
-  sharedCollectionNames: string[]
-): Promise<Array<{ name: string; slug: string; floorPrice?: number | null }>> {
-  const inventory = await fetchOpenSeaAccountInventory(walletAddress);
-  const wanted = new Set(sharedCollectionNames.map((name) => normalizeText(name)));
-
-  const candidateMap = new Map<string, { name: string; slug: string; floorPrice?: number | null }>();
-
-  for (const item of inventory) {
-    const name = getCollectionNameFromAccountItem(item);
-    const normalizedName = normalizeText(name);
-    const slug = getCollectionSlugFromAccountItem(item);
-    if (!wanted.has(normalizedName) || !slug) continue;
-
-    const existing = candidateMap.get(slug);
-    const floorPrice = getFloorPriceFromAccountItem(item);
-    if (!existing || (floorPrice ?? -1) > (existing.floorPrice ?? -1)) {
-      candidateMap.set(slug, { name: name || slug, slug, floorPrice });
-    }
-  }
-
-  return [...candidateMap.values()].sort((a, b) => (b.floorPrice ?? -1) - (a.floorPrice ?? -1));
-}
-
-async function fetchCollectionEntryDates(
-  walletA: string,
-  walletB: string,
-  candidatesA: Array<{ name: string; slug: string }>,
-  candidatesB: Array<{ name: string; slug: string }>
-): Promise<Map<string, { dateA: string | null; dateB: string | null }>> {
-  const result = new Map<string, { dateA: string | null; dateB: string | null }>();
-
-  const slugMapA = new Map(candidatesA.map((c) => [normalizeText(c.name), c.slug]));
-  const slugMapB = new Map(candidatesB.map((c) => [normalizeText(c.name), c.slug]));
-
-  const allNames = new Set([...slugMapA.keys(), ...slugMapB.keys()]);
-
-  await Promise.all(
-    [...allNames].map(async (normalizedName) => {
-      const slugA = slugMapA.get(normalizedName) || "";
-      const slugB = slugMapB.get(normalizedName) || "";
-
-      const [rawDateA, rawDateB] = await Promise.all([
-        slugA ? fetchCollectionInboundTimestamp(slugA, walletA) : Promise.resolve(null),
-        slugB ? fetchCollectionInboundTimestamp(slugB, walletB) : Promise.resolve(null),
-      ]);
-
-      result.set(normalizedName, {
-        dateA: sanitizeDateLabel(rawDateA ? formatDateShort(rawDateA) : null),
-        dateB: sanitizeDateLabel(rawDateB ? formatDateShort(rawDateB) : null),
-      });
-    })
-  );
-
-  return result;
-}
 
 function clamp(value: number, min = 0, max = 1) {
   return Math.max(min, Math.min(max, value));
@@ -1264,7 +1136,8 @@ async function enrichDisplayedNFTs(
 async function enrichSharedBuckets(
   buckets: Record<string, SharedBucket>,
   cache: Map<string, Promise<NFT>>,
-  entryDates?: Map<string, { dateA: string | null; dateB: string | null }>
+  acquiredMapA: Map<string, { timestamp: number; fromAddress: string }>,
+  acquiredMapB: Map<string, { timestamp: number; fromAddress: string }>
 ): Promise<Record<string, SharedBucket>> {
   const entries = await Promise.all(
     Object.entries(buckets).map(async ([key, bucket]) => {
@@ -1273,16 +1146,17 @@ async function enrichSharedBuckets(
         enrichDisplayedNFTs(bucket.walletB, cache),
       ]);
 
-      const dates = entryDates?.get(normalizeText(key));
+      const enteredDateA = walletA[0] ? fetchNftAcquiredDate(walletA[0], acquiredMapA) : null;
+      const enteredDateB = walletB[0] ? fetchNftAcquiredDate(walletB[0], acquiredMapB) : null;
 
       return [
         key,
         {
           ...bucket,
-          walletA: walletA.map(({ acquiredAt: _, ...nft }) => ({ ...nft, acquiredAt: null })),
-          walletB: walletB.map(({ acquiredAt: _, ...nft }) => ({ ...nft, acquiredAt: null })),
-          enteredDateA: dates?.dateA ?? null,
-          enteredDateB: dates?.dateB ?? null,
+          walletA: walletA.map(clearAcquiredAt),
+          walletB: walletB.map(clearAcquiredAt),
+          enteredDateA,
+          enteredDateB,
         },
       ] as const;
     })
@@ -1953,21 +1827,11 @@ export async function GET(req: Request) {
     });
 
     const enrichCache = new Map<string, Promise<NFT>>();
-    const slugContractCache = new Map<string, string>();
-    const sharedCollectionNames = Object.keys(sharedCollectionsRaw);
 
-    const [sharedCollectionCandidatesA, sharedCollectionCandidatesB] =
-      await Promise.all([
-        buildSharedCollectionCandidates(walletA, sharedCollectionNames),
-        buildSharedCollectionCandidates(walletB, sharedCollectionNames),
-      ]);
-
-    const collectionEntryDates = await fetchCollectionEntryDates(
-      walletA,
-      walletB,
-      sharedCollectionCandidatesA,
-      sharedCollectionCandidatesB
-    );
+    const [acquiredMapA, acquiredMapB] = await Promise.all([
+      buildWalletAcquiredMap(walletA),
+      buildWalletAcquiredMap(walletB),
+    ]);
 
     const coreProfileA = buildCoreWalletProfile(nftsA as WalletProfileNFT[]);
     const coreProfileB = buildCoreWalletProfile(nftsB as WalletProfileNFT[]);
@@ -1978,13 +1842,12 @@ export async function GET(req: Request) {
         buildCollectorCardProfile(nftsB, tasteB, enrichCache),
         enrichSharedExactWithAcquiredDates(
           sharedExactRaw.slice(0, EXACT_LIMIT),
-          walletA,
-          walletB,
-          enrichCache,
-          slugContractCache
+          acquiredMapA,
+          acquiredMapB,
+          enrichCache
         ),
-        enrichSharedBuckets(sharedCollectionsRaw, enrichCache, collectionEntryDates),
-        enrichSharedBuckets(sharedArtistsRaw, enrichCache),
+        enrichSharedBuckets(sharedCollectionsRaw, enrichCache, acquiredMapA, acquiredMapB),
+        enrichSharedBuckets(sharedArtistsRaw, enrichCache, acquiredMapA, acquiredMapB),
       ]);
 
     const filteredSharedCollections = filterNameServiceBuckets(sharedCollections);
