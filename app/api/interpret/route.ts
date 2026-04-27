@@ -18,8 +18,8 @@ type InterpretRequest = {
   exactCount?: unknown;
 };
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const OPENAI_MODEL = process.env.OPENAI_INTERPRETATION_MODEL || "gpt-4o";
+const OPENAI_API_KEY = process.env.GROQ_API_KEY;
+const OPENAI_MODEL = process.env.OPENAI_INTERPRETATION_MODEL || "llama-3.3-70b-versatile";
 
 const INTERPRETATION_SYSTEM_PROMPT = `You are writing a "why this match" interpretation for Collector Chemistry,
 a cultural compatibility tool that compares two public NFT collector profiles.
@@ -53,11 +53,7 @@ Voice rules:
 - Do not use "Wallet A" or "Wallet B" language
 - Do not name-drop collections as the main point — they are evidence, not the story
 
-Output as JSON with two fields:
-- headline: one line, maximum 100 characters
-- summary: the full interpretation as plain prose paragraphs separated by
-  double newlines (\\n\\n), matching the length and depth of the reference
-  interpretations in the spec, typically 250-400 words`;
+Respond with valid JSON only. No markdown, no code fences. Example format: {"headline": "...", "summary": "..."}`;
 
 function sanitizeString(value: unknown, maxLength = 150) {
   if (typeof value !== "string") return "";
@@ -146,7 +142,15 @@ export async function POST(req: Request) {
     const body = (await req.json()) as InterpretRequest;
     const userMessage = buildUserMessage(body || {});
 
-    if (!OPENAI_API_KEY || !userMessage.trim()) {
+    console.log("INTERPRET_USER_MESSAGE", userMessage);
+
+    if (!OPENAI_API_KEY) {
+      console.log("INTERPRET_ERROR: missing GROQ_API_KEY");
+      return safeOutput();
+    }
+
+    if (!userMessage.trim()) {
+      console.log("INTERPRET_ERROR: empty user message");
       return safeOutput();
     }
 
@@ -154,7 +158,7 @@ export async function POST(req: Request) {
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 
     try {
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -163,22 +167,6 @@ export async function POST(req: Request) {
         body: JSON.stringify({
           model: OPENAI_MODEL,
           max_tokens: 600,
-          response_format: {
-            type: "json_schema",
-            json_schema: {
-              name: "pair_interpretation",
-              strict: true,
-              schema: {
-                type: "object",
-                additionalProperties: false,
-                required: ["headline", "summary"],
-                properties: {
-                  headline: { type: "string" },
-                  summary: { type: "string" },
-                },
-              },
-            },
-          },
           messages: [
             { role: "system", content: INTERPRETATION_SYSTEM_PROMPT },
             { role: "user", content: userMessage },
@@ -187,7 +175,11 @@ export async function POST(req: Request) {
         signal: controller.signal,
       });
 
+      console.log("INTERPRET_OPENAI_STATUS", response.status);
+
       if (!response.ok) {
+        const errorText = await response.text();
+        console.log("INTERPRET_OPENAI_ERROR", errorText);
         return safeOutput();
       }
 
@@ -200,18 +192,39 @@ export async function POST(req: Request) {
       };
 
       const content = payload?.choices?.[0]?.message?.content || "";
+      console.log("INTERPRET_RAW_CONTENT", content);
+
       if (!content) return safeOutput();
 
-      const parsed = JSON.parse(content) as { headline?: unknown; summary?: unknown };
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+if (!jsonMatch) return safeOutput();
+const cleaned = jsonMatch[0].trim();
+const parsed = JSON.parse(cleaned) as { headline?: unknown; summary?: unknown };
       const headline = sanitizeString(parsed?.headline, 100);
-      const summary = sanitizeString(parsed?.summary, 5000);
+
+// Handle both output shapes: single summary field or multi-part fields
+const rawSummary = parsed?.summary
+  ? sanitizeString(parsed.summary, 5000)
+  : [
+      parsed?.separation,
+      parsed?.["the gap"],
+      parsed?.["the turn"],
+      parsed?.["closing line"],
+    ]
+      .filter((part) => typeof part === "string" && (part as string).trim())
+      .map((part) => (part as string).trim())
+      .join("\n\n");
+const summary = typeof rawSummary === "string" ? rawSummary : "";
+
+      console.log("INTERPRET_RESULT", { headline, summary: summary.slice(0, 100) });
 
       if (!headline && !summary) return safeOutput();
       return NextResponse.json({ headline, summary }, { status: 200 });
     } finally {
       clearTimeout(timeoutId);
     }
-  } catch {
+  } catch (err) {
+    console.log("INTERPRET_CAUGHT_ERROR", err);
     return safeOutput();
   }
 }
