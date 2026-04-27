@@ -115,6 +115,23 @@ type WalletSummary = {
   profile: CollectorProfile;
   pfpUrl?: string | null;
   bannerUrl?: string | null;
+  firstMint: {
+    nft: {
+      contractAddress: string;
+      tokenId: string;
+      collectionName: string;
+      imageUrl: string;
+      title: string;
+    };
+    timestamp: string;
+  } | null;
+  acquisitionBreakdown: {
+    mintCount: number;
+    acquiredCount: number;
+    totalSampled: number;
+    mintPercent: number;
+    acquiredPercent: number;
+  };
 };
 
 type OpenSeaTrait = {
@@ -220,6 +237,30 @@ type OpenSeaNftEvent = {
 type OpenSeaNftEventsResponse = {
   asset_events?: OpenSeaNftEvent[];
   events?: OpenSeaNftEvent[];
+  next?: string | null;
+};
+
+type OpenSeaAccountEventNft = {
+  contract?: string;
+  identifier?: string | number;
+  collection?: string;
+  image_url?: string;
+  display_image_url?: string;
+  name?: string;
+};
+
+type OpenSeaAccountEvent = {
+  event_timestamp?: string | number;
+  sent_at?: string;
+  from_address?: string;
+  to_address?: string;
+  winner_account?: { address?: string };
+  nft?: OpenSeaAccountEventNft;
+};
+
+type OpenSeaAccountEventsResponse = {
+  asset_events?: OpenSeaAccountEvent[];
+  events?: OpenSeaAccountEvent[];
   next?: string | null;
 };
 
@@ -564,6 +605,189 @@ async function fetchCollectionInboundTimestamp(
 }
 
 
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+function toIsoTimestamp(value?: string | number, fallback?: string | null) {
+  if (typeof value === "number") {
+    return new Date(value * 1000).toISOString();
+  }
+  if (typeof value === "string" && value.trim()) {
+    return value;
+  }
+  if (typeof fallback === "string" && fallback.trim()) {
+    return fallback;
+  }
+  return "";
+}
+
+// Replace the entire fetchFirstMint function in app/api/compare/route.ts
+// with this clean version. It fetches all available event pages,
+// collects all mint events (from_address = zero address),
+// and returns the one with the earliest timestamp.
+//
+// OpenSea's v2 events API does not support ascending sort via query params.
+// Fetching all pages and finding the minimum is the correct v1 approach.
+
+type FirstMintResult = {
+  nft: {
+    contractAddress: string;
+    tokenId: string;
+    collectionName: string;
+    imageUrl: string;
+    title: string;
+  };
+  timestamp: string;
+  tsMs: number;
+};
+
+async function fetchFirstMint(address: string): Promise<Omit<FirstMintResult, "tsMs"> | null> {
+  if (!OPENSEA_API_KEY) return null;
+
+  try {
+    const mints: FirstMintResult[] = [];
+    let next = "";
+
+    for (let page = 0; page < OPENSEA_MAX_EVENT_PAGES; page++) {
+      const params = new URLSearchParams({
+        limit: String(OPENSEA_EVENT_PAGE_LIMIT),
+        event_type: "transfer",
+      });
+      if (next) params.set("next", next);
+
+      const data = await fetchOpenSeaJson<OpenSeaAccountEventsResponse>(
+        `/events/accounts/${normalizeAddress(address)}?${params.toString()}`,
+        { events: [], asset_events: [], next: null }
+      );
+
+      const events = data.events || data.asset_events || [];
+
+      for (const event of events) {
+        if (normalizeAddress(event.from_address) !== ZERO_ADDRESS) continue;
+        if (!event.nft) continue;
+
+        const tokenId = String(event.nft.identifier || "");
+        const contractAddress = normalizeAddress(event.nft.contract || "");
+        const timestamp = toIsoTimestamp(event.event_timestamp, event.sent_at);
+        if (!tokenId || !contractAddress || !timestamp) continue;
+
+        const tsMs = new Date(timestamp).getTime();
+        if (!Number.isFinite(tsMs)) continue;
+
+        mints.push({
+          nft: {
+            contractAddress,
+            tokenId,
+            collectionName: String(event.nft.collection || "").trim() || "Unknown collection",
+            imageUrl: String(event.nft.display_image_url || event.nft.image_url || ""),
+            title: String(event.nft.name || "").trim() || `#${tokenId}`,
+          },
+          timestamp,
+          tsMs,
+        });
+      }
+
+      next = String(data.next || "");
+      if (!next || !events.length) break;
+    }
+
+    if (!mints.length) return null;
+
+    // Return the mint with the earliest timestamp across all fetched pages
+    const earliest = mints.reduce((min, curr) => curr.tsMs < min.tsMs ? curr : min);
+
+    return {
+      nft: earliest.nft,
+      timestamp: earliest.timestamp,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchAcquisitionBreakdown(address: string): Promise<{
+  mintCount: number;
+  acquiredCount: number;
+  totalSampled: number;
+  mintPercent: number;
+  acquiredPercent: number;
+}> {
+  if (!OPENSEA_API_KEY) {
+    return {
+      mintCount: 0,
+      acquiredCount: 0,
+      totalSampled: 0,
+      mintPercent: 0,
+      acquiredPercent: 0,
+    };
+  }
+
+  try {
+    const target = normalizeAddress(address);
+    let next = "";
+    let mintCount = 0;
+    let acquiredCount = 0;
+
+    for (let page = 0; page < OPENSEA_MAX_EVENT_PAGES; page += 1) {
+      const params = new URLSearchParams({
+        limit: String(OPENSEA_EVENT_PAGE_LIMIT),
+        event_type: "transfer",
+      });
+      if (next) params.set("next", next);
+
+      const data = await fetchOpenSeaJson<OpenSeaAccountEventsResponse>(
+        `/events/accounts/${target}?${params.toString()}`,
+        { events: [], asset_events: [], next: null }
+      );
+
+      const events = data.events || data.asset_events || [];
+
+      for (const event of events) {
+        if (normalizeAddress(event.to_address || event.winner_account?.address) !== target) continue;
+
+        if (normalizeAddress(event.from_address) === ZERO_ADDRESS) {
+          mintCount += 1;
+        } else {
+          acquiredCount += 1;
+        }
+      }
+
+      next = String(data.next || "");
+      if (!next || !events.length) break;
+    }
+
+    const totalSampled = mintCount + acquiredCount;
+    if (totalSampled === 0) {
+      return {
+        mintCount,
+        acquiredCount,
+        totalSampled,
+        mintPercent: 0,
+        acquiredPercent: 0,
+      };
+    }
+
+    const mintPercent = Math.round((mintCount / totalSampled) * 100);
+    const acquiredPercent = Math.max(0, 100 - mintPercent);
+
+    return {
+      mintCount,
+      acquiredCount,
+      totalSampled,
+      mintPercent,
+      acquiredPercent,
+    };
+  } catch {
+    return {
+      mintCount: 0,
+      acquiredCount: 0,
+      totalSampled: 0,
+      mintPercent: 0,
+      acquiredPercent: 0,
+    };
+  }
+}
+
+
 type ProfileCategoryDistribution = CollectorProfile["categoryDistribution"];
 type ProfileTopCollection = { name?: string; collectionName?: string };
 
@@ -699,19 +923,6 @@ async function buildWalletAcquiredMap(
 ): Promise<Map<string, { timestamp: number; fromAddress: string }>> {
   if (!OPENSEA_API_KEY) return new Map();
 
-  type EventNft = { contract?: string; identifier?: string | number };
-  type AccountEvent = {
-    event_timestamp?: string | number;
-    from_address?: string;
-    to_address?: string;
-    nft?: EventNft;
-  };
-  type AccountEventsResponse = {
-    asset_events?: AccountEvent[];
-    events?: AccountEvent[];
-    next?: string | null;
-  };
-
   const acquiredMap = new Map<string, { timestamp: number; fromAddress: string }>();
   const target = normalizeAddress(walletAddress);
   let next = "";
@@ -723,7 +934,7 @@ async function buildWalletAcquiredMap(
     });
     if (next) params.set("next", next);
 
-    const data = await fetchOpenSeaJson<AccountEventsResponse>(
+    const data = await fetchOpenSeaJson<OpenSeaAccountEventsResponse>(
       `/events/accounts/${target}?${params.toString()}`,
       { events: [], asset_events: [], next: null }
     );
@@ -1620,11 +1831,15 @@ export async function GET(req: Request) {
   }
 
   try {
-    const [nftsA, nftsB, profileA_os, profileB_os] = await Promise.all([
+    const [nftsA, nftsB, profileA_os, profileB_os, firstMintA, firstMintB, acquisitionA, acquisitionB] = await Promise.all([
       fetchNFTs(walletA),
       fetchNFTs(walletB),
       fetchOpenSeaProfile(walletA),
       fetchOpenSeaProfile(walletB),
+      fetchFirstMint(walletA),
+      fetchFirstMint(walletB),
+      fetchAcquisitionBreakdown(walletA),
+      fetchAcquisitionBreakdown(walletB),
     ]);
 
     const tasteA = buildTasteDNA(nftsA);
@@ -1756,6 +1971,8 @@ export async function GET(req: Request) {
       profile: profileA,
       pfpUrl: profileA_os.pfpUrl,
       bannerUrl: profileA_os.bannerUrl,
+      firstMint: firstMintA,
+      acquisitionBreakdown: acquisitionA,
     };
 
     const walletBResponse: WalletSummary = {
@@ -1764,6 +1981,8 @@ export async function GET(req: Request) {
       profile: profileB,
       pfpUrl: profileB_os.pfpUrl,
       bannerUrl: profileB_os.bannerUrl,
+      firstMint: firstMintB,
+      acquisitionBreakdown: acquisitionB,
     };
 
     return NextResponse.json({

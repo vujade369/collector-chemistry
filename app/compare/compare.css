@@ -1219,3 +1219,132 @@
   .compare-profile-piece-meta { padding: 0 12px 12px; }
   .compare-signatures { grid-template-columns: 1fr; }
 }
+
+
+/* ─── First mint ─────────────────────────────────────────────── */
+
+.compare-first-mint {
+  display: grid;
+  gap: 8px;
+}
+
+.compare-first-mint-label {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #555;
+}
+
+.compare-first-mint-card {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border-radius: 10px;
+  border: 0.5px solid #1e1e1e;
+  background: #0c0c0c;
+}
+
+.compare-first-mint-image {
+  width: 56px;
+  height: 56px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #141414;
+  flex-shrink: 0;
+}
+
+.compare-first-mint-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.compare-first-mint-meta {
+  display: grid;
+  gap: 3px;
+}
+
+.compare-first-mint-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: #c8c5be;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.compare-first-mint-collection {
+  font-size: 11px;
+  color: #555;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.compare-first-mint-date {
+  font-size: 11px;
+  color: #888;
+  margin-top: 2px;
+}
+
+/* ─── Acquisition breakdown ──────────────────────────────────── */
+
+.compare-acquisition {
+  display: grid;
+  gap: 8px;
+}
+
+.compare-acquisition-label {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #555;
+}
+
+.compare-acquisition-rows {
+  display: grid;
+  gap: 6px;
+}
+
+.compare-acquisition-row {
+  display: grid;
+  grid-template-columns: 64px 1fr 36px;
+  gap: 8px;
+  align-items: center;
+}
+
+.compare-acquisition-type {
+  font-size: 11px;
+  color: #888;
+}
+
+.compare-acquisition-bar-track {
+  height: 4px;
+  border-radius: 999px;
+  background: #1e1e1e;
+  overflow: hidden;
+}
+
+.compare-acquisition-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: #ff3399;
+  min-width: 2px;
+}
+
+.compare-acquisition-bar-secondary {
+  background: #29b6f6;
+}
+
+.compare-acquisition-pct {
+  font-size: 11px;
+  color: #555;
+  text-align: right;
+}
+
+.compare-acquisition-note {
+  font-size: 10px;
+  color: #3a3a3a;
+}

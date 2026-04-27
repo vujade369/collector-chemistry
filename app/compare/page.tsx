@@ -75,6 +75,23 @@ type WalletSummary = {
   profile: CollectorProfile;
   pfpUrl?: string | null;
   bannerUrl?: string | null;
+  firstMint: {
+    nft: {
+      contractAddress: string;
+      tokenId: string;
+      collectionName: string;
+      imageUrl: string;
+      title: string;
+    };
+    timestamp: string;
+  } | null;
+  acquisitionBreakdown: {
+    mintCount: number;
+    acquiredCount: number;
+    totalSampled: number;
+    mintPercent: number;
+    acquiredPercent: number;
+  };
 };
 
 type SharedBucket = {
@@ -200,6 +217,16 @@ function humanizeCollectionName(value?: string | null) {
       return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
     })
     .join(" ");
+}
+
+function formatMintDate(timestamp: string) {
+  if (!timestamp) return "";
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    year: "numeric",
+  });
 }
 
 function sanitizeDisplayDate(value?: string | null) {
@@ -781,6 +808,71 @@ function CollectorProfileCard({
         </div>
       ) : (
         <div className="compare-empty">No top collection available yet.</div>
+      )}
+
+      {wallet.firstMint && (
+        <div className="compare-first-mint">
+          <div className="compare-first-mint-label">First mint</div>
+          <div className="compare-first-mint-card">
+            <div className="compare-first-mint-image">
+              {wallet.firstMint.nft.imageUrl ? (
+                <img
+                  src={normalizeImageUrl(wallet.firstMint.nft.imageUrl)}
+                  alt={wallet.firstMint.nft.title}
+                  loading="lazy"
+                />
+              ) : (
+                <div className="compare-image-fallback">No image</div>
+              )}
+            </div>
+            <div className="compare-first-mint-meta">
+              <div className="compare-first-mint-title">
+                {wallet.firstMint.nft.title || wallet.firstMint.nft.collectionName}
+              </div>
+              <div className="compare-first-mint-collection">
+                {wallet.firstMint.nft.collectionName}
+              </div>
+              <div className="compare-first-mint-date compare-mono">
+                {formatMintDate(wallet.firstMint.timestamp)}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {wallet.acquisitionBreakdown?.totalSampled > 0 && (
+        <div className="compare-acquisition">
+          <div className="compare-acquisition-label">How they collect</div>
+          <div className="compare-acquisition-rows">
+            <div className="compare-acquisition-row">
+              <span className="compare-acquisition-type">Minted</span>
+              <div className="compare-acquisition-bar-track">
+                <div
+                  className="compare-acquisition-bar-fill"
+                  style={{ width: `${wallet.acquisitionBreakdown.mintPercent}%` }}
+                />
+              </div>
+              <span className="compare-acquisition-pct compare-mono">
+                {wallet.acquisitionBreakdown.mintPercent}%
+              </span>
+            </div>
+            <div className="compare-acquisition-row">
+              <span className="compare-acquisition-type">Acquired</span>
+              <div className="compare-acquisition-bar-track">
+                <div
+                  className="compare-acquisition-bar-fill compare-acquisition-bar-secondary"
+                  style={{ width: `${wallet.acquisitionBreakdown.acquiredPercent}%` }}
+                />
+              </div>
+              <span className="compare-acquisition-pct compare-mono">
+                {wallet.acquisitionBreakdown.acquiredPercent}%
+              </span>
+            </div>
+          </div>
+          <div className="compare-acquisition-note compare-mono">
+            Based on {wallet.acquisitionBreakdown.totalSampled} recent events
+          </div>
+        </div>
       )}
     </article>
   );
