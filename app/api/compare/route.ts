@@ -351,6 +351,9 @@ function getCollectionSlugFromAccountItem(item: OpenSeaAccountNFT) {
   if (typeof item.collection === "object" && item.collection?.slug) {
     return item.collection.slug;
   }
+  if (typeof item.collection === "string" && item.collection) {
+    return item.collection;
+  }
   if (item.collection_slug) return item.collection_slug;
   return "";
 }
@@ -509,7 +512,7 @@ async function fetchCollectionInboundTimestamp(
       { events: [], asset_events: [], next: null }
     );
 
-   const events = data.events || data.asset_events || [];
+    const events = data.events || data.asset_events || [];
     for (const event of events) {
       const toAddress = normalizeAddress(
         event.to_address || event.winner_account?.address
