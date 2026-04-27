@@ -44,6 +44,7 @@ type NFT = {
 };
 
 type CollectorProfile = {
+  username?: string;
   archetype: string;
   level: number;
   primaryLean: string;
@@ -308,6 +309,27 @@ function isLikelyValidInput(value: string) {
   return isEthAddress || isEns;
 }
 
+function getCollectorDisplayName(
+  profile: Pick<CollectorProfile, "username"> | null | undefined,
+  inputLabel: string,
+  address: string
+) {
+  const username = String(profile?.username || "").trim();
+  if (username) return username;
+
+  const input = String(inputLabel || "").trim();
+  if (input) return input;
+
+  return shortenAddress(address);
+}
+
+function getCollectorSecondaryAddress(primaryLabel: string, address: string) {
+  const secondary = shortenAddress(address);
+  if (!secondary) return "";
+  if (primaryLabel.trim().toLowerCase() === secondary.trim().toLowerCase()) return "";
+  return secondary;
+}
+
 const BREAKDOWN_META: Record<string, string> = {
   exact: "Same NFTs held by both wallets",
   collections: "Same collections, different pieces",
@@ -362,10 +384,14 @@ function WalletLabel({
   address,
   tone,
   pfpUrl,
+  displayName,
+  secondaryAddress,
 }: {
   address: string;
   tone: "a" | "b";
   pfpUrl?: string | null;
+  displayName?: string;
+  secondaryAddress?: string;
 }) {
   const [imgError, setImgError] = useState(false);
   const initial = address ? address.slice(0, 1).toUpperCase() : "?";
@@ -388,7 +414,12 @@ function WalletLabel({
           </span>
         )}
       </div>
-      <span className="cc-wallet-label-address">{shortenAddress(address)}</span>
+      <div className="cc-wallet-label-text">
+        <span className="cc-wallet-label-name">{displayName || shortenAddress(address)}</span>
+        {secondaryAddress ? (
+          <span className="cc-wallet-label-secondary">{secondaryAddress}</span>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -564,12 +595,16 @@ function ScoreBreakdownBars({
 
 function CollectorProfileCard({
   wallet,
-  submitted,
+  address,
+  displayName,
+  secondaryAddress,
   tone,
   pfpUrl,
 }: {
   wallet: WalletSummary;
-  submitted: string;
+  address: string;
+  displayName: string;
+  secondaryAddress: string;
   tone: "a" | "b";
   pfpUrl?: string | null;
 }) {
@@ -588,7 +623,13 @@ function CollectorProfileCard({
     <article className={`panel compare-profile-card wallet-tone-${tone}`}>
       <div className="compare-profile-header">
         <div>
-          <WalletLabel address={submitted} tone={tone} pfpUrl={pfpUrl} />
+          <WalletLabel
+            address={address}
+            tone={tone}
+            pfpUrl={pfpUrl}
+            displayName={displayName}
+            secondaryAddress={secondaryAddress}
+          />
           <h3 className="compare-profile-archetype" style={{ marginTop: "10px" }}>
             {wallet.profile.archetype}
           </h3>
@@ -597,7 +638,9 @@ function CollectorProfileCard({
       </div>
 
       <div className="compare-profile-identity">
-        <div className="compare-profile-address-full">{submitted}</div>
+        {secondaryAddress ? (
+          <div className="compare-profile-address-full">{secondaryAddress}</div>
+        ) : null}
       </div>
 
       <div className="compare-profile-stats">
@@ -674,12 +717,16 @@ function TasteSignature({
   tone,
   pfpUrl,
   address,
+  displayName,
+  secondaryAddress,
   slices,
 }: {
   title: string;
   tone: "a" | "b";
   pfpUrl?: string | null;
   address: string;
+  displayName: string;
+  secondaryAddress: string;
   slices: TasteSlice[];
 }) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
@@ -743,7 +790,13 @@ function TasteSignature({
   return (
     <article className={`compare-signature-card wallet-tone-${tone}`}>
       <div className="compare-signature-head">
-        <WalletLabel address={address} tone={tone} pfpUrl={pfpUrl} />
+        <WalletLabel
+          address={address}
+          tone={tone}
+          pfpUrl={pfpUrl}
+          displayName={displayName}
+          secondaryAddress={secondaryAddress}
+        />
         <div className="compare-signature-title">{title}</div>
       </div>
       <div className="compare-signature-visual">
@@ -987,6 +1040,10 @@ export default function ComparePage() {
   }
 
   const canCompare = isLikelyValidInput(walletA) && isLikelyValidInput(walletB);
+  const collectorNameA = getCollectorDisplayName(data?.walletA?.profile, submittedA, submittedA);
+  const collectorNameB = getCollectorDisplayName(data?.walletB?.profile, submittedB, submittedB);
+  const collectorSecondaryA = getCollectorSecondaryAddress(collectorNameA, submittedA);
+  const collectorSecondaryB = getCollectorSecondaryAddress(collectorNameB, submittedB);
 
   return (
     <main className="compare-page">
@@ -1061,7 +1118,10 @@ export default function ComparePage() {
               <div className="cc-identity-row">
                 <div className="cc-identity cc-identity-a">
                   <Avatar address={submittedA} tone="a" pfpUrl={data.walletA.pfpUrl} />
-                  <p className="cc-identity-name">{shortenAddress(submittedA)}</p>
+                  <p className="cc-identity-name">{collectorNameA}</p>
+                  {collectorSecondaryA ? (
+                    <p className="cc-identity-address">{collectorSecondaryA}</p>
+                  ) : null}
                   <p className="cc-identity-sub">{data.walletA.profile.archetype}</p>
                 </div>
 
@@ -1072,7 +1132,10 @@ export default function ComparePage() {
 
                 <div className="cc-identity cc-identity-b">
                   <Avatar address={submittedB} tone="b" pfpUrl={data.walletB.pfpUrl} />
-                  <p className="cc-identity-name">{shortenAddress(submittedB)}</p>
+                  <p className="cc-identity-name">{collectorNameB}</p>
+                  {collectorSecondaryB ? (
+                    <p className="cc-identity-address">{collectorSecondaryB}</p>
+                  ) : null}
                   <p className="cc-identity-sub">{data.walletB.profile.archetype}</p>
                 </div>
               </div>
@@ -1164,7 +1227,7 @@ export default function ComparePage() {
 
             {/* Taste map */}
             <section className="panel compare-section compare-section-compact">
-              <div className="compare-section-head">
+              <div className="compare-section-head compare-section-head-band">
                 <div className="eyebrow">Taste map</div>
                 <h2 className="compare-section-title">Where your taste lives</h2>
                 <p className="compare-section-text">
@@ -1178,6 +1241,8 @@ export default function ComparePage() {
                     tone="a"
                     address={submittedA}
                     pfpUrl={data.walletA.pfpUrl}
+                    displayName={collectorNameA}
+                    secondaryAddress={collectorSecondaryA}
                     slices={walletATasteSlices}
                   />
                   <TasteSignature
@@ -1185,6 +1250,8 @@ export default function ComparePage() {
                     tone="b"
                     address={submittedB}
                     pfpUrl={data.walletB.pfpUrl}
+                    displayName={collectorNameB}
+                    secondaryAddress={collectorSecondaryB}
                     slices={walletBTasteSlices}
                   />
                 </div>
@@ -1196,7 +1263,7 @@ export default function ComparePage() {
             {/* Exact overlap */}
             {sharedExact.length > 0 && (
               <section className="panel compare-section">
-                <div className="compare-section-head">
+                <div className="compare-section-head compare-section-head-band">
                   <div className="eyebrow">Exact overlap</div>
                   <h2 className="compare-section-title">You both chose this</h2>
                   <p className="compare-section-text">The clearest direct intersection.</p>
@@ -1217,7 +1284,7 @@ export default function ComparePage() {
             {/* Shared collections */}
             {sharedCollections.length > 0 && (
               <section className="panel compare-section">
-                <div className="compare-section-head">
+                <div className="compare-section-head compare-section-head-band">
                   <div className="eyebrow">Shared collections</div>
                   <h2 className="compare-section-title">Different pieces, same world</h2>
                   <p className="compare-section-text">Similar gravity, different selections.</p>
@@ -1256,7 +1323,13 @@ export default function ComparePage() {
                           <div className="compare-group-columns">
                             <div className="compare-column compare-column-a">
                               <div className="compare-column-head">
-                                <WalletLabel address={submittedA} tone="a" pfpUrl={data.walletA.pfpUrl} />
+                                <WalletLabel
+                                  address={submittedA}
+                                  tone="a"
+                                  pfpUrl={data.walletA.pfpUrl}
+                                  displayName={collectorNameA}
+                                  secondaryAddress={collectorSecondaryA}
+                                />
                                 <div className="compare-column-meta compare-mono">
                                   {bucket.walletA.length} shown · {bucket.walletACount} total
                                 </div>
@@ -1280,7 +1353,13 @@ export default function ComparePage() {
                             </div>
                             <div className="compare-column compare-column-b">
                               <div className="compare-column-head">
-                                <WalletLabel address={submittedB} tone="b" pfpUrl={data.walletB.pfpUrl} />
+                                <WalletLabel
+                                  address={submittedB}
+                                  tone="b"
+                                  pfpUrl={data.walletB.pfpUrl}
+                                  displayName={collectorNameB}
+                                  secondaryAddress={collectorSecondaryB}
+                                />
                                 <div className="compare-column-meta compare-mono">
                                   {bucket.walletB.length} shown · {bucket.walletBCount} total
                                 </div>
@@ -1322,7 +1401,7 @@ export default function ComparePage() {
             {/* Shared artists */}
             {sharedArtists.length > 0 && (
               <section className="panel compare-section">
-                <div className="compare-section-head">
+                <div className="compare-section-head compare-section-head-band">
                   <div className="eyebrow">Shared artists</div>
                   <h2 className="compare-section-title">Drawn to the same artists</h2>
                   <p className="compare-section-text">
@@ -1364,7 +1443,13 @@ export default function ComparePage() {
                           <div className="compare-group-columns">
                             <div className="compare-column compare-column-a">
                               <div className="compare-column-head">
-                                <WalletLabel address={submittedA} tone="a" pfpUrl={data.walletA.pfpUrl} />
+                                <WalletLabel
+                                  address={submittedA}
+                                  tone="a"
+                                  pfpUrl={data.walletA.pfpUrl}
+                                  displayName={collectorNameA}
+                                  secondaryAddress={collectorSecondaryA}
+                                />
                                 <div className="compare-column-meta compare-mono">
                                   {bucket.walletA.length} shown · {bucket.walletACount} total
                                 </div>
@@ -1388,7 +1473,13 @@ export default function ComparePage() {
                             </div>
                             <div className="compare-column compare-column-b">
                               <div className="compare-column-head">
-                                <WalletLabel address={submittedB} tone="b" pfpUrl={data.walletB.pfpUrl} />
+                                <WalletLabel
+                                  address={submittedB}
+                                  tone="b"
+                                  pfpUrl={data.walletB.pfpUrl}
+                                  displayName={collectorNameB}
+                                  secondaryAddress={collectorSecondaryB}
+                                />
                                 <div className="compare-column-meta compare-mono">
                                   {bucket.walletB.length} shown · {bucket.walletBCount} total
                                 </div>
@@ -1429,12 +1520,24 @@ export default function ComparePage() {
 
             {/* Collector profiles */}
             <section className="compare-overview">
+              <div className="compare-section-head compare-section-head-band compare-overview-head">
+                <div className="eyebrow">Collector profiles</div>
+                <h2 className="compare-section-title">Who each collector is</h2>
+                <p className="compare-section-text">
+                  Identity first. Holdings and habits as supporting context.
+                </p>
+              </div>
               <div className="compare-overview-grid">
                 <article className="panel compare-wallet-card wallet-tone-a">
                   <div className="compare-wallet-top">
                     <div className="compare-wallet-id">
-                      <WalletLabel address={submittedA} tone="a" pfpUrl={data.walletA.pfpUrl} />
-                      <div className="compare-wallet-address" style={{ marginTop: "6px" }}>{submittedA}</div>
+                      <WalletLabel
+                        address={submittedA}
+                        tone="a"
+                        pfpUrl={data.walletA.pfpUrl}
+                        displayName={collectorNameA}
+                        secondaryAddress={collectorSecondaryA}
+                      />
                     </div>
                     <div className="compare-wallet-count">
                       <div className="compare-wallet-count-value compare-mono">{data.walletA.totalNFTs}</div>
@@ -1445,8 +1548,13 @@ export default function ComparePage() {
                 <article className="panel compare-wallet-card wallet-tone-b">
                   <div className="compare-wallet-top">
                     <div className="compare-wallet-id">
-                      <WalletLabel address={submittedB} tone="b" pfpUrl={data.walletB.pfpUrl} />
-                      <div className="compare-wallet-address" style={{ marginTop: "6px" }}>{submittedB}</div>
+                      <WalletLabel
+                        address={submittedB}
+                        tone="b"
+                        pfpUrl={data.walletB.pfpUrl}
+                        displayName={collectorNameB}
+                        secondaryAddress={collectorSecondaryB}
+                      />
                     </div>
                     <div className="compare-wallet-count">
                       <div className="compare-wallet-count-value compare-mono">{data.walletB.totalNFTs}</div>
@@ -1458,13 +1566,17 @@ export default function ComparePage() {
               <div className="compare-profile-grid">
                 <CollectorProfileCard
                   wallet={data.walletA}
-                  submitted={submittedA}
+                  address={submittedA}
+                  displayName={collectorNameA}
+                  secondaryAddress={collectorSecondaryA}
                   tone="a"
                   pfpUrl={data.walletA.pfpUrl}
                 />
                 <CollectorProfileCard
                   wallet={data.walletB}
-                  submitted={submittedB}
+                  address={submittedB}
+                  displayName={collectorNameB}
+                  secondaryAddress={collectorSecondaryB}
                   tone="b"
                   pfpUrl={data.walletB.pfpUrl}
                 />

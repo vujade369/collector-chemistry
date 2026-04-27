@@ -79,6 +79,7 @@ type WalletMastery = {
 };
 
 type CollectorProfile = {
+  username?: string | null;
   archetype: string;
   level: number;
   primaryLean: string;
@@ -405,19 +406,40 @@ async function fetchOpenSeaAccountInventory(address: string): Promise<OpenSeaAcc
 }
 
 async function fetchOpenSeaProfile(address: string): Promise<{
+  username: string | null;
   pfpUrl: string | null;
   bannerUrl: string | null;
 }> {
-  if (!OPENSEA_API_KEY) return { pfpUrl: null, bannerUrl: null };
+  if (!OPENSEA_API_KEY) return { username: null, pfpUrl: null, bannerUrl: null };
 
   const data = await fetchOpenSeaJson<{
+    username?: string | null;
+    name?: string | null;
     profile_image_url?: string | null;
     banner_image_url?: string | null;
+    account?: {
+      username?: string | null;
+      name?: string | null;
+    } | null;
+    user?: {
+      username?: string | null;
+    } | null;
   }>(`/accounts/${address}`, {});
 
-  console.log("OPENSEA_PROFILE", { address, data });
+  const usernameCandidates = [
+    data?.username,
+    data?.name,
+    data?.account?.username,
+    data?.account?.name,
+    data?.user?.username,
+  ];
+  const username =
+    usernameCandidates
+      .map((value) => String(value || "").trim())
+      .find(Boolean) || null;
 
   return {
+    username,
     pfpUrl: data?.profile_image_url || null,
     bannerUrl: data?.banner_image_url || null,
   };
@@ -1695,6 +1717,7 @@ export async function GET(req: Request) {
 
     const profileA: CollectorProfile = {
       ...profileCardA,
+      username: profileA_os.username,
       collectorIdentityLabel: coreProfileA.collectorIdentityLabel,
       dominantCategory: coreProfileA.dominantCategory,
       secondaryCategory: coreProfileA.secondaryCategory,
@@ -1706,6 +1729,7 @@ export async function GET(req: Request) {
 
     const profileB: CollectorProfile = {
       ...profileCardB,
+      username: profileB_os.username,
       collectorIdentityLabel: coreProfileB.collectorIdentityLabel,
       dominantCategory: coreProfileB.dominantCategory,
       secondaryCategory: coreProfileB.secondaryCategory,
