@@ -1074,6 +1074,33 @@
 
 .compare-show-more { width: fit-content; }
 
+/* Interpretation block */
+.cc-interpretation {
+  display: grid;
+  gap: 14px;
+}
+
+.cc-interpretation-headline {
+  font-size: 15px;
+  font-weight: 500;
+  color: #d8d5ce;
+  letter-spacing: -0.01em;
+  line-height: 1.4;
+  margin: 0;
+  padding-left: 14px;
+  border-left: 2px solid #3a3a3a;
+}
+
+.cc-interpretation-body {
+  display: grid;
+  gap: 10px;
+}
+
+.cc-editorial-muted {
+  opacity: 0.35;
+  font-style: italic;
+}
+
 .btn {
   cursor: pointer;
   font-size: 13px;
