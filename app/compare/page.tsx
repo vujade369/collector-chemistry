@@ -612,8 +612,8 @@ export default function ComparePage() {
   const [interpretationLoading, setInterpretationLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [showMoreCollections, setShowMoreCollections] = useState(false);
-  const [showMoreArtists, setShowMoreArtists] = useState(false);
+  const [isCollectionsExpanded, setIsCollectionsExpanded] = useState(false);
+  const [isArtistsExpanded, setIsArtistsExpanded] = useState(false);
 
   const searchParams = useSearchParams();
 
@@ -758,8 +758,8 @@ export default function ComparePage() {
       setData(json);
       setSubmittedA(a);
       setSubmittedB(b);
-      setShowMoreCollections(false);
-      setShowMoreArtists(false);
+      setIsCollectionsExpanded(false);
+      setIsArtistsExpanded(false);
       void fetchInterpretation(buildInterpretRequest(json));
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to compare wallets.";
@@ -792,8 +792,8 @@ export default function ComparePage() {
     setInterpretationLoading(false);
     setError("");
     setLoading(false);
-    setShowMoreCollections(false);
-    setShowMoreArtists(false);
+    setIsCollectionsExpanded(false);
+    setIsArtistsExpanded(false);
   }
 
   const canCompare = isLikelyValidInput(walletA) && isLikelyValidInput(walletB);
@@ -1003,7 +1003,7 @@ export default function ComparePage() {
                 </div>
                 <div className="compare-group-list">
                   {sharedCollections
-                    .slice(0, showMoreCollections ? sharedCollections.length : 3)
+                    .slice(0, isCollectionsExpanded ? sharedCollections.length : 2)
                     .map(([name, bucket]) => {
                       const enteredDateA = sanitizeDisplayDate(bucket.enteredDateA);
                       const enteredDateB = sanitizeDisplayDate(bucket.enteredDateB);
@@ -1086,13 +1086,13 @@ export default function ComparePage() {
                       );
                     })}
                 </div>
-                {sharedCollections.length > 3 && (
+                {sharedCollections.length > 2 && !isCollectionsExpanded && (
                   <button
                     type="button"
                     className="btn compare-btn-secondary compare-show-more"
-                    onClick={() => setShowMoreCollections((v) => !v)}
+                    onClick={() => setIsCollectionsExpanded(true)}
                   >
-                    {showMoreCollections ? "Show less" : `Show more (${sharedCollections.length - 3})`}
+                    {`Show more (${sharedCollections.length - 2})`}
                   </button>
                 )}
               </section>
@@ -1110,7 +1110,7 @@ export default function ComparePage() {
                 </div>
                 <div className="compare-group-list">
                   {sharedArtists
-                    .slice(0, showMoreArtists ? sharedArtists.length : 3)
+                    .slice(0, isArtistsExpanded ? sharedArtists.length : 2)
                     .map(([name, bucket]) => {
                       const enteredDateA = sanitizeDisplayDate(bucket.enteredDateA);
                       const enteredDateB = sanitizeDisplayDate(bucket.enteredDateB);
@@ -1194,13 +1194,13 @@ export default function ComparePage() {
                       );
                     })}
                 </div>
-                {sharedArtists.length > 3 && (
+                {sharedArtists.length > 2 && !isArtistsExpanded && (
                   <button
                     type="button"
                     className="btn compare-btn-secondary compare-show-more"
-                    onClick={() => setShowMoreArtists((v) => !v)}
+                    onClick={() => setIsArtistsExpanded(true)}
                   >
-                    {showMoreArtists ? "Show less" : `Show more (${sharedArtists.length - 3})`}
+                    {`Show more (${sharedArtists.length - 2})`}
                   </button>
                 )}
               </section>
