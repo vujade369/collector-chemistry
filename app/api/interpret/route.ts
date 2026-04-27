@@ -199,7 +199,7 @@ export async function POST(req: Request) {
       const jsonMatch = content.match(/\{[\s\S]*\}/);
 if (!jsonMatch) return safeOutput();
 const cleaned = jsonMatch[0].trim();
-const parsed = JSON.parse(cleaned) as { headline?: unknown; summary?: unknown };
+const parsed = JSON.parse(cleaned) as Record<string, unknown>;
       const headline = sanitizeString(parsed?.headline, 100);
 
 // Handle both output shapes: single summary field or multi-part fields

@@ -39,6 +39,10 @@ export type WalletProfileNFT = {
   };
   title?: string;
   description?: string;
+  acquiredAt?: string;
+  mintedAt?: string;
+  blockTimestamp?: string;
+  timeLastUpdated?: string;
 };
 
 export type TopCollection = {
@@ -74,6 +78,7 @@ export type WalletProfile = {
   };
   collectorIdentityLabel: string;
   patternLine: string;
+  identityParagraph: string;
   coreInsight: string;
   tensionInsight: string;
   whatStandsOut: string;
@@ -414,6 +419,18 @@ function formatCategoryLabel(category: string) {
   return category.replace(/_/g, " ").trim().toLowerCase();
 }
 
+function pickVariant(seed: number, options: string[]) {
+  if (!options.length) return "";
+  const index = Math.abs(seed) % options.length;
+  return options[index];
+}
+
+function getBreadthLevel(totalCollections: number, avgNFTsPerCollection: number) {
+  if (totalCollections > 30 && avgNFTsPerCollection < 3) return "HIGH" as const;
+  if (totalCollections >= 12) return "MEDIUM" as const;
+  return "LOW" as const;
+}
+
 function buildPatternLine(params: {
   focusLabel: "Focused" | "Balanced" | "Explorer";
   repeatRatio: number;
@@ -444,39 +461,47 @@ function buildPatternLine(params: {
 }
 
 function buildCoreInsight(params: {
-  breadthHigh: boolean;
+  breadthLevel: "HIGH" | "MEDIUM" | "LOW";
   repeatRatio: number;
   top1Percent: number;
   categoryCoexistenceCount: number;
-  focusIndex: number;
+  lowData: boolean;
   unknownRatio: number;
+  seed: number;
 }) {
   const {
-    breadthHigh,
+    breadthLevel,
     repeatRatio,
     top1Percent,
     categoryCoexistenceCount,
-    focusIndex,
+    lowData,
     unknownRatio,
+    seed,
   } = params;
 
-  if (breadthHigh && repeatRatio > 0.2 && top1Percent > 0.1) {
-    return "You move widely, but your attention keeps folding back on the same signals.";
+  if (lowData) {
+    return pickVariant(seed, [
+      "Early signal only, but there is already a visible pattern in where you return.",
+      "This is still a light sample, but the direction of attention is already clear.",
+    ]);
   }
-  if (breadthHigh && repeatRatio > 0.2) {
-    return "There is more repetition here than the surface suggests.";
+  if (breadthLevel === "HIGH" && repeatRatio > 0.2) {
+    return "You move widely, but your attention is not random.";
   }
-  if (breadthHigh && top1Percent > 0.15) {
-    return "You explore widely, but one world has more gravity than the rest.";
+  if (breadthLevel === "HIGH" && top1Percent > 0.12) {
+    return "You explore widely, but one world pulls more of your attention than the rest.";
   }
-  if (breadthHigh && categoryCoexistenceCount >= 3) {
-    return "You are not collecting categories. You are tracking energy across formats.";
-  }
-  if (focusIndex >= 70 && categoryCoexistenceCount >= 3) {
-    return "Concentrated attention, but not in the obvious direction.";
+  if (categoryCoexistenceCount >= 3) {
+    return pickVariant(seed, [
+      "You are not collecting categories. You are tracking a specific kind of signal across them.",
+      "The throughline is not format. It is the kind of signal you keep recognizing across formats.",
+    ]);
   }
   if (unknownRatio > 0.25) {
-    return "A significant part of your wallet moves outside obvious lanes.";
+    return "A significant portion of this wallet does not fit cleanly into categories.";
+  }
+  if (repeatRatio > 0.2) {
+    return "You keep returning to the same signals, even when the surface looks varied.";
   }
   return "";
 }
@@ -487,11 +512,26 @@ function buildTensionInsight(params: {
   categoryCoexistenceCount: number;
   unknownRatio: number;
   repeatRatio: number;
+  lowData: boolean;
+  seed: number;
 }) {
-  const { focusLabel, top1Percent, categoryCoexistenceCount, unknownRatio, repeatRatio } = params;
+  const {
+    focusLabel,
+    top1Percent,
+    categoryCoexistenceCount,
+    unknownRatio,
+    repeatRatio,
+    lowData,
+    seed,
+  } = params;
+
+  if (lowData) return "";
 
   if (focusLabel === "Explorer" && top1Percent > 0.12) {
-    return "It looks scattered at first. It is not.";
+    return pickVariant(seed, [
+      "It looks scattered at first. It is not.",
+      "Broad on the surface. Structured underneath.",
+    ]);
   }
   if (focusLabel === "Focused" && categoryCoexistenceCount >= 3) {
     return "Fewer collections than most, but the taste runs in multiple directions.";
@@ -510,6 +550,7 @@ function buildWhatStandsOut(params: {
   repeatRatio: number;
   repeatCollectionsLength: number;
   absentCategories: string[];
+  totalCollections: number;
 }) {
   const {
     top1Percent,
@@ -519,6 +560,7 @@ function buildWhatStandsOut(params: {
     repeatRatio,
     repeatCollectionsLength,
     absentCategories,
+    totalCollections,
   } = params;
 
   if (top1Percent > 0.15 && topCollection?.name) {
@@ -534,7 +576,96 @@ function buildWhatStandsOut(params: {
   if (absentCategories.length >= 2) {
     return `Almost no presence in ${formatCategoryLabel(absentCategories[0])} or ${formatCategoryLabel(absentCategories[1])}, which most collectors eventually touch.`;
   }
-  return "";
+  if (topCollection?.name) {
+    return `${topCollection.name} is the strongest anchor, with ${topCollection.count} pieces across ${totalCollections} collections.`;
+  }
+  return `${repeatCollectionsLength} collections show repeat attention with three or more pieces.`;
+}
+
+function buildIdentityParagraph(params: {
+  breadthLevel: "HIGH" | "MEDIUM" | "LOW";
+  repeatRatio: number;
+  top1Percent: number;
+  top3Percent: number;
+  categoryCoexistenceCount: number;
+  lowData: boolean;
+  timeBehavior: "bursty" | "steady" | "";
+  unknownRatio: number;
+  anchorCollection: { name: string; count: number } | null;
+  seed: number;
+}) {
+  const {
+    breadthLevel,
+    repeatRatio,
+    top1Percent,
+    top3Percent,
+    categoryCoexistenceCount,
+    lowData,
+    timeBehavior,
+    unknownRatio,
+    anchorCollection,
+    seed,
+  } = params;
+
+  if (lowData) {
+    return pickVariant(seed, [
+      "This wallet is still early, but the attention pattern is already visible. You move with curiosity, then return when something feels worth staying with.",
+      "There is not enough volume for heavy claims yet, but the direction is clear. You are exploring, with early signs of selective return.",
+    ]);
+  }
+
+  const moveLine =
+    breadthLevel === "HIGH"
+      ? "You move widely across collections and formats."
+      : breadthLevel === "MEDIUM"
+      ? "You move selectively, with enough range to test different signals."
+      : "You move with concentration, staying close to a tighter set of collections.";
+
+  const surfaceLine =
+    repeatRatio >= 0.2
+      ? "From the outside this can look broad, but the repeat behavior is strong."
+      : "From the outside this can look open-ended, but you do not linger everywhere.";
+
+  const structureFacts: string[] = [];
+  if (anchorCollection?.name && top1Percent > 0.1) {
+    structureFacts.push(
+      `${anchorCollection.name} holds about ${Math.round(top1Percent * 100)}% of your wallet`
+    );
+  }
+  if (top3Percent > 0.3) {
+    structureFacts.push(
+      `${Math.round(top3Percent * 100)}% sits in your top three collections`
+    );
+  }
+  if (categoryCoexistenceCount >= 3) {
+    structureFacts.push(
+      `you keep signal across ${categoryCoexistenceCount} strong category lanes`
+    );
+  }
+
+  const structureLine =
+    structureFacts.length > 0
+      ? `Under the surface, ${structureFacts.join(", ")}.`
+      : "Under the surface, your attention keeps a quiet internal structure.";
+
+  const suggestionParts: string[] = [];
+  if (unknownRatio > 0.25)
+    suggestionParts.push("You are comfortable moving outside obvious category language.");
+  if (timeBehavior === "bursty")
+    suggestionParts.push(
+      "Your pattern reads as wave-based, with periods of concentrated movement."
+    );
+  if (timeBehavior === "steady")
+    suggestionParts.push("Your pattern reads as steady practice rather than isolated bursts.");
+
+  const suggestionLine =
+    suggestionParts[0] ||
+    pickVariant(seed, [
+      "What this suggests is selective conviction, not random exploration.",
+      "What this suggests is a collector who recognizes a signal and returns to it.",
+    ]);
+
+  return [moveLine, surfaceLine, structureLine, suggestionLine].join(" ");
 }
 
 function buildBehavioralReads(params: {
@@ -543,11 +674,25 @@ function buildBehavioralReads(params: {
   categoryCoexistenceCount: number;
   top1Percent: number;
   absentCategories: string[];
+  timeBehavior: "bursty" | "steady" | "";
+  lowData: boolean;
+  firstAcquisition: string;
 }) {
-  const { breadthHigh, repeatRatio, categoryCoexistenceCount, top1Percent, absentCategories } =
-    params;
+  const {
+    breadthHigh,
+    repeatRatio,
+    categoryCoexistenceCount,
+    top1Percent,
+    absentCategories,
+    timeBehavior,
+    lowData,
+    firstAcquisition,
+  } = params;
   const reads: string[] = [];
 
+  if (lowData) {
+    reads.push("Early pattern, still forming");
+  }
   if (breadthHigh && repeatRatio > 0.2) {
     reads.push("Moves broadly, commits selectively");
   }
@@ -566,6 +711,18 @@ function buildBehavioralReads(params: {
   if (breadthHigh && repeatRatio < 0.1) {
     reads.push("Wallet is wider than it is deep");
   }
+  if (timeBehavior === "steady") {
+    reads.push("Builds steadily over time");
+  }
+  if (timeBehavior === "bursty") {
+    reads.push("Moves in concentrated waves");
+  }
+  if (firstAcquisition) {
+    const year = new Date(firstAcquisition).getUTCFullYear();
+    if (year > 0 && year <= 2021) {
+      reads.push("Tends to arrive early");
+    }
+  }
 
   return [...new Set(reads)].slice(0, 3);
 }
@@ -580,6 +737,51 @@ function buildAbsenceSignal(absentCategories: string[]) {
 function buildCollectorIdentityLabel(patternLine: string) {
   if (patternLine) return patternLine;
   return "Selective collector with clear instincts";
+}
+
+function extractTimestamp(nft: WalletProfileNFT) {
+  const candidates = [
+    nft.acquiredAt,
+    nft.mintedAt,
+    nft.blockTimestamp,
+    nft.timeLastUpdated,
+  ];
+  for (const value of candidates) {
+    const raw = String(value || "").trim();
+    if (!raw) continue;
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+  }
+  return "";
+}
+
+function deriveTimeBehavior(nfts: WalletProfileNFT[]) {
+  const timestamps = nfts
+    .map(extractTimestamp)
+    .filter(Boolean)
+    .sort();
+
+  if (timestamps.length < 6) {
+    return {
+      firstAcquisition: "",
+      lastAcquisition: "",
+      timeBehavior: "" as "bursty" | "steady" | "",
+    };
+  }
+
+  const first = timestamps[0];
+  const last = timestamps[timestamps.length - 1];
+  const firstMs = new Date(first).getTime();
+  const lastMs = new Date(last).getTime();
+  const spanDays = Math.max(1, Math.floor((lastMs - firstMs) / 86400000));
+  const activeDays = new Set(timestamps.map((value) => value.slice(0, 10))).size;
+  const activeRatio = activeDays / spanDays;
+
+  return {
+    firstAcquisition: first,
+    lastAcquisition: last,
+    timeBehavior: (activeRatio < 0.2 ? "bursty" : "steady") as "bursty" | "steady",
+  };
 }
 
 export function buildWalletProfile(nfts: WalletProfileNFT[]): WalletProfile {
@@ -597,6 +799,7 @@ export function buildWalletProfile(nfts: WalletProfileNFT[]): WalletProfile {
 
   const totalCollections = collections.length;
   const avgNFTsPerCollection = totalNFTs / Math.max(totalCollections, 1);
+  const breadthLevel = getBreadthLevel(totalCollections, avgNFTsPerCollection);
   const unknownCollectionCount = collectionMap.get("Unknown collection") || 0;
   const namedCollections = collections.filter(
     (collection) => collection.name !== "Unknown collection"
@@ -622,6 +825,7 @@ export function buildWalletProfile(nfts: WalletProfileNFT[]): WalletProfile {
 
   const focusIndex = calculateFocusIndex(collections, totalNFTs);
   const focusLabel = classifyCollectorFocus(focusIndex);
+  const lowData = totalNFTs < 20 || totalCollections < 5;
 
   const categoryDistribution = buildCategoryDistribution(nfts);
   const dominantCategory = getDominantCategory(categoryDistribution);
@@ -648,34 +852,44 @@ export function buildWalletProfile(nfts: WalletProfileNFT[]): WalletProfile {
     topCategoryMargin,
   });
   const unknownRatio = otherPercentage / 100;
-  const breadthHigh = totalCollections > 30 && avgNFTsPerCollection < 3;
+  const breadthHigh = breadthLevel === "HIGH";
+  const { firstAcquisition, timeBehavior } = deriveTimeBehavior(nfts);
+  const seed = totalNFTs + totalCollections + focusIndex;
+
   const patternLine = buildPatternLine({
     focusLabel,
     repeatRatio,
     top1Percent,
     categoryCoexistenceCount,
   });
+
   const coreInsight = buildCoreInsight({
-    breadthHigh,
+    breadthLevel,
     repeatRatio,
     top1Percent,
     categoryCoexistenceCount,
-    focusIndex,
+    lowData,
     unknownRatio,
+    seed,
   });
+
   const tensionInsight = buildTensionInsight({
     focusLabel,
     top1Percent,
     categoryCoexistenceCount,
     unknownRatio,
     repeatRatio,
+    lowData,
+    seed,
   });
+
   const anchorSource = collections.filter((collection) => collection.count >= 5);
   const anchorCandidate =
     anchorSource.sort((a, b) => b.count - a.count)[0] || topCollectionsSource[0] || null;
   const anchorCollection = anchorCandidate
     ? { name: anchorCandidate.name, count: anchorCandidate.count }
     : null;
+
   const whatStandsOut = buildWhatStandsOut({
     top1Percent,
     top3Percent,
@@ -684,14 +898,33 @@ export function buildWalletProfile(nfts: WalletProfileNFT[]): WalletProfile {
     repeatRatio,
     repeatCollectionsLength: repeatCollections.length,
     absentCategories,
+    totalCollections,
   });
+
+  const identityParagraph = buildIdentityParagraph({
+    breadthLevel,
+    repeatRatio,
+    top1Percent,
+    top3Percent,
+    categoryCoexistenceCount,
+    lowData,
+    timeBehavior,
+    unknownRatio,
+    anchorCollection,
+    seed,
+  });
+
   const behavioralReads = buildBehavioralReads({
     breadthHigh,
     repeatRatio,
     categoryCoexistenceCount,
     top1Percent,
     absentCategories,
+    timeBehavior,
+    lowData,
+    firstAcquisition,
   });
+
   const absenceSignal = buildAbsenceSignal(absentCategories);
   const categorySourceBreakdown = getCategorySourceBreakdown(nfts);
   const collectorIdentityLabel = buildCollectorIdentityLabel(patternLine);
@@ -712,6 +945,7 @@ export function buildWalletProfile(nfts: WalletProfileNFT[]): WalletProfile {
     categorySourceBreakdown,
     collectorIdentityLabel,
     patternLine,
+    identityParagraph,
     coreInsight,
     tensionInsight,
     whatStandsOut,
