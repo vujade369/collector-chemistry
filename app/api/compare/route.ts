@@ -509,15 +509,21 @@ async function fetchCollectionInboundTimestamp(
       { events: [], asset_events: [], next: null }
     );
 
-    const events = data.events || data.asset_events || [];
+   const events = data.events || data.asset_events || [];
     for (const event of events) {
       const toAddress = normalizeAddress(
         event.to_address || event.winner_account?.address
       );
       if (toAddress === target) {
-        const timestamp = event.event_timestamp || event.sent_at || null;
-        if (timestamp && (!oldest || new Date(timestamp) < new Date(oldest))) {
-          oldest = timestamp;
+        const raw = event.event_timestamp;
+        const timestamp = typeof raw === "number"
+          ? new Date(raw * 1000).toISOString()
+          : (typeof raw === "string" ? raw : event.sent_at || null);
+        if (timestamp) {
+          const ts = new Date(timestamp).getTime();
+          if (!oldest || ts < new Date(oldest).getTime()) {
+            oldest = timestamp;
+          }
         }
       }
     }
