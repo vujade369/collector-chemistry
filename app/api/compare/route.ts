@@ -545,7 +545,10 @@ async function fetchCollectionInboundTimestamp(
 type ProfileCategoryDistribution = CollectorProfile["categoryDistribution"];
 type ProfileTopCollection = { name?: string; collectionName?: string };
 
-function getChemistryLabel(score: number) {
+// Single source of truth for chemistry labels.
+// Matches the spec in docs/interpretation-handoff.md and docs/DATA_MODEL.md.
+// The numeric score is internal only. This label is what the UI renders.
+function getChemistryLabel(score: number): string {
   if (score >= 80) return "Strong Signal";
   if (score >= 60) return "Kindred";
   if (score >= 40) return "Interesting Tension";
@@ -1457,23 +1460,6 @@ function getConfidence(
   return "Low";
 }
 
-function labelFromScore(score: number) {
-  if (score >= 90) return "Extremely aligned";
-  if (score >= 75) return "Strong match";
-  if (score >= 60) return "Clear overlap";
-  if (score >= 40) return "Some shared taste";
-  if (score >= 20) return "Light connection";
-  return "Limited overlap";
-}
-
-function labelFromTasteAlignment(score: number) {
-  if (score >= 85) return "Very high";
-  if (score >= 70) return "High";
-  if (score >= 55) return "Moderate";
-  if (score >= 35) return "Light";
-  return "Low";
-}
-
 function buildSimilarityType(params: {
   totalA: number;
   totalB: number;
@@ -1541,153 +1527,7 @@ function buildInterpretationLine(params: {
     return `There is a visible connection around ${sharedTop[0]}, but each wallet interprets that lane differently. ${sizeRead}`;
   }
 
-  return `There is not much direct overlap yet, but the wallets still show a few adjacent taste signals. ${sizeRead}`;
-}
-
-function computeArchetype(
-  taste: TasteMap,
-  totalNFTs: number,
-  diversity: number
-) {
-  const top = getTopTasteEntries(taste, 2);
-  const primary = top[0]?.[0] || "Other";
-  const primaryPct = top[0]?.[1] || 0;
-  const secondaryPct = top[1]?.[1] || 0;
-
-  if (diversity >= 6 && totalNFTs >= 80) return "Broad Explorer";
-  if (primary === "Meme" && primaryPct >= 18) return "Meme Native";
-  if (primary === "Fine Art") return "Art-Led Collector";
-  if (primary === "Generative Art") return "Generative Lean";
-  if (primary === "PFP") return "Identity Builder";
-  if (primary === "Utility") return "Utility Strategist";
-  if (primary === "Photography") return "Image Archivist";
-  if (primary === "Music") return "Sound Collector";
-  if (primaryPct >= 38) return "Focused Curator";
-  if (Math.abs(primaryPct - secondaryPct) <= 6) return "Cross-Current Collector";
-
-  return "Taste Builder";
-}
-
-function computeLevel(totalNFTs: number, diversity: number) {
-  const holdingsCurve =
-    totalNFTs > 0
-      ? (Math.log10(totalNFTs + 1) / Math.log10(1000)) * 92
-      : 0;
-
-  const diversityBonus = Math.min(diversity * 1.25, 7);
-
-  return clampInt(Math.round(holdingsCurve + diversityBonus), 1, 99);
-}
-
-function buildProfileLine(
-  primaryLean: string,
-  secondaryLean: string,
-  totalNFTs: number
-) {
-  if (secondaryLean && secondaryLean !== primaryLean) {
-    if (totalNFTs >= 100) {
-      return `Leans ${primaryLean.toLowerCase()} first, with a strong ${secondaryLean.toLowerCase()} undercurrent.`;
-    }
-    return `A ${primaryLean.toLowerCase()}-leaning wallet with clear ${secondaryLean.toLowerCase()} spillover.`;
-  }
-
-  return `A wallet centered most strongly around ${primaryLean.toLowerCase()}.`;
-}
-
-function pickMostOwnedGroup(grouped: Record<string, NFT[]>) {
-  const ranked = Object.entries(grouped)
-    .filter(([name, items]) => !!name.trim() && items.length > 0)
-    .sort((a, b) => b[1].length - a[1].length);
-
-  return ranked[0] || null;
-}
-
-async function buildTopCollectionSignal(
-  nfts: NFT[],
-  cache: Map<string, Promise<NFT>>
-) {
-  const topCollection = pickMostOwnedGroup(groupByCollection(nfts));
-
-  if (topCollection) {
-    const [name, items] = topCollection;
-    const enriched = await Promise.all(
-      items.slice(0, 8).map((nft) => enrichNFT(nft, cache))
-    );
-    const previewImages = enriched
-      .map((nft) => getExistingImage(nft))
-      .filter(Boolean)
-      .slice(0, 2);
-
-    return {
-      source: "collection" as const,
-      name,
-      ownedCount: items.length,
-      previewImages,
-    };
-  }
-
-  const artistBuckets = groupByArtist(nfts);
-  delete artistBuckets.unknown;
-  const topArtist = pickMostOwnedGroup(artistBuckets);
-
-  if (!topArtist) return null;
-
-  const [name, items] = topArtist;
-  const enriched = await Promise.all(
-    items.slice(0, 8).map((nft) => enrichNFT(nft, cache))
-  );
-  const previewImages = enriched
-    .map((nft) => getExistingImage(nft))
-    .filter(Boolean)
-    .slice(0, 2);
-
-  return {
-    source: "artist" as const,
-    name,
-    ownedCount: items.length,
-    previewImages,
-  };
-}
-
-async function buildCollectorCardProfile(
-  nfts: NFT[],
-  taste: TasteMap,
-  cache: Map<string, Promise<NFT>>
-): Promise<CollectorProfile> {
-  const top = getTopTasteEntries(taste, 2);
-  const primaryLean = top[0]?.[0] || "Other";
-  const secondaryLean = top[1]?.[0] || primaryLean;
-
-  const diversity = Object.entries(taste).filter(
-    ([key, value]) => value > 0 && key !== "Other"
-  ).length;
-
-  const archetype = computeArchetype(taste, nfts.length, diversity);
-  const level = computeLevel(nfts.length, diversity);
-  const profileLine = buildProfileLine(primaryLean, secondaryLean, nfts.length);
-
-  const topCollection = await buildTopCollectionSignal(nfts, cache);
-
-  return {
-    archetype,
-    level,
-    primaryLean,
-    secondaryLean,
-    profileLine,
-    collectorIdentityLabel: "Exploratory collector across emerging and uncategorized work",
-    dominantCategory: "other",
-    secondaryCategory: "other",
-    categoryDistribution: [],
-    otherPercentage: 100,
-    categoryConfidence: "Low",
-    categorySourceBreakdown: {
-      opensea: 0,
-      metadata: 0,
-      keyword: 0,
-      other: 0,
-    },
-    topCollection,
-  };
+  return `There are not many direct overlaps yet, but the wallets still show a few adjacent taste signals. ${sizeRead}`;
 }
 
 function buildSummary(params: {
@@ -1907,12 +1747,12 @@ export async function GET(req: Request) {
       walletB: walletBResponse,
       scoring: {
         chemistryScore,
-        label: labelFromScore(chemistryScore),
+        label: getChemistryLabel(chemistryScore),
         confidence,
         similarityType,
         tasteAlignment: {
           score: Math.round(tasteScore * 100),
-          label: labelFromTasteAlignment(Math.round(tasteScore * 100)),
+          label: getChemistryLabel(Math.round(tasteScore * 100)),
         },
         interpretation,
         pairInterpretation,
@@ -1939,4 +1779,154 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+// ─── Collector card profile (local to this route) ────────────────────────────
+// Note: archetype and level logic here will be consolidated into
+// lib/walletProfile.ts as part of the profile-first refactor.
+
+function computeArchetype(
+  taste: TasteMap,
+  totalNFTs: number,
+  diversity: number
+) {
+  const top = getTopTasteEntries(taste, 2);
+  const primary = top[0]?.[0] || "Other";
+  const primaryPct = top[0]?.[1] || 0;
+  const secondaryPct = top[1]?.[1] || 0;
+
+  if (diversity >= 6 && totalNFTs >= 80) return "Broad Explorer";
+  if (primary === "Meme" && primaryPct >= 18) return "Meme Native";
+  if (primary === "Fine Art") return "Art-Led Collector";
+  if (primary === "Generative Art") return "Generative Lean";
+  if (primary === "PFP") return "Identity Builder";
+  if (primary === "Utility") return "Utility Strategist";
+  if (primary === "Photography") return "Image Archivist";
+  if (primary === "Music") return "Sound Collector";
+  if (primaryPct >= 38) return "Focused Curator";
+  if (Math.abs(primaryPct - secondaryPct) <= 6) return "Cross-Current Collector";
+
+  return "Taste Builder";
+}
+
+function computeLevel(totalNFTs: number, diversity: number) {
+  const holdingsCurve =
+    totalNFTs > 0
+      ? (Math.log10(totalNFTs + 1) / Math.log10(1000)) * 92
+      : 0;
+
+  const diversityBonus = Math.min(diversity * 1.25, 7);
+
+  return clampInt(Math.round(holdingsCurve + diversityBonus), 1, 99);
+}
+
+function buildProfileLine(
+  primaryLean: string,
+  secondaryLean: string,
+  totalNFTs: number
+) {
+  if (secondaryLean && secondaryLean !== primaryLean) {
+    if (totalNFTs >= 100) {
+      return `Leans ${primaryLean.toLowerCase()} first, with a strong ${secondaryLean.toLowerCase()} undercurrent.`;
+    }
+    return `A ${primaryLean.toLowerCase()}-leaning wallet with clear ${secondaryLean.toLowerCase()} spillover.`;
+  }
+
+  return `A wallet centered most strongly around ${primaryLean.toLowerCase()}.`;
+}
+
+function pickMostOwnedGroup(grouped: Record<string, NFT[]>) {
+  const ranked = Object.entries(grouped)
+    .filter(([name, items]) => !!name.trim() && items.length > 0)
+    .sort((a, b) => b[1].length - a[1].length);
+
+  return ranked[0] || null;
+}
+
+async function buildTopCollectionSignal(
+  nfts: NFT[],
+  cache: Map<string, Promise<NFT>>
+) {
+  const topCollection = pickMostOwnedGroup(groupByCollection(nfts));
+
+  if (topCollection) {
+    const [name, items] = topCollection;
+    const enriched = await Promise.all(
+      items.slice(0, 8).map((nft) => enrichNFT(nft, cache))
+    );
+    const previewImages = enriched
+      .map((nft) => getExistingImage(nft))
+      .filter(Boolean)
+      .slice(0, 2);
+
+    return {
+      source: "collection" as const,
+      name,
+      ownedCount: items.length,
+      previewImages,
+    };
+  }
+
+  const artistBuckets = groupByArtist(nfts);
+  delete artistBuckets.unknown;
+  const topArtist = pickMostOwnedGroup(artistBuckets);
+
+  if (!topArtist) return null;
+
+  const [name, items] = topArtist;
+  const enriched = await Promise.all(
+    items.slice(0, 8).map((nft) => enrichNFT(nft, cache))
+  );
+  const previewImages = enriched
+    .map((nft) => getExistingImage(nft))
+    .filter(Boolean)
+    .slice(0, 2);
+
+  return {
+    source: "artist" as const,
+    name,
+    ownedCount: items.length,
+    previewImages,
+  };
+}
+
+async function buildCollectorCardProfile(
+  nfts: NFT[],
+  taste: TasteMap,
+  cache: Map<string, Promise<NFT>>
+): Promise<CollectorProfile> {
+  const top = getTopTasteEntries(taste, 2);
+  const primaryLean = top[0]?.[0] || "Other";
+  const secondaryLean = top[1]?.[0] || primaryLean;
+
+  const diversity = Object.entries(taste).filter(
+    ([key, value]) => value > 0 && key !== "Other"
+  ).length;
+
+  const archetype = computeArchetype(taste, nfts.length, diversity);
+  const level = computeLevel(nfts.length, diversity);
+  const profileLine = buildProfileLine(primaryLean, secondaryLean, nfts.length);
+
+  const topCollection = await buildTopCollectionSignal(nfts, cache);
+
+  return {
+    archetype,
+    level,
+    primaryLean,
+    secondaryLean,
+    profileLine,
+    collectorIdentityLabel: "Exploratory collector across emerging and uncategorized work",
+    dominantCategory: "other",
+    secondaryCategory: "other",
+    categoryDistribution: [],
+    otherPercentage: 100,
+    categoryConfidence: "Low",
+    categorySourceBreakdown: {
+      opensea: 0,
+      metadata: 0,
+      keyword: 0,
+      other: 0,
+    },
+    topCollection,
+  };
 }

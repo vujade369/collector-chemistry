@@ -225,13 +225,6 @@ const BREAKDOWN_META: Record<string, string> = {
   taste: "Similarity in collecting categories",
 };
 
-function scoreLabel(score: number) {
-  if (score < 25) return "Very different";
-  if (score < 50) return "Some overlap";
-  if (score < 75) return "Shared taste";
-  return "Strong alignment";
-}
-
 const SPECTRUM_COLORS = [
   { color: "#ff0080", bg: "#1a0814", border: "#ff008055" },
   { color: "#00b0ff", bg: "#0a0e1a", border: "#00b0ff55" },
@@ -780,7 +773,7 @@ export default function ComparePage() {
 
                 <div className="cc-score-center">
                   <p className="cc-score-eyebrow">chemistry</p>
-                  <p className="cc-score-label">{scoreLabel(data.scoring.chemistryScore)}</p>
+                  <p className="cc-score-label">{data.scoring.label}</p>
                 </div>
 
                 <div className="cc-identity cc-identity-b">
