@@ -211,6 +211,14 @@
   letter-spacing: 0.01em;
 }
 
+.cc-identity-address {
+  font-size: 11px;
+  color: rgba(216, 213, 206, 0.56);
+  text-align: center;
+  margin: -4px 0 0;
+  letter-spacing: 0.01em;
+}
+
 .cc-identity-sub {
   font-size: 11px;
   color: #666;
@@ -426,6 +434,26 @@
   letter-spacing: 0.01em;
 }
 
+.cc-wallet-label-text {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.cc-wallet-label-name {
+  font-size: 12px;
+  color: #c8c5be;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+}
+
+.cc-wallet-label-secondary {
+  font-size: 10px;
+  color: rgba(200, 197, 190, 0.56);
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+}
+
 
 /* ─── Shared panel / section system ──────────────────────────────── */
 
@@ -457,6 +485,13 @@
 .compare-section-head {
   display: grid;
   gap: 6px;
+}
+
+.compare-section-head-band {
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 11px 14px;
+  margin: -22px -22px 0;
 }
 
 .compare-section-title {
@@ -763,6 +798,7 @@
 /* ─── Overview / wallet cards ────────────────────────────────────── */
 
 .compare-overview { display: grid; gap: 12px; }
+.compare-overview-head { margin-bottom: 2px; }
 .compare-overview-grid,
 .compare-profile-grid { display: grid; gap: 12px; }
 
@@ -971,69 +1007,68 @@
 
 /* ─── Taste map ──────────────────────────────────────────────────── */
 
-.compare-bars { display: grid; gap: 16px; }
-
 .compare-section-compact { padding: 20px; gap: 14px; }
-.compare-section-compact .compare-bars { gap: 12px; }
-.compare-section-compact .compare-bar-row { gap: 6px; }
-.compare-section-compact .compare-bar-side { height: 7px; }
-
-.compare-bar-legend {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding-bottom: 4px;
-  border-bottom: 0.5px solid #1e1e1e;
-}
 
 .wallet-a { color: #ff3399; }
 .wallet-b { color: #29b6f6; }
 
-.compare-bar-row { display: grid; gap: 7px; }
-
-.compare-bar-top {
+.compare-signatures {
   display: grid;
-  grid-template-columns: 52px 1fr 52px;
-  align-items: center;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.compare-signature-card {
+  border: 0.5px solid #1e1e1e;
+  border-radius: 12px;
+  background: #0c0c0c;
+  padding: 14px;
+  display: grid;
   gap: 12px;
-  font-size: 12px;
 }
 
-.compare-bar-left { text-align: left; color: #ff3399; }
-.compare-bar-right { text-align: right; color: #29b6f6; }
-.compare-bar-label { color: #c8c5be; text-align: center; font-size: 13px; }
-
-.compare-bar-track {
+.compare-signature-head {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.compare-signature-title {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #555;
+}
+
+.compare-signature-visual {
+  display: grid;
+  place-items: center;
+}
+
+.compare-signature-svg {
+  width: 170px;
+  height: 170px;
+  display: block;
+}
+
+.compare-signature-legend {
+  display: grid;
   gap: 6px;
-  align-items: center;
 }
 
-.compare-bar-side {
-  height: 8px;
-  border-radius: 999px;
-  overflow: hidden;
-  background: #1a1a1a;
-  position: relative;
+.compare-signature-legend-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
 }
 
-.compare-bar-side.left .compare-bar-fill {
-  margin-left: auto;
-  background: #ff3399;
+.compare-signature-legend-name {
+  font-size: 12px;
+  color: #a8a59e;
 }
 
-.compare-bar-side.right .compare-bar-fill {
-  background: #29b6f6;
-}
-
-.compare-bar-fill {
-  height: 100%;
-  border-radius: 999px;
-  min-width: 3px;
+.compare-signature-legend-value {
+  font-size: 12px;
 }
 
 /* ─── Divergence ─────────────────────────────────────────────────── */
@@ -1132,6 +1167,7 @@
 @media (min-width: 720px) {
   .compare-group-columns { grid-template-columns: 1fr 1fr; }
   .compare-section { padding: 26px; }
+  .compare-section-head-band { margin: -26px -26px 0; }
 }
 
 @media (max-width: 559px) {
@@ -1141,4 +1177,5 @@
   .compare-profile-stats { grid-template-columns: 1fr 1fr; }
   .compare-profile-piece { grid-template-columns: 1fr; }
   .compare-profile-piece-meta { padding: 0 12px 12px; }
+  .compare-signatures { grid-template-columns: 1fr; }
 }
