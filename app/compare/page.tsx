@@ -9,6 +9,13 @@ type NFT = {
   contract: {
     address: string;
     name?: string;
+    openSeaMetadata?: {
+      imageUrl?: string;
+      bannerImageUrl?: string;
+    };
+  };
+  collection?: {
+    imageUrl?: string;
   };
   tokenId: string;
   title?: string;
@@ -41,6 +48,7 @@ type NFT = {
   displayImage?: string;
   acquiredDateA?: string | null;
   acquiredDateB?: string | null;
+  displayArtistImage?: string;
 };
 
 type CollectorProfile = {
@@ -328,6 +336,72 @@ function getCollectorSecondaryAddress(primaryLabel: string, address: string) {
   if (!secondary) return "";
   if (primaryLabel.trim().toLowerCase() === secondary.trim().toLowerCase()) return "";
   return secondary;
+}
+
+function getEntryPillName(
+  profile: Pick<CollectorProfile, "username"> | null | undefined,
+  address: string
+) {
+  const username = String(profile?.username || "").trim();
+  if (username) return username;
+  return shortenAddress(address);
+}
+
+function getOfficialCollectionImageFromNft(nft?: NFT | null) {
+  if (!nft) return "";
+  const primary = normalizeImageUrl(nft.contract?.openSeaMetadata?.imageUrl || "");
+  if (primary) return primary;
+  const fromCollection = normalizeImageUrl(nft.collection?.imageUrl || "");
+  if (fromCollection) return fromCollection;
+  return normalizeImageUrl(nft.contract?.openSeaMetadata?.bannerImageUrl || "");
+}
+
+function getOfficialArtistImageFromNft(nft?: NFT | null) {
+  if (!nft) return "";
+  const fromDisplay = normalizeImageUrl(nft.displayArtistImage || "");
+  if (fromDisplay) return fromDisplay;
+  const fromRaw = normalizeImageUrl(
+    String(
+      (nft.raw?.metadata as Record<string, unknown> | undefined)?.artist_image_url ||
+      (nft.raw?.metadata as Record<string, unknown> | undefined)?.artistImageUrl ||
+      ""
+    )
+  );
+  return fromRaw;
+}
+
+function getGroupOfficialAvatar(nfts: NFT[], mode: "collection" | "artist") {
+  let nftImageFallback = "";
+
+  for (const nft of nfts) {
+    const official =
+      mode === "artist" ? getOfficialArtistImageFromNft(nft) : getOfficialCollectionImageFromNft(nft);
+    if (official) return { url: official, source: "official" as const };
+    if (!nftImageFallback) nftImageFallback = getNftImage(nft);
+  }
+
+  if (mode === "artist") {
+    const byCollection = new Map<string, { count: number; image: string }>();
+    for (const nft of nfts) {
+      const key =
+        String(nft.displayCollectionSlug || "").trim().toLowerCase() ||
+        String(nft.displayCollectionName || "").trim().toLowerCase() ||
+        String(nft.contract?.address || "").trim().toLowerCase();
+      if (!key) continue;
+      const image = getOfficialCollectionImageFromNft(nft);
+      const current = byCollection.get(key);
+      byCollection.set(key, {
+        count: (current?.count || 0) + 1,
+        image: current?.image || image,
+      });
+    }
+    const ranked = [...byCollection.values()].sort((a, b) => b.count - a.count);
+    const collectionImage = ranked.find((entry) => entry.image)?.image || "";
+    if (collectionImage) return { url: collectionImage, source: "official" as const };
+  }
+
+  if (nftImageFallback) return { url: nftImageFallback, source: "fallback" as const };
+  return { url: "", source: "none" as const };
 }
 
 const BREAKDOWN_META: Record<string, string> = {
@@ -1044,6 +1118,8 @@ export default function ComparePage() {
   const collectorNameB = getCollectorDisplayName(data?.walletB?.profile, submittedB, submittedB);
   const collectorSecondaryA = getCollectorSecondaryAddress(collectorNameA, submittedA);
   const collectorSecondaryB = getCollectorSecondaryAddress(collectorNameB, submittedB);
+  const entryPillNameA = getEntryPillName(data?.walletA?.profile, submittedA);
+  const entryPillNameB = getEntryPillName(data?.walletB?.profile, submittedB);
 
   return (
     <main className="compare-page">
@@ -1296,24 +1372,35 @@ export default function ComparePage() {
                       const enteredDateA = sanitizeDisplayDate(bucket.enteredDateA);
                       const enteredDateB = sanitizeDisplayDate(bucket.enteredDateB);
                       const displayName = humanizeCollectionName(name) || name;
+                      const groupAvatar = getGroupOfficialAvatar(
+                        [...bucket.walletA, ...bucket.walletB],
+                        "collection"
+                      );
                       return (
                         <article key={name} className="panel-subtle compare-group-card">
                           <div className="compare-group-head">
                             <div className="compare-group-title-wrap">
-                              <h3 className="compare-group-title">{displayName}</h3>
+                              <div className="compare-group-title-row">
+                                {groupAvatar.url ? (
+                                  <img
+                                    className={`compare-group-avatar ${groupAvatar.source === "fallback" ? "is-fallback" : ""}`}
+                                    src={groupAvatar.url}
+                                    alt={`${displayName} avatar`}
+                                    loading="lazy"
+                                  />
+                                ) : null}
+                                <h3 className="compare-group-title">{displayName}</h3>
+                              </div>
                               {enteredDateA || enteredDateB ? (
-                                <div className="compare-group-entry-dates compare-mono">
+                                <div className="compare-group-entry-pills compare-mono">
                                   {enteredDateA ? (
-                                    <span>
-                                      {shortenAddress(submittedA)} entered <strong>{enteredDateA}</strong>
+                                    <span className="compare-group-entry-pill compare-group-entry-pill-a">
+                                      {entryPillNameA} entered {enteredDateA}
                                     </span>
                                   ) : null}
-                                  {enteredDateA && enteredDateB ? (
-                                    <span className="compare-entry-divider">·</span>
-                                  ) : null}
                                   {enteredDateB ? (
-                                    <span>
-                                      {shortenAddress(submittedB)} entered <strong>{enteredDateB}</strong>
+                                    <span className="compare-group-entry-pill compare-group-entry-pill-b">
+                                      {entryPillNameB} entered {enteredDateB}
                                     </span>
                                   ) : null}
                                 </div>
@@ -1414,26 +1501,37 @@ export default function ComparePage() {
                     .map(([name, bucket]) => {
                       const enteredDateA = sanitizeDisplayDate(bucket.enteredDateA);
                       const enteredDateB = sanitizeDisplayDate(bucket.enteredDateB);
+                      const groupAvatar = getGroupOfficialAvatar(
+                        [...bucket.walletA, ...bucket.walletB],
+                        "artist"
+                      );
 
                       return (
                         <article key={name} className="panel-subtle compare-group-card">
                           <div className="compare-group-head">
                             <div className="compare-group-title-wrap">
-                              <h3 className="compare-group-title compare-group-title-lower">{name}</h3>
+                              <div className="compare-group-title-row">
+                                {groupAvatar.url ? (
+                                  <img
+                                    className={`compare-group-avatar ${groupAvatar.source === "fallback" ? "is-fallback" : ""}`}
+                                    src={groupAvatar.url}
+                                    alt={`${name} avatar`}
+                                    loading="lazy"
+                                  />
+                                ) : null}
+                                <h3 className="compare-group-title compare-group-title-lower">{name}</h3>
+                              </div>
                               <div className="compare-group-meta">Shared artist</div>
                               {enteredDateA || enteredDateB ? (
-                                <div className="compare-group-entry-dates compare-mono">
+                                <div className="compare-group-entry-pills compare-mono">
                                   {enteredDateA ? (
-                                    <span>
-                                      {shortenAddress(submittedA)} entered <strong>{enteredDateA}</strong>
+                                    <span className="compare-group-entry-pill compare-group-entry-pill-a">
+                                      {entryPillNameA} entered {enteredDateA}
                                     </span>
                                   ) : null}
-                                  {enteredDateA && enteredDateB ? (
-                                    <span className="compare-entry-divider">·</span>
-                                  ) : null}
                                   {enteredDateB ? (
-                                    <span>
-                                      {shortenAddress(submittedB)} entered <strong>{enteredDateB}</strong>
+                                    <span className="compare-group-entry-pill compare-group-entry-pill-b">
+                                      {entryPillNameB} entered {enteredDateB}
                                     </span>
                                   ) : null}
                                 </div>
