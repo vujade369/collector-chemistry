@@ -440,24 +440,24 @@ function buildPatternLine(params: {
   const { focusLabel, repeatRatio, top1Percent, categoryCoexistenceCount } = params;
 
   if (focusLabel === "Explorer" && repeatRatio > 0.25) {
-    return "Wide-ranging, but not random";
+    return "Wide range, repeat choices";
   }
   if (focusLabel === "Explorer" && top1Percent > 0.12) {
-    return "Explores widely, commits when something hits";
+    return "Explores widely, commits in pockets";
   }
   if (focusLabel === "Explorer" && repeatRatio < 0.1) {
-    return "Curious, constantly moving";
+    return "Fast-moving, lightly attached";
   }
   if (focusLabel === "Focused" && categoryCoexistenceCount >= 3) {
-    return "Selective, but not predictable";
+    return "Tight focus, wide references";
   }
   if (focusLabel === "Focused") {
-    return "Focused, high conviction";
+    return "Tight focus, high conviction";
   }
   if (focusLabel === "Balanced" && categoryCoexistenceCount >= 3) {
-    return "Deliberate, wide-ranging taste";
+    return "Measured choices, surprising spread";
   }
-  return "Selective collector with clear instincts";
+  return "Selective eye, consistent instinct";
 }
 
 function buildCoreInsight(params: {
@@ -481,32 +481,33 @@ function buildCoreInsight(params: {
 
   if (lowData) {
     return pickVariant(seed, [
-      "Early signal only, but there is already a visible pattern in where you return.",
-      "This is still a light sample, but the direction of attention is already clear.",
+      "Small sample, but you already return to the same kinds of work.",
+      "Early read, but your attention already has a repeat pattern.",
     ]);
   }
   if (breadthLevel === "HIGH" && repeatRatio > 0.2) {
-    return "You move widely, but your attention is not random.";
+    return "You move widely, but your repeat choices are easy to spot.";
   }
   if (breadthLevel === "HIGH" && top1Percent > 0.12) {
-    return "You explore widely, but one world pulls more of your attention than the rest.";
+    return "You move across scenes, but one collection keeps taking meaningful share.";
   }
   if (categoryCoexistenceCount >= 3) {
     return pickVariant(seed, [
-      "You are not collecting categories. You are tracking a specific kind of signal across them.",
-      "The throughline is not format. It is the kind of signal you keep recognizing across formats.",
+      "You move between very different kinds of work, but the visual signal you respond to stays consistent.",
+      "The formats change, but your cultural signal stays steady across the wallet.",
     ]);
   }
   if (unknownRatio > 0.25) {
-    return "A significant portion of this wallet does not fit cleanly into categories.";
+    return "A meaningful part of this wallet refuses neat labels, and that feels intentional.";
   }
   if (repeatRatio > 0.2) {
-    return "You keep returning to the same signals, even when the surface looks varied.";
+    return "Even when the surface looks varied, your returns reveal a clear pull.";
   }
   return "";
 }
 
 function buildTensionInsight(params: {
+  breadthLevel: "HIGH" | "MEDIUM" | "LOW";
   focusLabel: "Focused" | "Balanced" | "Explorer";
   top1Percent: number;
   categoryCoexistenceCount: number;
@@ -516,6 +517,7 @@ function buildTensionInsight(params: {
   seed: number;
 }) {
   const {
+    breadthLevel,
     focusLabel,
     top1Percent,
     categoryCoexistenceCount,
@@ -526,6 +528,17 @@ function buildTensionInsight(params: {
   } = params;
 
   if (lowData) return "";
+
+  if (
+    breadthLevel === "HIGH" &&
+    (repeatRatio > 0.1 || categoryCoexistenceCount >= 3)
+  ) {
+    return pickVariant(seed + 11, [
+      "It looks open-ended at first. It is not.",
+      "At first glance it reads like wandering. Then the repeats show up.",
+      "Plenty of range on the surface. Underneath, you keep returning to the same thread.",
+    ]);
+  }
 
   if (focusLabel === "Explorer" && top1Percent > 0.12) {
     return pickVariant(seed, [
@@ -563,23 +576,21 @@ function buildWhatStandsOut(params: {
     totalCollections,
   } = params;
 
+  if (focusLabel === "Explorer" && top3Percent > 0.35) {
+    const pct = Math.round(top3Percent * 100);
+    return `You move across a lot of collections, but ${pct}% sits in just three. That push and pull between breadth and return defines the wallet.`;
+  }
   if (top1Percent > 0.15 && topCollection?.name) {
     const pct = Math.round(top1Percent * 100);
-    return `${topCollection.name} accounts for ${pct}% of this wallet. For a collector who moves this widely, that is a significant anchor.`;
-  }
-  if (top3Percent > 0.35 && focusLabel === "Explorer") {
-    return "Over a third of this wallet sits in just three collections. The breadth is real, but so is the concentration.";
+    return `${topCollection.name} holds ${pct}% on its own. You keep roaming, but you keep this one close.`;
   }
   if (repeatRatio > 0.3) {
-    return `${repeatCollectionsLength} collections with three or more pieces. This wallet returns more than it appears to.`;
+    return `${repeatCollectionsLength} collections have three or more pieces. You are not just sampling, you are revisiting.`;
   }
   if (absentCategories.length >= 2) {
-    return `Almost no presence in ${formatCategoryLabel(absentCategories[0])} or ${formatCategoryLabel(absentCategories[1])}, which most collectors eventually touch.`;
+    return `Almost no movement into ${formatCategoryLabel(absentCategories[0])} or ${formatCategoryLabel(absentCategories[1])}. The taste boundary is sharper than most.`;
   }
-  if (topCollection?.name) {
-    return `${topCollection.name} is the strongest anchor, with ${topCollection.count} pieces across ${totalCollections} collections.`;
-  }
-  return `${repeatCollectionsLength} collections show repeat attention with three or more pieces.`;
+  return `${totalCollections} collections with ${repeatCollectionsLength} repeat pockets. The wallet stays open without losing shape.`;
 }
 
 function buildIdentityParagraph(params: {
@@ -609,27 +620,36 @@ function buildIdentityParagraph(params: {
 
   if (lowData) {
     return pickVariant(seed, [
-      "This wallet is still early, but the attention pattern is already visible. You move with curiosity, then return when something feels worth staying with.",
-      "There is not enough volume for heavy claims yet, but the direction is clear. You are exploring, with early signs of selective return.",
+      "You move with curiosity, then return to specific pockets quickly. From the outside it reads exploratory. Underneath, the repeats are already visible. It suggests your taste is forming faster than the wallet is growing.",
+      "You are early, but not undefined. You test different things, then revisit what lands. At a glance it looks open-ended. Underneath, there is already editing. It suggests clear taste, even at low volume.",
     ]);
   }
 
   const moveLine =
     breadthLevel === "HIGH"
-      ? "You move widely across collections and formats."
+      ? pickVariant(seed + 1, [
+          "You move across a lot of territory.",
+          "You move broadly, without committing everywhere.",
+        ])
       : breadthLevel === "MEDIUM"
-      ? "You move selectively, with enough range to test different signals."
-      : "You move with concentration, staying close to a tighter set of collections.";
+      ? pickVariant(seed + 2, [
+          "You move selectively, with enough range to test different work.",
+          "You keep a measured spread, then go deeper where it clicks.",
+        ])
+      : pickVariant(seed + 3, [
+          "You move with concentration and stay close to a tighter set of collections.",
+          "You keep attention tight, then build depth inside it.",
+        ]);
 
   const surfaceLine =
     repeatRatio >= 0.2
-      ? "From the outside this can look broad, but the repeat behavior is strong."
-      : "From the outside this can look open-ended, but you do not linger everywhere.";
+      ? "From the outside this can read broad. In practice you return with intent."
+      : "From the outside this can read open-ended. In practice your attention still edits hard.";
 
   const structureFacts: string[] = [];
   if (anchorCollection?.name && top1Percent > 0.1) {
     structureFacts.push(
-      `${anchorCollection.name} holds about ${Math.round(top1Percent * 100)}% of your wallet`
+      `one anchor holds about ${Math.round(top1Percent * 100)}% of your wallet`
     );
   }
   if (top3Percent > 0.3) {
@@ -639,30 +659,30 @@ function buildIdentityParagraph(params: {
   }
   if (categoryCoexistenceCount >= 3) {
     structureFacts.push(
-      `you keep signal across ${categoryCoexistenceCount} strong category lanes`
+      "you keep returning across very different kinds of work"
     );
   }
 
   const structureLine =
     structureFacts.length > 0
       ? `Under the surface, ${structureFacts.join(", ")}.`
-      : "Under the surface, your attention keeps a quiet internal structure.";
+      : "Under the surface, your attention has a quiet structure.";
 
   const suggestionParts: string[] = [];
   if (unknownRatio > 0.25)
-    suggestionParts.push("You are comfortable moving outside obvious category language.");
+    suggestionParts.push("You are comfortable trusting taste before labels catch up.");
   if (timeBehavior === "bursty")
     suggestionParts.push(
-      "Your pattern reads as wave-based, with periods of concentrated movement."
+      "Your pattern moves in waves, with periods of concentrated motion."
     );
   if (timeBehavior === "steady")
-    suggestionParts.push("Your pattern reads as steady practice rather than isolated bursts.");
+    suggestionParts.push("Your pattern reads like steady practice, not occasional bursts.");
 
   const suggestionLine =
     suggestionParts[0] ||
-    pickVariant(seed, [
-      "What this suggests is selective conviction, not random exploration.",
-      "What this suggests is a collector who recognizes a signal and returns to it.",
+    pickVariant(seed + 7, [
+      "What that means is simple. You explore, but you do not collect by accident.",
+      "What that means is you are not browsing. You are building a point of view.",
     ]);
 
   return [moveLine, surfaceLine, structureLine, suggestionLine].join(" ");
@@ -691,25 +711,25 @@ function buildBehavioralReads(params: {
   const reads: string[] = [];
 
   if (lowData) {
-    reads.push("Early pattern, still forming");
+    reads.push("Early pattern, already directional");
   }
   if (breadthHigh && repeatRatio > 0.2) {
-    reads.push("Moves broadly, commits selectively");
+    reads.push("Moves wide, then repeats with intent");
   }
   if (repeatRatio > 0.2 && categoryCoexistenceCount >= 3) {
-    reads.push("Returns to the same signals across contexts");
+    reads.push("Repeats the same visual signal in very different work");
   }
   if (top1Percent > 0.12) {
-    reads.push("Concentrates attention when something hits");
+    reads.push("Keeps one anchor while continuing to explore");
   }
   if (absentCategories.length >= 2) {
-    reads.push(`Rarely touches ${formatCategoryLabel(absentCategories[0])}`);
+    reads.push(`Rarely moves into ${formatCategoryLabel(absentCategories[0])}`);
   }
   if (categoryCoexistenceCount >= 3) {
-    reads.push("Moves in categories that rarely overlap");
+    reads.push("Moves between very different scenes without flattening taste");
   }
   if (breadthHigh && repeatRatio < 0.1) {
-    reads.push("Wallet is wider than it is deep");
+    reads.push("Prefers fresh territory over deep stacking");
   }
   if (timeBehavior === "steady") {
     reads.push("Builds steadily over time");
@@ -874,6 +894,7 @@ export function buildWalletProfile(nfts: WalletProfileNFT[]): WalletProfile {
   });
 
   const tensionInsight = buildTensionInsight({
+    breadthLevel,
     focusLabel,
     top1Percent,
     categoryCoexistenceCount,
