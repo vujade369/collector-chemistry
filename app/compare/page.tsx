@@ -112,6 +112,29 @@ type CompareResponse = {
   };
 };
 
+type InterpretResponse = {
+  headline: string;
+  summary: string;
+};
+
+type InterpretRequest = {
+  archetypeA: string;
+  archetypeB: string;
+  chemistryLabel: string;
+  chemistryScore: number;
+  profileLineA: string;
+  profileLineB: string;
+  primaryLeanA: string;
+  primaryLeanB: string;
+  contrastA: string;
+  contrastB: string;
+  topCollectionsA: string[];
+  topCollectionsB: string[];
+  sharedCollections: string[];
+  sharedArtists: string[];
+  exactCount: number;
+};
+
 function shortenAddress(value: string) {
   if (!value) return "";
   if (value.length < 14) return value;
@@ -585,6 +608,8 @@ export default function ComparePage() {
   const [submittedA, setSubmittedA] = useState("");
   const [submittedB, setSubmittedB] = useState("");
   const [data, setData] = useState<CompareResponse | null>(null);
+  const [interpretation, setInterpretation] = useState<InterpretResponse | null>(null);
+  const [interpretationLoading, setInterpretationLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showMoreCollections, setShowMoreCollections] = useState(false);
@@ -640,11 +665,87 @@ export default function ComparePage() {
       .slice(0, 6);
   }, [data, tasteKeys]);
 
+  function buildInterpretRequest(json: CompareResponse): InterpretRequest {
+    const sharedCollectionKeys = Object.keys(json.shared.collections || {});
+    const sharedArtistKeys = Object.keys(json.shared.artists || {});
+
+    const primaryA = json.walletA.profile.primaryLean || "";
+    const primaryB = json.walletB.profile.primaryLean || "";
+    const secondaryA = json.walletA.profile.secondaryLean || "";
+    const secondaryB = json.walletB.profile.secondaryLean || "";
+
+    const contrastA =
+      primaryA && secondaryA && primaryA !== secondaryA
+        ? `${primaryA}-heavy with ${secondaryA} undercurrent`
+        : primaryA || "";
+
+    const contrastB =
+      primaryB && secondaryB && primaryB !== secondaryB
+        ? `${primaryB}-heavy with ${secondaryB} undercurrent`
+        : primaryB || "";
+
+    const sortedCollectionsForA = [...sharedCollectionKeys].sort(
+      (a, b) =>
+        (json.shared.collections[b]?.walletACount || 0) -
+        (json.shared.collections[a]?.walletACount || 0)
+    );
+
+    const sortedCollectionsForB = [...sharedCollectionKeys].sort(
+      (a, b) =>
+        (json.shared.collections[b]?.walletBCount || 0) -
+        (json.shared.collections[a]?.walletBCount || 0)
+    );
+
+    return {
+      archetypeA: json.walletA.profile.archetype || "",
+      archetypeB: json.walletB.profile.archetype || "",
+      chemistryLabel: (json.scoring as { chemistryLabel?: string }).chemistryLabel || json.scoring.label || "",
+      chemistryScore: json.scoring.chemistryScore || 0,
+      profileLineA: json.walletA.profile.profileLine || "",
+      profileLineB: json.walletB.profile.profileLine || "",
+      primaryLeanA: primaryA,
+      primaryLeanB: primaryB,
+      contrastA,
+      contrastB,
+      topCollectionsA: sortedCollectionsForA.slice(0, 3),
+      topCollectionsB: sortedCollectionsForB.slice(0, 3),
+      sharedCollections: sharedCollectionKeys.slice(0, 5),
+      sharedArtists: sharedArtistKeys.slice(0, 3),
+      exactCount: json.shared.exactCount || 0,
+    };
+  }
+
+  async function fetchInterpretation(body: InterpretRequest) {
+    setInterpretationLoading(true);
+    try {
+      const res = await fetch("/api/interpret", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const json = (await res.json()) as Partial<InterpretResponse>;
+      if (json.headline || json.summary) {
+        setInterpretation({
+          headline: json.headline || "",
+          summary: json.summary || "",
+        });
+      } else {
+        setInterpretation(null);
+      }
+    } catch {
+      setInterpretation(null);
+    } finally {
+      setInterpretationLoading(false);
+    }
+  }
+
   async function runCompareWith(a: string, b: string) {
     try {
       setLoading(true);
       setError("");
       setData(null);
+      setInterpretation(null);
+      setInterpretationLoading(false);
       const url = `/api/compare?walletA=${encodeURIComponent(a)}&walletB=${encodeURIComponent(b)}`;
       const res = await fetch(url);
       const contentType = res.headers.get("content-type") || "";
@@ -659,6 +760,7 @@ export default function ComparePage() {
       setSubmittedB(b);
       setShowMoreCollections(false);
       setShowMoreArtists(false);
+      void fetchInterpretation(buildInterpretRequest(json));
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to compare wallets.";
       setError(message);
@@ -686,6 +788,8 @@ export default function ComparePage() {
     setSubmittedA("");
     setSubmittedB("");
     setData(null);
+    setInterpretation(null);
+    setInterpretationLoading(false);
     setError("");
     setLoading(false);
     setShowMoreCollections(false);
@@ -824,7 +928,31 @@ export default function ComparePage() {
               )}
 
               <div className="cc-editorial-footer">
-                <p className="cc-editorial-text">{data.scoring.pairInterpretation.summary}</p>
+                {interpretationLoading && (
+                  <p className="cc-editorial-text cc-editorial-muted">Reading the overlap...</p>
+                )}
+
+                {!interpretationLoading && interpretation?.summary && (
+                  <div className="cc-interpretation">
+                    {interpretation.headline && (
+                      <p className="cc-interpretation-headline">{interpretation.headline}</p>
+                    )}
+                    <div className="cc-interpretation-body">
+                      {interpretation.summary
+                        .split("\n\n")
+                        .filter(Boolean)
+                        .map((paragraph, i) => (
+                          <p key={i} className="cc-editorial-text">
+                            {paragraph}
+                          </p>
+                        ))}
+                    </div>
+                  </div>
+                )}
+
+                {!interpretationLoading && !interpretation?.summary && (
+                  <p className="cc-editorial-text">{data.scoring.pairInterpretation.summary}</p>
+                )}
                 {overlapTasteTags.length > 0 && (
                   <div className="cc-tag-row">
                     {overlapTasteTags.map((tag, i) => {
