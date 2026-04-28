@@ -607,28 +607,7 @@ async function fetchCollectionInboundTimestamp(
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
-function toIsoTimestamp(value?: string | number, fallback?: string | null) {
-  if (typeof value === "number") {
-    return new Date(value * 1000).toISOString();
-  }
-  if (typeof value === "string" && value.trim()) {
-    return value;
-  }
-  if (typeof fallback === "string" && fallback.trim()) {
-    return fallback;
-  }
-  return "";
-}
-
-// Replace the entire fetchFirstMint function in app/api/compare/route.ts
-// with this clean version. It fetches all available event pages,
-// collects all mint events (from_address = zero address),
-// and returns the one with the earliest timestamp.
-//
-// OpenSea's v2 events API does not support ascending sort via query params.
-// Fetching all pages and finding the minimum is the correct v1 approach.
-
-type FirstMintResult = {
+async function fetchFirstMint(address: string): Promise<{
   nft: {
     contractAddress: string;
     tokenId: string;
@@ -637,67 +616,89 @@ type FirstMintResult = {
     title: string;
   };
   timestamp: string;
-  tsMs: number;
-};
-
-async function fetchFirstMint(address: string): Promise<Omit<FirstMintResult, "tsMs"> | null> {
-  if (!OPENSEA_API_KEY) return null;
+} | null> {
+  if (!ALCHEMY_API_KEY) return null;
 
   try {
-    const mints: FirstMintResult[] = [];
-    let next = "";
+    const alchemyUrl = `https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`;
 
-    for (let page = 0; page < OPENSEA_MAX_EVENT_PAGES; page++) {
-      const params = new URLSearchParams({
-        limit: String(OPENSEA_EVENT_PAGE_LIMIT),
-        event_type: "transfer",
-      });
-      if (next) params.set("next", next);
+    const body = {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "alchemy_getAssetTransfers",
+      params: [
+        {
+          fromBlock: "0x0",
+          toBlock: "latest",
+          toAddress: normalizeAddress(address),
+          fromAddress: ZERO_ADDRESS,
+          category: ["erc721", "erc1155"],
+          withMetadata: true,
+          excludeZeroValue: false,
+          maxCount: "0xa",
+          order: "asc",
+        },
+      ],
+    };
 
-      const data = await fetchOpenSeaJson<OpenSeaAccountEventsResponse>(
-        `/events/accounts/${normalizeAddress(address)}?${params.toString()}`,
-        { events: [], asset_events: [], next: null }
-      );
+    const res = await withTimeout(
+      fetch(alchemyUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        cache: "no-store",
+      }),
+      8000,
+      null as unknown as Response
+    );
 
-      const events = data.events || data.asset_events || [];
+    if (!res || !res.ok) return null;
 
-      for (const event of events) {
-        if (normalizeAddress(event.from_address) !== ZERO_ADDRESS) continue;
-        if (!event.nft) continue;
+    const json = (await res.json()) as {
+      result?: {
+        transfers?: Array<{
+          from: string;
+          to: string;
+          contractAddress: string;
+          tokenId: string | null;
+          erc1155Metadata?: Array<{ tokenId: string }> | null;
+          asset: string | null;
+          metadata?: {
+            blockTimestamp?: string;
+          };
+          rawContract?: {
+            address?: string;
+          };
+        }>;
+      };
+    };
 
-        const tokenId = String(event.nft.identifier || "");
-        const contractAddress = normalizeAddress(event.nft.contract || "");
-        const timestamp = toIsoTimestamp(event.event_timestamp, event.sent_at);
-        if (!tokenId || !contractAddress || !timestamp) continue;
+    const transfers = json?.result?.transfers || [];
+    if (!transfers.length) return null;
 
-        const tsMs = new Date(timestamp).getTime();
-        if (!Number.isFinite(tsMs)) continue;
+    const first = transfers[0];
+    const contractAddress = normalizeAddress(
+      first.contractAddress || first.rawContract?.address || ""
+    );
+    const rawTokenId = first.tokenId || first.erc1155Metadata?.[0]?.tokenId || "";
+const tokenId = rawTokenId.startsWith("0x")
+  ? String(BigInt(rawTokenId))
+  : String(rawTokenId);
+    const timestamp = first.metadata?.blockTimestamp || "";
 
-        mints.push({
-          nft: {
-            contractAddress,
-            tokenId,
-            collectionName: String(event.nft.collection || "").trim() || "Unknown collection",
-            imageUrl: String(event.nft.display_image_url || event.nft.image_url || ""),
-            title: String(event.nft.name || "").trim() || `#${tokenId}`,
-          },
-          timestamp,
-          tsMs,
-        });
-      }
+    if (!contractAddress || !tokenId) return null;
 
-      next = String(data.next || "");
-      if (!next || !events.length) break;
-    }
-
-    if (!mints.length) return null;
-
-    // Return the mint with the earliest timestamp across all fetched pages
-    const earliest = mints.reduce((min, curr) => curr.tsMs < min.tsMs ? curr : min);
+    const displayMeta = await fetchOpenSeaAsset(contractAddress, String(tokenId));
 
     return {
-      nft: earliest.nft,
-      timestamp: earliest.timestamp,
+      nft: {
+        contractAddress,
+        tokenId: String(tokenId),
+        collectionName: displayMeta.collectionName || first.asset || "Unknown collection",
+        imageUrl: displayMeta.imageUrl || "",
+        title: displayMeta.title || (first.asset ? `${first.asset} #${tokenId}` : `#${tokenId}`),
+      },
+      timestamp,
     };
   } catch {
     return null;

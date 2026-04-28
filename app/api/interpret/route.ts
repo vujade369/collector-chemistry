@@ -80,7 +80,6 @@ function pushLine(lines: string[], label: string, value: string | number) {
     lines.push(`- ${label}: ${value}`);
     return;
   }
-
   if (!value.trim()) return;
   lines.push(`- ${label}: ${value}`);
 }
@@ -196,29 +195,33 @@ export async function POST(req: Request) {
 
       if (!content) return safeOutput();
 
-const jsonMatch = content.match(/\{[\s\S]*\}/);
-if (!jsonMatch) return safeOutput();
-const cleaned = jsonMatch[0].trim();
-let parsed: Record<string, unknown>;
-try {
-  parsed = JSON.parse(cleaned) as Record<string, unknown>;
-} catch {
-  return safeOutput();
-}
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return safeOutput();
+      const cleaned = jsonMatch[0].trim();
 
-// Handle both output shapes: single summary field or multi-part fields
-const rawSummary = parsed?.summary
-  ? sanitizeString(parsed.summary, 5000)
-  : [
-      parsed?.separation,
-      parsed?.["the gap"],
-      parsed?.["the turn"],
-      parsed?.["closing line"],
-    ]
-      .filter((part) => typeof part === "string" && (part as string).trim())
-      .map((part) => (part as string).trim())
-      .join("\n\n");
-const summary = typeof rawSummary === "string" ? rawSummary : "";
+      let headline = "";
+      let summary = "";
+
+      try {
+        const parsed = JSON.parse(cleaned) as Record<string, unknown>;
+        headline = sanitizeString(parsed?.headline, 100);
+
+        const rawSummary = parsed?.summary
+          ? sanitizeString(parsed.summary as string, 5000)
+          : [
+              parsed?.separation,
+              parsed?.["the gap"],
+              parsed?.["the turn"],
+              parsed?.["closing line"],
+            ]
+              .filter((part) => typeof part === "string" && (part as string).trim())
+              .map((part) => (part as string).trim())
+              .join("\n\n");
+
+        summary = typeof rawSummary === "string" ? rawSummary : "";
+      } catch {
+        return safeOutput();
+      }
 
       console.log("INTERPRET_RESULT", { headline, summary: summary.slice(0, 100) });
 
