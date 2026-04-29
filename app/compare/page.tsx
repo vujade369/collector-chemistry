@@ -144,6 +144,8 @@ type InterpretResponse = {
 };
 
 type InterpretRequest = {
+  nameA: string;
+  nameB: string;
   archetypeA: string;
   archetypeB: string;
   chemistryLabel: string;
@@ -716,9 +718,13 @@ function CollectorProfileCard({
     .slice(0, 2);
   const topImage = previewImages[0] || "";
   const secondaryPreview = previewImages[1] || "";
-  const topCollectionLabel =
-    topCollection?.source === "artist" ? "Top Artist" : "Top Collection";
-  const topCollectionSupport = "Most owned across wallet";
+  const returnPatternLabel =
+    topCollection?.source === "artist" ? "Where they keep coming back" : "Return Pattern";
+  const returnPatternLine = topCollection
+    ? `Keeps returning to ${topCollection.name}`
+    : "Return pattern not available yet.";
+  const signalPieceLabel = "Signal Piece";
+  const signalPieceSupport = "Representative piece from this pattern";
 
   return (
     <article className={`panel compare-profile-card wallet-tone-${tone}`}>
@@ -760,7 +766,7 @@ function CollectorProfileCard({
       </div>
 
       <div className="compare-profile-piece-head">
-        <span className="compare-profile-piece-kicker">{topCollectionLabel}</span>
+        <span className="compare-profile-piece-kicker">{returnPatternLabel}</span>
       </div>
 
       {topCollection ? (
@@ -787,12 +793,12 @@ function CollectorProfileCard({
           </div>
           <div className="compare-profile-piece-meta">
             <div className="compare-profile-piece-title truncate-2">{topCollection.name}</div>
-            <div className="compare-profile-piece-support">{topCollectionSupport}</div>
+            <div className="compare-profile-piece-support">{returnPatternLine}</div>
             <div className="compare-profile-piece-subtitle truncate-2">
               <span className="compare-profile-piece-count compare-mono">
                 {topCollection.ownedCount}
               </span>{" "}
-              owned
+              works held
             </div>
             {secondaryPreview ? (
               <div className="compare-profile-preview-row">
@@ -809,6 +815,25 @@ function CollectorProfileCard({
       ) : (
         <div className="compare-empty">No top collection available yet.</div>
       )}
+
+      {topImage ? (
+        <div className="compare-profile-piece-head">
+          <span className="compare-profile-piece-kicker">{signalPieceLabel}</span>
+        </div>
+      ) : null}
+      {topImage ? (
+        <div className={`compare-profile-piece wallet-tone-${tone}`}>
+          <div className="compare-profile-piece-image">
+            <img src={topImage} alt={`${topCollection?.name || "Collection"} signal piece`} loading="lazy" />
+          </div>
+          <div className="compare-profile-piece-meta">
+            <div className="compare-profile-piece-title truncate-2">
+              {topCollection?.name || "Return pattern collection"}
+            </div>
+            <div className="compare-profile-piece-support">{signalPieceSupport}</div>
+          </div>
+        </div>
+      ) : null}
 
       {wallet.firstMint && (
         <div className="compare-first-mint">
@@ -1074,9 +1099,11 @@ export default function ComparePage() {
     [data]
   );
 
-  function buildInterpretRequest(json: CompareResponse): InterpretRequest {
+  function buildInterpretRequest(json: CompareResponse, walletInputA: string, walletInputB: string): InterpretRequest {
     const sharedCollectionKeys = Object.keys(json.shared.collections || {});
     const sharedArtistKeys = Object.keys(json.shared.artists || {});
+    const interpretNameA = getCollectorDisplayName(json.walletA.profile, walletInputA, walletInputA);
+    const interpretNameB = getCollectorDisplayName(json.walletB.profile, walletInputB, walletInputB);
 
     const primaryA = json.walletA.profile.primaryLean || "";
     const primaryB = json.walletB.profile.primaryLean || "";
@@ -1106,6 +1133,8 @@ export default function ComparePage() {
     );
 
     return {
+      nameA: interpretNameA,
+      nameB: interpretNameB,
       archetypeA: json.walletA.profile.archetype || "",
       archetypeB: json.walletB.profile.archetype || "",
       chemistryLabel: (json.scoring as { chemistryLabel?: string }).chemistryLabel || json.scoring.label || "",
@@ -1169,7 +1198,7 @@ export default function ComparePage() {
       setSubmittedB(b);
       setIsCollectionsExpanded(false);
       setIsArtistsExpanded(false);
-      void fetchInterpretation(buildInterpretRequest(json));
+      void fetchInterpretation(buildInterpretRequest(json, a, b));
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to compare wallets.";
       setError(message);
@@ -1330,18 +1359,44 @@ export default function ComparePage() {
                     const totalA = bucket.walletACount;
                     const totalB = bucket.walletBCount;
                     const max = Math.max(totalA, totalB, 1);
+                    const depthGap = Math.abs(totalA - totalB);
+                    const localMax = Math.max(totalA, totalB);
+                    const imbalanceLabel =
+                      depthGap === 0
+                        ? "even depth"
+                        : depthGap >= Math.max(4, Math.ceil(localMax * 0.6))
+                          ? "much deeper"
+                          : depthGap >= Math.max(2, Math.ceil(localMax * 0.35))
+                            ? "goes deeper here"
+                            : "one-sided";
                     return (
                       <div key={name} className="cc-bar-row">
                         <p className="cc-bar-name">{displayName}</p>
                         <div className="cc-bar-track-wrap">
-                          <div className="cc-bar-track">
-                            <div className="cc-bar-fill cc-bar-a" style={{ width: `${(totalA / max) * 100}%` }} />
+                          <div style={{ display: "grid", gap: "4px" }}>
+                            <div className="compare-mono" style={{ fontSize: "10px", color: "#8a8a8a" }}>
+                              {collectorNameA}
+                            </div>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "8px", alignItems: "center" }}>
+                              <div className="cc-bar-track">
+                                <div className="cc-bar-fill cc-bar-a" style={{ width: `${(totalA / max) * 100}%` }} />
+                              </div>
+                              <span className="compare-mono" style={{ fontSize: "11px", color: "#ff0080" }}>{totalA}</span>
+                            </div>
                           </div>
-                          <div className="cc-bar-track">
-                            <div className="cc-bar-fill cc-bar-b" style={{ width: `${(totalB / max) * 100}%` }} />
+                          <div style={{ display: "grid", gap: "4px" }}>
+                            <div className="compare-mono" style={{ fontSize: "10px", color: "#8a8a8a" }}>
+                              {collectorNameB}
+                            </div>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "8px", alignItems: "center" }}>
+                              <div className="cc-bar-track">
+                                <div className="cc-bar-fill cc-bar-b" style={{ width: `${(totalB / max) * 100}%` }} />
+                              </div>
+                              <span className="compare-mono" style={{ fontSize: "11px", color: "#00b0ff" }}>{totalB}</span>
+                            </div>
                           </div>
                         </div>
-                        <p className="cc-bar-counts">{totalA} · {totalB}</p>
+                        <p className="cc-bar-counts" style={{ color: "#6f6f6f", fontSize: "10px" }}>{imbalanceLabel}</p>
                       </div>
                     );
                   })}
@@ -1390,6 +1445,71 @@ export default function ComparePage() {
                     })}
                   </div>
                 )}
+              </div>
+            </section>
+
+            {/* Collector profiles */}
+            <section className="compare-overview">
+              <div className="compare-section-head compare-section-head-band compare-overview-head">
+                <div className="eyebrow">Collector profiles</div>
+                <h2 className="compare-section-title">How each collector moves</h2>
+                <p className="compare-section-text">
+                  Identity first. Context and proof follow from repeated attention.
+                </p>
+              </div>
+              <div className="compare-overview-grid">
+                <article className="panel compare-wallet-card wallet-tone-a">
+                  <div className="compare-wallet-top">
+                    <div className="compare-wallet-id">
+                      <WalletLabel
+                        address={submittedA}
+                        tone="a"
+                        pfpUrl={data.walletA.pfpUrl}
+                        displayName={collectorNameA}
+                        secondaryAddress={collectorSecondaryA}
+                      />
+                    </div>
+                    <div className="compare-wallet-count">
+                      <div className="compare-wallet-count-value compare-mono">{data.walletA.totalNFTs}</div>
+                      <div className="compare-wallet-count-label">Holdings indexed</div>
+                    </div>
+                  </div>
+                </article>
+                <article className="panel compare-wallet-card wallet-tone-b">
+                  <div className="compare-wallet-top">
+                    <div className="compare-wallet-id">
+                      <WalletLabel
+                        address={submittedB}
+                        tone="b"
+                        pfpUrl={data.walletB.pfpUrl}
+                        displayName={collectorNameB}
+                        secondaryAddress={collectorSecondaryB}
+                      />
+                    </div>
+                    <div className="compare-wallet-count">
+                      <div className="compare-wallet-count-value compare-mono">{data.walletB.totalNFTs}</div>
+                      <div className="compare-wallet-count-label">Holdings indexed</div>
+                    </div>
+                  </div>
+                </article>
+              </div>
+              <div className="compare-profile-grid">
+                <CollectorProfileCard
+                  wallet={data.walletA}
+                  address={submittedA}
+                  displayName={collectorNameA}
+                  secondaryAddress={collectorSecondaryA}
+                  tone="a"
+                  pfpUrl={data.walletA.pfpUrl}
+                />
+                <CollectorProfileCard
+                  wallet={data.walletB}
+                  address={submittedB}
+                  displayName={collectorNameB}
+                  secondaryAddress={collectorSecondaryB}
+                  tone="b"
+                  pfpUrl={data.walletB.pfpUrl}
+                />
               </div>
             </section>
 
@@ -1707,71 +1827,6 @@ export default function ComparePage() {
                 )}
               </section>
             )}
-
-            {/* Collector profiles */}
-            <section className="compare-overview">
-              <div className="compare-section-head compare-section-head-band compare-overview-head">
-                <div className="eyebrow">Collector profiles</div>
-                <h2 className="compare-section-title">Who each collector is</h2>
-                <p className="compare-section-text">
-                  Identity first. Holdings and habits as supporting context.
-                </p>
-              </div>
-              <div className="compare-overview-grid">
-                <article className="panel compare-wallet-card wallet-tone-a">
-                  <div className="compare-wallet-top">
-                    <div className="compare-wallet-id">
-                      <WalletLabel
-                        address={submittedA}
-                        tone="a"
-                        pfpUrl={data.walletA.pfpUrl}
-                        displayName={collectorNameA}
-                        secondaryAddress={collectorSecondaryA}
-                      />
-                    </div>
-                    <div className="compare-wallet-count">
-                      <div className="compare-wallet-count-value compare-mono">{data.walletA.totalNFTs}</div>
-                      <div className="compare-wallet-count-label">Holdings indexed</div>
-                    </div>
-                  </div>
-                </article>
-                <article className="panel compare-wallet-card wallet-tone-b">
-                  <div className="compare-wallet-top">
-                    <div className="compare-wallet-id">
-                      <WalletLabel
-                        address={submittedB}
-                        tone="b"
-                        pfpUrl={data.walletB.pfpUrl}
-                        displayName={collectorNameB}
-                        secondaryAddress={collectorSecondaryB}
-                      />
-                    </div>
-                    <div className="compare-wallet-count">
-                      <div className="compare-wallet-count-value compare-mono">{data.walletB.totalNFTs}</div>
-                      <div className="compare-wallet-count-label">Holdings indexed</div>
-                    </div>
-                  </div>
-                </article>
-              </div>
-              <div className="compare-profile-grid">
-                <CollectorProfileCard
-                  wallet={data.walletA}
-                  address={submittedA}
-                  displayName={collectorNameA}
-                  secondaryAddress={collectorSecondaryA}
-                  tone="a"
-                  pfpUrl={data.walletA.pfpUrl}
-                />
-                <CollectorProfileCard
-                  wallet={data.walletB}
-                  address={submittedB}
-                  displayName={collectorNameB}
-                  secondaryAddress={collectorSecondaryB}
-                  tone="b"
-                  pfpUrl={data.walletB.pfpUrl}
-                />
-              </div>
-            </section>
 
           </div>
         )}

@@ -11,6 +11,9 @@
 * traits[]
 * openseaUrl
 
+Potential future field:
+- acquisitionDate (ISO timestamp) for time-based profile reads when available
+
 ## WalletProfile
 
 Current profile object returned from `/api/profile`.
