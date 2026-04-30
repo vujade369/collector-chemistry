@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import React, { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import "./profile.css";
 
@@ -59,6 +59,18 @@ type ProfileResponse = {
   wallet: string;
   profile?: WalletProfile;
   taste?: Record<string, number>;
+  categoryGroups?: Record<string, {
+    totalCount: number;
+    previews: Array<{
+      title: string;
+      collectionName: string;
+      imageUrl: string;
+    }>;
+    collections: Array<{
+      name: string;
+      count: number;
+    }>;
+  }>;
 };
 
 type TasteSlice = {
@@ -299,6 +311,8 @@ export default function ProfilePage() {
   const [error, setError] = useState("");
   const [result, setResult] = useState<ProfileResponse | null>(null);
   const [compareWallet, setCompareWallet] = useState("");
+  const [openCategory, setOpenCategory] = useState<string | null>(null);
+  const [showAllCategories, setShowAllCategories] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -392,6 +406,20 @@ export default function ProfilePage() {
     () => buildTasteSlices(result?.taste || {}, 6),
     [result?.taste]
   );
+
+  const categoryList = useMemo(() => {
+    const groups = result?.categoryGroups || {};
+    return Object.entries(groups)
+      .sort((a, b) => b[1].totalCount - a[1].totalCount)
+      .slice(0, 6);
+  }, [result?.categoryGroups]);
+
+  const remainingCategories = useMemo(() => {
+    const groups = result?.categoryGroups || {};
+    return Object.entries(groups)
+      .sort((a, b) => b[1].totalCount - a[1].totalCount)
+      .slice(6);
+  }, [result?.categoryGroups]);
 
   const canCompare = isValidInput(compareWallet);
 
@@ -519,6 +547,98 @@ export default function ProfilePage() {
             ) : null}
 
             {tasteSlices.length > 0 ? <TasteSignature title="Taste map" slices={tasteSlices} /> : null}
+
+            {categoryList.length > 0 ? (
+              <div className="profile-panel">
+                <p className="profile-section-label">Tap a category to explore</p>
+                <div className="cat-grid">
+                  {(showAllCategories
+                    ? [...categoryList, ...remainingCategories]
+                    : categoryList
+                  ).map(([cat, group], idx) => {
+                    const isOpen = openCategory === cat;
+                    const insertDrawerAfter =
+                      idx % 2 === 1 ||
+                      idx === (showAllCategories
+                        ? categoryList.length + remainingCategories.length - 1
+                        : categoryList.length - 1);
+                    return (
+                      <React.Fragment key={cat}>
+                        <div
+                          className={`cat-card${isOpen ? " cat-card--open" : ""}`}
+                          onClick={() => setOpenCategory(isOpen ? null : cat)}
+                        >
+                          <div className="cat-accent" />
+                          <span className="cat-chevron">{isOpen ? "▾" : "›"}</span>
+                          <p className="cat-name">{cat}</p>
+                          <p className="cat-pct">{group.totalCount}</p>
+                          <p className="cat-count">{group.totalCount} pieces</p>
+                        </div>
+                        {insertDrawerAfter && openCategory && (
+                          (() => {
+                            const rowStart = idx % 2 === 0 ? idx : idx - 1;
+                            const rowEnd = rowStart + 1;
+                            const rowCats = (showAllCategories
+                              ? [...categoryList, ...remainingCategories]
+                              : categoryList
+                            ).slice(rowStart, rowEnd + 1).map(([c]) => c);
+                            if (!rowCats.includes(openCategory)) return null;
+                            const openGroup = result?.categoryGroups?.[openCategory];
+                            if (!openGroup) return null;
+                            return (
+                              <div className="cat-drawer">
+                                <div className="cat-drawer-header">
+                                  <span className="cat-drawer-label">{openCategory}</span>
+                                  <span className="cat-drawer-count">
+                                    {openGroup.totalCount} pieces across {openGroup.collections.length} collections
+                                  </span>
+                                </div>
+                                <div className="cat-nft-grid">
+                                  {openGroup.previews.slice(0, 3).map((p, i) => (
+                                    <div key={i} className="cat-nft-thumb">
+                                      {p.imageUrl ? (
+                                        <img src={p.imageUrl} alt={p.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                      ) : null}
+                                    </div>
+                                  ))}
+                                  {openGroup.totalCount > 3 ? (
+                                    <div className="cat-nft-more">+{openGroup.totalCount - 3}</div>
+                                  ) : null}
+                                </div>
+                                <div className="cat-collections">
+                                  {openGroup.collections.slice(0, 3).map((c, i) => (
+                                    <div key={i} className="cat-coll-row">
+                                      <span className="cat-coll-name">{c.name}</span>
+                                      <span className="cat-coll-count">{c.count} pieces</span>
+                                    </div>
+                                  ))}
+                                  {openGroup.collections.length > 3 ? (
+                                    <div className="cat-coll-row">
+                                      <span className="cat-coll-name" style={{ color: "#444" }}>
+                                        + {openGroup.collections.length - 3} more collections
+                                      </span>
+                                    </div>
+                                  ) : null}
+                                </div>
+                              </div>
+                            );
+                          })()
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                  {!showAllCategories && remainingCategories.length > 0 ? (
+                    <button
+                      className="cat-show-more"
+                      onClick={() => setShowAllCategories(true)}
+                      type="button"
+                    >
+                      Show {remainingCategories.length} more categories ›
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
 
             {profile.whatStandsOut ? (
               <p className="profile-standout">{profile.whatStandsOut}</p>
