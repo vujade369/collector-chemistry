@@ -6,6 +6,9 @@ export type WalletProfileNFT = {
   contract?: {
     name?: string;
     address?: string;
+    openSeaMetadata?: {
+      imageUrl?: string;
+    };
   };
   collection?: {
     name?: string;
@@ -38,9 +41,20 @@ export type WalletProfileNFT = {
     };
   };
   title?: string;
+  name?: string;
+  image?: {
+    cachedUrl?: string;
+    thumbnailUrl?: string;
+  };
   description?: string;
-  acquiredAt?: string;
+  acquiredAt?: {
+    blockTimestamp?: string | null;
+    blockNumber?: string | null;
+  };
   mintedAt?: string;
+  mint?: {
+    timestamp?: string | null;
+  };
   blockTimestamp?: string;
   timeLastUpdated?: string;
 };
@@ -82,7 +96,10 @@ export type WalletProfile = {
   coreInsight: string;
   tensionInsight: string;
   whatStandsOut: string;
-  anchorCollection: { name: string; count: number } | null;
+  anchorCollection: { name: string; count: number; imageUrl?: string } | null;
+  signalPiece?: { tokenId?: string; collectionName: string; imageUrl?: string } | null;
+  firstMint?: { tokenId?: string; collectionName: string; imageUrl?: string; timestamp: string } | null;
+  acquisitionBreakdown?: { mintCount: number; acquiredCount: number; totalSampled: number; mintPercent: number; acquiredPercent: number } | null;
   behavioralReads: string[];
   absenceSignal: string;
   repeatRatio: number;
@@ -602,7 +619,7 @@ function buildIdentityParagraph(params: {
   lowData: boolean;
   timeBehavior: "bursty" | "steady" | "";
   unknownRatio: number;
-  anchorCollection: { name: string; count: number } | null;
+  anchorCollection: { name: string; count: number; imageUrl?: string } | null;
   seed: number;
 }) {
   const {
@@ -759,9 +776,35 @@ function buildCollectorIdentityLabel(patternLine: string) {
   return "Selective collector with clear instincts";
 }
 
+function extractNFTImageUrl(nft: WalletProfileNFT): string {
+  return (
+    nft.image?.cachedUrl ||
+    nft.image?.thumbnailUrl ||
+    nft.contract?.openSeaMetadata?.imageUrl ||
+    ""
+  );
+}
+
+function extractNFTTimestamp(nft: WalletProfileNFT): string {
+  const candidates = [
+    nft.mint?.timestamp,
+    nft.acquiredAt?.blockTimestamp,
+    nft.timeLastUpdated,
+  ];
+
+  for (const value of candidates) {
+    const raw = String(value || "").trim();
+    if (!raw) continue;
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+  }
+
+  return "";
+}
+
 function extractTimestamp(nft: WalletProfileNFT) {
   const candidates = [
-    nft.acquiredAt,
+    nft.acquiredAt?.blockTimestamp,
     nft.mintedAt,
     nft.blockTimestamp,
     nft.timeLastUpdated,
@@ -907,9 +950,63 @@ export function buildWalletProfile(nfts: WalletProfileNFT[]): WalletProfile {
   const anchorSource = collections.filter((collection) => collection.count >= 5);
   const anchorCandidate =
     anchorSource.sort((a, b) => b.count - a.count)[0] || topCollectionsSource[0] || null;
-  const anchorCollection = anchorCandidate
-    ? { name: anchorCandidate.name, count: anchorCandidate.count }
+  const anchorCollectionNFT = anchorCandidate
+    ? nfts.find((nft) => resolveCollectionName(nft) === anchorCandidate.name) || null
     : null;
+  const anchorCollectionImageUrl = anchorCollectionNFT
+    ? extractNFTImageUrl(anchorCollectionNFT)
+    : "";
+  const anchorCollection = anchorCandidate
+    ? {
+        name: anchorCandidate.name,
+        count: anchorCandidate.count,
+        imageUrl: anchorCollectionImageUrl || undefined,
+      }
+    : null;
+
+  const signalPiece =
+    anchorCandidate && anchorCollectionImageUrl
+      ? {
+          tokenId: anchorCollectionNFT?.name,
+          collectionName: anchorCandidate.name,
+          imageUrl: anchorCollectionImageUrl,
+        }
+      : null;
+
+  const firstMintCandidates = nfts
+    .map((nft) => ({ nft, timestamp: extractNFTTimestamp(nft) }))
+    .filter((entry) => Boolean(entry.timestamp))
+    .sort(
+      (a, b) =>
+        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
+  const firstMint = firstMintCandidates[0]
+    ? {
+        tokenId: firstMintCandidates[0].nft.name,
+        collectionName: resolveCollectionName(firstMintCandidates[0].nft),
+        imageUrl: extractNFTImageUrl(firstMintCandidates[0].nft) || undefined,
+        timestamp: firstMintCandidates[0].timestamp,
+      }
+    : null;
+
+  const totalSampled = nfts.length;
+  const mintCount = nfts.filter((nft) => {
+    const value = String(nft.mint?.timestamp || "").trim();
+    if (!value) return false;
+    const parsed = new Date(value);
+    return !Number.isNaN(parsed.getTime());
+  }).length;
+  const acquiredCount = Math.max(0, totalSampled - mintCount);
+  const acquisitionBreakdown =
+    totalSampled > 0
+      ? {
+          mintCount,
+          acquiredCount,
+          totalSampled,
+          mintPercent: Math.round((mintCount / totalSampled) * 100),
+          acquiredPercent: Math.round((acquiredCount / totalSampled) * 100),
+        }
+      : null;
 
   const whatStandsOut = buildWhatStandsOut({
     top1Percent,
@@ -971,6 +1068,9 @@ export function buildWalletProfile(nfts: WalletProfileNFT[]): WalletProfile {
     tensionInsight,
     whatStandsOut,
     anchorCollection,
+    signalPiece,
+    firstMint,
+    acquisitionBreakdown,
     behavioralReads,
     absenceSignal,
     repeatRatio,
