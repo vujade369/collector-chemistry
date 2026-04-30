@@ -410,6 +410,129 @@ function normalizeImageUrl(url?: string) {
   return url;
 }
 
+function classify(nft: WalletProfileNFT) {
+  const haystack = normalizeText(
+    `${nft.contractMetadata?.name || ""} ${nft.contract?.name || ""} ${
+      nft.title || ""
+    } ${nft.description || ""}`
+  );
+
+  if (
+    haystack.includes("utility") ||
+    haystack.includes("membership") ||
+    haystack.includes("pass") ||
+    haystack.includes("access")
+  ) {
+    return "Utility";
+  }
+
+  if (
+    haystack.includes("music") ||
+    haystack.includes("song") ||
+    haystack.includes("audio") ||
+    haystack.includes("sound")
+  ) {
+    return "Music";
+  }
+
+  if (
+    haystack.includes("photo") ||
+    haystack.includes("photography") ||
+    haystack.includes("photograph")
+  ) {
+    return "Photography";
+  }
+
+  if (
+    haystack.includes("generative") ||
+    haystack.includes("algorithmic") ||
+    haystack.includes("art blocks")
+  ) {
+    return "Generative Art";
+  }
+
+  if (
+    haystack.includes("fine art") ||
+    haystack.includes("edition") ||
+    haystack.includes("gallery") ||
+    haystack.includes("painting") ||
+    haystack.includes("portrait")
+  ) {
+    return "Fine Art";
+  }
+
+  if (
+    haystack.includes("punk") ||
+    haystack.includes("ape") ||
+    haystack.includes("pfp") ||
+    haystack.includes("avatar") ||
+    haystack.includes("penguin") ||
+    haystack.includes("cat") ||
+    haystack.includes("bear")
+  ) {
+    return "PFP";
+  }
+
+  if (
+    haystack.includes("meme") ||
+    haystack.includes("pepe") ||
+    haystack.includes("wojak") ||
+    haystack.includes("furie")
+  ) {
+    return "Meme";
+  }
+
+  if (
+    haystack.includes("game") ||
+    haystack.includes("gaming") ||
+    haystack.includes("player") ||
+    haystack.includes("quest") ||
+    haystack.includes("character")
+  ) {
+    return "Gaming";
+  }
+
+  if (
+    haystack.includes("3d") ||
+    haystack.includes("animation") ||
+    haystack.includes("animated") ||
+    haystack.includes("motion") ||
+    haystack.includes("vr")
+  ) {
+    return "3D / Animation";
+  }
+
+  if (
+    haystack.includes("collectible") ||
+    haystack.includes("trading") ||
+    haystack.includes("series")
+  ) {
+    return "Collectibles";
+  }
+
+  return "Other";
+}
+
+function buildTasteDNA(nfts: WalletProfileNFT[]) {
+  const counts: Record<string, number> = {};
+
+  nfts.forEach((nft) => {
+    const type = classify(nft);
+    counts[type] = (counts[type] || 0) + 1;
+  });
+
+  const total = nfts.length;
+  const percentages: Record<string, number> = {};
+
+  if (total === 0) return percentages;
+
+  Object.keys(counts).forEach((key) => {
+    percentages[key] = Math.round((counts[key] / total) * 100);
+  });
+
+  return percentages;
+}
+
 async function fetchOpenSeaAsset(
   contractAddress: string,
   tokenId: string
@@ -677,6 +800,7 @@ export async function GET(req: Request) {
 
     const fetchStartMs = Date.now();
     const nfts = await fetchWalletNFTs<WalletProfileNFT>(wallet, ALCHEMY_API_KEY);
+    const taste = buildTasteDNA(nfts);
     console.log("RAW NFT SAMPLE:", JSON.stringify(nfts[0], null, 2));
     const fetchNFTsMs = Date.now() - fetchStartMs;
 
@@ -699,6 +823,7 @@ export async function GET(req: Request) {
     return NextResponse.json({
       wallet,
       profile: enrichedProfile,
+      taste,
       sampleTopCollections: enrichedProfile.topCollections,
       sampleCategoryDistribution: enrichedProfile.categoryDistribution,
       nftCountUsed: enrichedProfile.totalNFTs,

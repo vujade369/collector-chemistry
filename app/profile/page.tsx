@@ -58,6 +58,7 @@ type WalletProfile = {
 type ProfileResponse = {
   wallet: string;
   profile?: WalletProfile;
+  taste?: Record<string, number>;
 };
 
 type TasteSlice = {
@@ -177,7 +178,7 @@ function toRgba(hex: string, alpha: number) {
 
 function TasteSignature({ title, slices }: { title: string; slices: TasteSlice[] }) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  const toneHex = "#9575ff";
+  const toneHex = "#ff3399";
   const total = slices.reduce((sum, slice) => sum + slice.value, 0) || 1;
   const size = 188;
   const cx = size / 2;
@@ -371,12 +372,10 @@ export default function ProfilePage() {
     };
   }, [profile]);
 
-  const tasteSlices = useMemo(() => {
-    const tasteRecord = Object.fromEntries(
-      (profile?.categoryDistribution || []).map((row) => [toTitleCase(row.category), row.percentage])
-    );
-    return buildTasteSlices(tasteRecord, 6);
-  }, [profile?.categoryDistribution]);
+  const tasteSlices = useMemo(
+    () => buildTasteSlices(result?.taste || {}, 6),
+    [result?.taste]
+  );
 
   const canCompare = isValidInput(compareWallet);
 
