@@ -87,3 +87,20 @@ When in doubt:
 - improve interpretation
 - improve clarity
 - reduce noise
+---
+
+## File editing rules
+
+When making code changes, always follow these rules without exception:
+
+- Never use git apply
+- Never generate or apply patches
+- Never use the patch tool
+- Use str_replace to make targeted edits to existing files
+- Use direct file write for new files
+- After every change, run git diff <filename> to confirm the change landed
+- After every change, run grep -n "<<<<<<\|=======\|>>>>>>" <filename> to confirm no conflict markers
+- If git diff shows no changes, the edit failed — retry with str_replace
+- Never commit if conflict markers are present in any file
+- Never apply more than one logical change per file per prompt
+- Never commit without running both checks first

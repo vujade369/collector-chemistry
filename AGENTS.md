@@ -180,3 +180,17 @@ Never use:
 - Financial or rarity language
 - Hype language
 - Generic superlatives
+## How to edit files
+
+All file changes must use str_replace or direct file write.
+Patches and git apply are forbidden without exception.
+
+After every file change run these two checks before proceeding:
+1. `git diff <filename>` — confirm the change landed correctly
+2. `grep -n "<<<<<<\|=======\|>>>>>>" <filename>` — confirm no conflict markers
+
+If either check fails, fix before doing anything else.
+
+Never apply more than one logical change per file per prompt.
+Never commit without running both checks first.
+Never commit if conflict markers are present in any file.

@@ -76,7 +76,6 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<ProfileResponse | null>(null);
-
   const [compareWallet, setCompareWallet] = useState("");
 
   useEffect(() => {
@@ -115,7 +114,6 @@ export default function ProfilePage() {
 
   const profile = result?.profile || null;
   const resolvedWallet = result?.wallet || walletFromQuery;
-
   const displayName = useMemo(() => toDisplayName(resolvedWallet), [resolvedWallet]);
 
   const behavioralReads = useMemo(
@@ -126,10 +124,7 @@ export default function ProfilePage() {
   const returnPattern = useMemo(() => {
     if (!profile) return null;
     if (profile.anchorCollection?.name && profile.anchorCollection?.count) {
-      return {
-        name: profile.anchorCollection.name,
-        count: profile.anchorCollection.count,
-      };
+      return { name: profile.anchorCollection.name, count: profile.anchorCollection.count };
     }
     const fallback = (profile.topCollections || [])[0];
     if (fallback?.name && fallback?.count) {
@@ -158,8 +153,11 @@ export default function ProfilePage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#0c0c0d] text-stone-100">
-      <div className="mx-auto w-full max-w-4xl px-6 py-16 sm:px-10 sm:py-24">
+    <main
+      className="min-h-screen"
+      style={{ background: "#fafaf9", color: "#1c1917" }}
+    >
+      <div className="mx-auto w-full max-w-3xl px-6 py-14 sm:px-10 sm:py-20">
         {loading ? (
           <div className="min-h-[40vh] flex items-center justify-center">
             <p className="text-sm text-stone-500">Reading your wallet...</p>
@@ -168,10 +166,10 @@ export default function ProfilePage() {
 
         {!loading && error ? (
           <div className="min-h-[40vh] flex items-center justify-center">
-            <p className="text-sm text-stone-400">
-              Nothing found for this wallet. {" "}
+            <p className="text-sm text-stone-600">
+              Nothing found for this wallet.{" "}
               <button
-                className="underline underline-offset-4 text-stone-200 hover:text-white"
+                className="underline underline-offset-4 text-stone-800 hover:text-stone-950"
                 onClick={() => router.push("/")}
                 type="button"
               >
@@ -182,38 +180,38 @@ export default function ProfilePage() {
         ) : null}
 
         {!loading && !error && profile ? (
-          <section className="space-y-14 sm:space-y-16">
-            <header className="space-y-3 pb-2">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-stone-500">What your wallet reveals</p>
-              <h1 className="text-3xl font-medium tracking-tight text-stone-100 sm:text-4xl">{displayName}</h1>
+          <section className="space-y-12 sm:space-y-14">
+            <header className="space-y-2">
+              <h1 className="text-2xl font-medium tracking-tight text-stone-950 sm:text-3xl"
+                style={{ color: "#1c1917" }}>
+                {displayName}
+              </h1>
               <p className="text-xs text-stone-500 sm:text-sm break-all">{resolvedWallet}</p>
             </header>
 
             {(profile.patternLine || profile.identityParagraph) ? (
-              <section className="max-w-3xl space-y-6 sm:space-y-7">
+              <section className="space-y-6 sm:space-y-7">
                 {profile.patternLine ? (
-                  <p className="text-3xl leading-[1.08] font-medium tracking-tight text-stone-100 sm:text-4xl">
+                  <p className="max-w-2xl text-2xl leading-tight font-semibold tracking-tight text-stone-950 sm:text-3xl"
+                    style={{ color: "#1c1917" }}>
                     {profile.patternLine}
                   </p>
                 ) : null}
-
                 {profile.identityParagraph ? (
-                  <p className="max-w-2xl text-base leading-8 text-stone-300 sm:text-[1.08rem] sm:leading-9">
+                  <p className="max-w-2xl text-base leading-8 text-stone-700 sm:text-lg sm:leading-9">
                     {profile.identityParagraph}
                   </p>
                 ) : null}
-
-                <p className="text-sm text-stone-500">Not what you own. Where you keep looking.</p>
               </section>
             ) : null}
 
             {behavioralReads.length > 0 ? (
-              <section className="rounded-2xl border border-stone-800/80 bg-stone-900/45 px-5 py-4 sm:px-6 sm:py-5">
-                <div className="flex flex-wrap gap-2.5">
+              <section>
+                <div className="flex flex-wrap gap-2">
                   {behavioralReads.map((read, idx) => (
                     <span
                       key={`${read}-${idx}`}
-                      className="rounded-full border border-stone-700 px-3 py-1 text-[11px] tracking-[0.04em] text-stone-300"
+                      className="rounded-full border border-stone-200 px-3 py-1 text-[11px] tracking-[0.04em] text-stone-400"
                     >
                       {read}
                     </span>
@@ -222,64 +220,66 @@ export default function ProfilePage() {
               </section>
             ) : null}
 
-            <section className="grid gap-8 sm:gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
-              {returnPattern ? (
-                <section className="rounded-2xl border border-stone-800/80 bg-stone-900/55 p-6 sm:p-7 space-y-2.5">
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-stone-500">Return Pattern</p>
-                  <p className="text-lg text-stone-100">You keep coming back to {returnPattern.name}.</p>
-                  <p className="text-sm text-stone-400">
-                    {returnPattern.count} {returnPattern.count === 1 ? "piece kept" : "pieces kept"}
-                  </p>
-                </section>
-              ) : null}
-
-              {tasteRows.length > 0 ? (
-                <section className="rounded-2xl border border-stone-800/80 bg-stone-900/45 p-6 sm:p-7 space-y-4">
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-stone-500">Where your attention concentrates</p>
-                  <div className="space-y-3.5">
-                    {tasteRows.map((row) => {
-                      const pct = Math.max(0, Math.min(100, Math.round(row.percentage)));
-                      return (
-                        <div key={row.category} className="space-y-1.5">
-                          <div className="grid grid-cols-[1fr_auto] items-baseline gap-3">
-                            <span className="text-sm text-stone-300">{toTitleCase(row.category)}</span>
-                            <span className="text-xs text-stone-500">{pct}%</span>
-                          </div>
-                          <div className="h-1.5 w-full rounded-full bg-stone-800">
-                            <div className="h-1.5 rounded-full bg-stone-500" style={{ width: `${pct}%` }} />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </section>
-              ) : null}
-            </section>
-
-            {profile.whatStandsOut ? (
-              <section className="max-w-2xl border-l border-stone-700 pl-4">
-                <p className="text-sm italic text-stone-400">{profile.whatStandsOut}</p>
+            {returnPattern ? (
+              <section className="space-y-1.5">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-stone-500">Return Pattern</p>
+                <p className="text-base text-stone-900">{returnPattern.name}</p>
+                <p className="text-sm text-stone-600">
+                  returned to {returnPattern.count} {returnPattern.count === 1 ? "time" : "times"}
+                </p>
               </section>
             ) : null}
 
-            <section className="pt-4 sm:pt-6 space-y-5">
-              <div className="space-y-2">
-                <p className="text-base text-stone-100">See who stopped in the same places.</p>
-                <p className="text-sm text-stone-400">Add another wallet to see where your attention overlaps.</p>
-              </div>
+            {tasteRows.length > 0 ? (
+              <section className="space-y-3">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-stone-500">Taste map</p>
+                <div className="space-y-3">
+                  {tasteRows.map((row) => {
+                    const pct = Math.max(0, Math.min(100, Math.round(row.percentage)));
+                    return (
+                      <div key={row.category} className="space-y-1.5">
+                        <div className="grid grid-cols-[1fr_auto] items-baseline gap-3">
+                          <span className="text-sm text-stone-600">{toTitleCase(row.category)}</span>
+                          <span className="text-xs text-stone-500">{pct}%</span>
+                        </div>
+                        <div className="h-1.5 w-full rounded-full bg-stone-200">
+                          <div
+                            className="h-1.5 rounded-full bg-stone-500"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : null}
 
-              <form className="max-w-xl space-y-3" onSubmit={handleCompareSubmit}>
+            {profile.whatStandsOut ? (
+              <section>
+                <p className="text-sm italic text-stone-500">{profile.whatStandsOut}</p>
+              </section>
+            ) : null}
+
+            <section className="pt-6 sm:pt-8 space-y-4">
+              <div className="space-y-1.5">
+                <p className="text-base font-medium text-stone-900">See who stopped in the same places.</p>
+                <p className="text-sm text-stone-600">
+                  Add another wallet to see where your taste overlaps.
+                </p>
+              </div>
+              <form className="space-y-3" onSubmit={handleCompareSubmit}>
                 <input
                   type="text"
                   value={compareWallet}
                   onChange={(e) => setCompareWallet(e.target.value)}
                   placeholder="Second wallet address or ENS"
-                  className="block w-full rounded-2xl border border-stone-700 bg-stone-950 px-4 py-3 text-sm text-stone-100 outline-none transition placeholder:text-stone-500 focus:border-stone-500"
+                  className="block w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-stone-500"
                 />
                 <button
                   type="submit"
                   disabled={!canCompare}
-                  className="inline-flex items-center justify-center rounded-full bg-stone-100 px-5 py-3 text-sm font-medium text-stone-950 transition hover:bg-white disabled:opacity-40"
+                  className="inline-flex items-center justify-center rounded-full bg-stone-900 px-5 py-3 text-sm font-medium text-stone-50 transition hover:bg-stone-800 disabled:opacity-40"
                 >
                   Compare
                 </button>

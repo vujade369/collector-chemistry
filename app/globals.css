@@ -275,3 +275,9 @@ ol {
     transition: none !important;
   }
 }
+/* shared page shell — use cc-page on <main> for consistent dark theme */
+.cc-page {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+}
