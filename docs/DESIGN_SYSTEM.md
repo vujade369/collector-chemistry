@@ -429,3 +429,19 @@ Collection list inside drawer (below thumbnails):
 - Padding: `10px`
 - Hover: color `#888`, border color `#333`
 - Clicking hides the row and reveals remaining category cards
+
+## Profile Page Visual Direction
+
+The individual profile page should feel more vivid and collector-facing than the earlier editorial version.
+
+Use the “Neon Pulse” reference in `docs/VISUAL_REFERENCES.md` as the main visual guide.
+
+Design priorities:
+- stronger hierarchy
+- more visual reward
+- compact modular cards
+- glowing accents used selectively
+- playful collector energy
+- clear mobile-first layout
+
+The page should still be readable, restrained, and fast.

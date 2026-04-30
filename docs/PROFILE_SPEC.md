@@ -410,3 +410,19 @@ Category classification uses the `classify()` function from
 Do not use `buildCategoryDistribution()` from `walletProfile.ts` for
 the category grid — that function uses a different classification system
 and produces inconsistent results.
+
+## Current Profile Page Direction
+
+The individual profile page is the foundation of the product.
+
+It should function as a single-wallet collector readout with:
+- identity
+- archetype
+- taste map
+- core signals
+- top collections
+- compare CTA
+
+The current target layout is the “Neon Pulse” direction described in `docs/VISUAL_REFERENCES.md`.
+
+Profile should be built first. Compare can later reuse the profile components side by side.

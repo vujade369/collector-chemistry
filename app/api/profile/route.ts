@@ -410,6 +410,15 @@ function normalizeImageUrl(url?: string) {
   return url;
 }
 
+function extractNFTImageUrl(nft: WalletProfileNFT) {
+  return normalizeImageUrl(
+    nft.image?.cachedUrl ||
+      nft.image?.thumbnailUrl ||
+      nft.contract?.openSeaMetadata?.imageUrl ||
+      ""
+  );
+}
+
 function classify(nft: WalletProfileNFT) {
   const haystack = normalizeText(
     `${nft.contractMetadata?.name || ""} ${nft.contract?.name || ""} ${
@@ -531,6 +540,77 @@ function buildTasteDNA(nfts: WalletProfileNFT[]) {
   });
 
   return percentages;
+}
+
+function buildCategoryGroups(
+  nfts: WalletProfileNFT[]
+): Record<string, {
+  totalCount: number;
+  previews: Array<{
+    title: string;
+    collectionName: string;
+    imageUrl: string;
+  }>;
+  collections: Array<{
+    name: string;
+    count: number;
+  }>;
+}> {
+  const grouped = new Map<string, WalletProfileNFT[]>();
+
+  for (const nft of nfts) {
+    const category = classify(nft);
+    if (category === "Other") continue;
+
+    const bucket = grouped.get(category);
+    if (bucket) {
+      bucket.push(nft);
+    } else {
+      grouped.set(category, [nft]);
+    }
+  }
+
+  const entries = [...grouped.entries()]
+    .filter(([, items]) => items.length > 0)
+    .map(([category, items]) => {
+      const previews = items.slice(0, 4).map((nft) => {
+        const collectionName = resolveCollectionName(nft);
+        const imageUrl =
+          extractNFTImageUrl(nft) ||
+          nft.contract?.openSeaMetadata?.imageUrl ||
+          "";
+
+        return {
+          title: nft.name || nft.title || collectionName,
+          collectionName,
+          imageUrl,
+        };
+      });
+
+      const collectionCounts = new Map<string, number>();
+      for (const nft of items) {
+        const collectionName = resolveCollectionName(nft);
+        if (collectionName === "Unknown collection") continue;
+        collectionCounts.set(collectionName, (collectionCounts.get(collectionName) || 0) + 1);
+      }
+
+      const collections = [...collectionCounts.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([name, count]) => ({ name, count }));
+
+      return [
+        category,
+        {
+          totalCount: items.length,
+          previews,
+          collections,
+        },
+      ] as const;
+    })
+    .sort((a, b) => b[1].totalCount - a[1].totalCount);
+
+  return Object.fromEntries(entries);
 }
 
 async function fetchOpenSeaAsset(
@@ -810,6 +890,7 @@ export async function GET(req: Request) {
 
     const profileStartMs = Date.now();
     const profile = buildWalletProfile(enrichedNFTs);
+    const categoryGroups = buildCategoryGroups(enrichedNFTs);
     const firstMint = await fetchFirstMint(wallet);
     const acquisitionBreakdown = await fetchAcquisitionBreakdown(wallet);
     const enrichedProfile = {
@@ -826,6 +907,7 @@ export async function GET(req: Request) {
       taste,
       sampleTopCollections: enrichedProfile.topCollections,
       sampleCategoryDistribution: enrichedProfile.categoryDistribution,
+      categoryGroups,
       nftCountUsed: enrichedProfile.totalNFTs,
       collectionsCheckedForCategory: debug.collectionsCheckedForCategory,
       collectionsWithCategory: debug.collectionsWithCategory,
