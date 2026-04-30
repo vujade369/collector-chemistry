@@ -339,3 +339,93 @@ Never let the design drift toward:
 
 If a design decision makes the product feel like a crypto analytics tool,
 it is wrong regardless of how polished it looks.
+
+---
+
+## Category card grid
+
+The category card grid is the primary exploration surface on the profile page.
+It replaces the horizontal bar taste map and sits below the donut taste signature.
+
+### Purpose
+Each taste category gets its own card with the percentage as the hero number.
+Tapping a card opens a drawer below it showing the NFTs inside that category.
+This turns the taste map from a summary into something you can explore.
+
+### Grid layout
+- Two columns, equal width
+- Gap: `8px`
+- Show top 6 categories by percentage
+- Remaining categories hidden behind a "show more" row at the bottom
+- "Show more" row spans full width, centered text, same border style as cards
+
+### Category cards (default state)
+- Background: `#111`
+- Border: `0.5px solid #222`
+- Border radius: `14px`
+- Padding: `14px`
+- Cursor: pointer
+
+Content inside each card:
+- Category name: `12px`, color `#a8a49d`, letter spacing `0.01em`
+- Percentage: `26px`, font weight `300`, color `#f0ede6`, letter spacing `-0.03em`
+- Piece count: `10px`, color `#444`
+- Chevron indicator: `10px`, color `#333`, positioned top-right, `›` character
+
+### Category cards (active / open state)
+- Background: `#130a0e`
+- Border: `0.5px solid rgba(255,51,153,0.35)`
+- Accent line: `2px solid #ff3399` at top of card (full width, no border radius)
+- Category name color: `rgba(255,51,153,0.8)`
+- Percentage color: `#ff3399`
+- Chevron: rotated `90deg`, color `rgba(255,51,153,0.5)`
+
+Transitions:
+- Border color: `150ms ease`
+- Background: `150ms ease`
+- Chevron rotation: `200ms ease`
+
+### Drawer
+The drawer appears as a full-width element spanning both columns,
+inserted in the grid immediately after the row containing the active card.
+
+- Background: `#0f0f0f`
+- Border: `0.5px solid rgba(255,51,153,0.12)`
+- Border radius: `12px`
+- Padding: `12px`
+- Grid column: `1 / -1` (spans full width)
+
+Drawer header:
+- Left: category label, `9px`, uppercase, letter spacing `0.15em`, color `#ff3399`
+- Right: piece count and collection count, `10px`, color `#555`
+
+NFT thumbnail grid inside drawer:
+- 4 columns, equal width
+- Gap: `6px`
+- Show up to 3 actual NFT thumbnails
+- 4th cell: overflow count (`+N` more), `10px`, color `#555`
+- Each thumbnail: `aspect-ratio: 1`, border radius `8px`, background `#1a1a1a`, border `0.5px solid #2a2a2a`
+- NFT images use `object-fit: cover`
+
+Collection list inside drawer (below thumbnails):
+- Separated from thumbnails by `0.5px solid #1e1e1e` border top, padding top `8px`
+- Each row: collection name left (`11px`, color `#888`), piece count right (`10px`, color `#444`)
+- Show top 3 collections within that category
+- If more exist: a final row with `+ N more collections` in color `#444`
+
+### Interaction rules
+- Only one drawer open at a time
+- Tapping the active card closes its drawer
+- Tapping a different card closes the current drawer and opens the new one
+- Drawer appears immediately below the row containing the tapped card
+- Smooth scroll to bring drawer into view after opening
+
+### Show more row
+- Spans full grid width
+- Text: `Show remaining categories ›`
+- Font size: `11px`, color `#555`, letter spacing `0.05em`
+- Border: `0.5px solid #1e1e1e`
+- Border radius: `10px`
+- Padding: `10px`
+- Hover: color `#888`, border color `#333`
+- Clicking hides the row and reveals remaining category cards

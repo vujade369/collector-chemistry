@@ -362,3 +362,51 @@ If both profiles produce generic reads, the chemistry output will be generic.
 
 Build sharp individual profiles first.
 The comparison writes itself from there.
+
+---
+
+## Category drill-down
+
+The category drill-down is the exploration layer of the profile page.
+It lives below the taste map donut and turns the percentage breakdown
+into something the collector can actually navigate.
+
+### Purpose
+A collector should be able to tap any taste category and immediately see
+which NFTs and collections sit inside it. This creates a moment of
+genuine discovery — not just "I collect 14% meme" but "here is exactly
+what that means."
+
+### Data requirements
+The profile API must return a `categoryGroups` field alongside the
+existing `categoryDistribution`. Each group contains:
+- The category name
+- Up to 4 NFT preview items (imageUrl, title, collectionName)
+- The top collections within that category with piece counts
+- Total piece count for the category
+
+### Display rules
+- Show the top 6 categories by percentage in the card grid
+- Hide remaining categories behind a "show more" interaction
+- Do not show categories with 0 pieces
+- The `other` category should always appear last if shown at all
+
+### Interaction
+- One category open at a time
+- Tapping a card reveals its drawer
+- Tapping the active card closes it
+- The drawer shows NFT thumbnails and a collection breakdown
+
+### Relationship to the taste map donut
+The donut and the category grid are two views of the same data.
+The donut shows the shape at a glance.
+The grid lets you go deeper.
+They should always be visually connected — same color system,
+same category names, same data source.
+
+### Data source
+Category classification uses the `classify()` function from
+`app/api/compare/route.ts`, the same function used by the compare page.
+Do not use `buildCategoryDistribution()` from `walletProfile.ts` for
+the category grid — that function uses a different classification system
+and produces inconsistent results.
