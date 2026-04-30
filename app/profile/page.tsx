@@ -178,6 +178,12 @@ function toRgba(hex: string, alpha: number) {
 
 function TasteSignature({ title, slices }: { title: string; slices: TasteSlice[] }) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const toneHex = "#ff3399";
   const total = slices.reduce((sum, slice) => sum + slice.value, 0) || 1;
   const size = 188;
@@ -208,9 +214,11 @@ function TasteSignature({ title, slices }: { title: string; slices: TasteSlice[]
       : rank > 0
       ? rankOpacity[Math.min(rank - 1, rankOpacity.length - 1)] || 0.26
       : 0.26;
-    const isDimmed = hoveredIndex !== null && hoveredIndex !== index;
-    const opacity = isDimmed ? Math.max(0.14, baseOpacity * 0.45) : baseOpacity;
-    const strokeWidth = rank === 1 ? baseStrokeWidth + 1.2 : baseStrokeWidth;
+    const isHovered = hoveredIndex === index;
+    const isDimmed = hoveredIndex !== null && !isHovered;
+    const opacity = isHovered ? 1 : isDimmed ? Math.max(0.14, baseOpacity * 0.45) : baseOpacity;
+    const baseRankStrokeWidth = rank === 1 ? baseStrokeWidth + 1.2 : baseStrokeWidth;
+    const strokeWidth = isHovered ? baseRankStrokeWidth + 3 : baseRankStrokeWidth;
 
     return {
       index,
@@ -221,6 +229,10 @@ function TasteSignature({ title, slices }: { title: string; slices: TasteSlice[]
       strokeWidth,
     };
   });
+
+  const orderedArcs = hoveredIndex === null
+    ? arcs
+    : [...arcs.filter((arc) => arc.index !== hoveredIndex), ...arcs.filter((arc) => arc.index === hoveredIndex)];
 
   const legendRows = (() => {
     const bucket = new Map<string, number>();
@@ -246,7 +258,7 @@ function TasteSignature({ title, slices }: { title: string; slices: TasteSlice[]
           style={{ width: "188px", height: "188px" }}
         >
           <circle cx={cx} cy={cy} r={radius} fill="none" stroke="#1b1b1b" strokeWidth={baseStrokeWidth} />
-          {arcs.map((arc) => (
+          {orderedArcs.map((arc, index) => (
             <path
               key={`${arc.label}-${arc.index}`}
               d={arc.path}
@@ -254,6 +266,10 @@ function TasteSignature({ title, slices }: { title: string; slices: TasteSlice[]
               stroke={arc.stroke}
               strokeWidth={arc.strokeWidth}
               strokeLinecap="butt"
+              style={{
+                opacity: mounted ? 1 : 0,
+                transition: `opacity 0.6s ease ${index * 0.1}s`,
+              }}
               onMouseEnter={() => setHoveredIndex(arc.index)}
               onMouseLeave={() => setHoveredIndex(null)}
             />
