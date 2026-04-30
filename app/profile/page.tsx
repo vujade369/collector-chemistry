@@ -442,48 +442,46 @@ export default function ProfilePage() {
             {returnPattern ? (
               <div className="profile-panel">
                 <p className="profile-section-label">Return Pattern</p>
-                {returnPattern.imageUrl ? (
-                  <img
-                    src={returnPattern.imageUrl}
-                    alt={returnPattern.name}
-                    style={{ width: "64px", height: "64px", borderRadius: "8px", objectFit: "cover" }}
-                  />
-                ) : null}
-                <p className="profile-return-name">{returnPattern.name}</p>
-                <p className="profile-return-count">
-                  returned to {returnPattern.count} {returnPattern.count === 1 ? "time" : "times"}
-                </p>
+                <div style={{ display: "grid", gridTemplateColumns: "72px 1fr", gap: "12px", alignItems: "center" }}>
+                  <div style={{ width: "72px", height: "72px", borderRadius: "10px", overflow: "hidden", background: "#0f0f0f", border: "0.5px solid #1e1e1e" }}>
+                    {returnPattern.imageUrl ? (
+                      <img src={returnPattern.imageUrl} alt={returnPattern.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    ) : null}
+                  </div>
+                  <div style={{ display: "grid", gap: "6px" }}>
+                    <p className="profile-return-name">{returnPattern.name}</p>
+                    <p className="profile-return-count">{returnPattern.count} works held</p>
+                  </div>
+                </div>
               </div>
             ) : null}
 
             {signalPiece ? (
               <div className="profile-panel">
                 <p className="profile-section-label">Signal Piece</p>
-                {signalPiece.imageUrl ? (
-                  <img
-                    src={signalPiece.imageUrl}
-                    alt={signalPiece.collectionName}
-                    style={{ width: "64px", height: "64px", borderRadius: "8px", objectFit: "cover" }}
-                  />
-                ) : null}
-                <p className="profile-return-name">{signalPiece.collectionName}</p>
+                <div style={{ display: "grid", gridTemplateColumns: "72px 1fr", gap: "12px", alignItems: "center" }}>
+                  <div style={{ width: "72px", height: "72px", borderRadius: "10px", overflow: "hidden", background: "#0f0f0f", border: "0.5px solid #1e1e1e" }}>
+                    <img src={signalPiece.imageUrl} alt={signalPiece.collectionName} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  </div>
+                  <p className="profile-return-name">{signalPiece.collectionName}</p>
+                </div>
               </div>
             ) : null}
 
             {firstMint ? (
               <div className="profile-panel">
-                <p className="profile-section-label">First Mint</p>
-                {firstMint.imageUrl ? (
-                  <img
-                    src={firstMint.imageUrl}
-                    alt={firstMint.title}
-                    style={{ width: "64px", height: "64px", borderRadius: "8px", objectFit: "cover" }}
-                  />
-                ) : null}
-                <p className="profile-return-name">{firstMint.collectionName}</p>
-                {firstMint.date ? (
-                  <p className="profile-return-count">{firstMint.date}</p>
-                ) : null}
+                <p className="profile-section-label">First mint</p>
+                <div style={{ display: "grid", gridTemplateColumns: "72px 1fr", gap: "12px", alignItems: "center" }}>
+                  <div style={{ width: "72px", height: "72px", borderRadius: "10px", overflow: "hidden", background: "#0f0f0f", border: "0.5px solid #1e1e1e" }}>
+                    {firstMint.imageUrl ? (
+                      <img src={firstMint.imageUrl} alt={firstMint.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    ) : null}
+                  </div>
+                  <div style={{ display: "grid", gap: "6px" }}>
+                    <p className="profile-return-name">{firstMint.collectionName}</p>
+                    <p className="profile-return-count">{firstMint.date}</p>
+                  </div>
+                </div>
               </div>
             ) : null}
 
@@ -495,16 +493,12 @@ export default function ProfilePage() {
                     <span className="profile-taste-label">Minted</span>
                     <span className="profile-taste-pct">{profile.acquisitionBreakdown.mintPercent}%</span>
                   </div>
-                  <div className="profile-taste-track">
-                    <div className="profile-taste-fill" style={{ width: `${profile.acquisitionBreakdown.mintPercent}%` }} />
-                  </div>
+                  <div className="profile-taste-track"><div className="profile-taste-fill" style={{ width: `${profile.acquisitionBreakdown.mintPercent}%` }} /></div>
                   <div className="profile-taste-label-row">
                     <span className="profile-taste-label">Acquired</span>
                     <span className="profile-taste-pct">{profile.acquisitionBreakdown.acquiredPercent}%</span>
                   </div>
-                  <div className="profile-taste-track">
-                    <div className="profile-taste-fill" style={{ width: `${profile.acquisitionBreakdown.acquiredPercent}%`, opacity: 0.55 }} />
-                  </div>
+                  <div className="profile-taste-track"><div className="profile-taste-fill" style={{ width: `${profile.acquisitionBreakdown.acquiredPercent}%`, opacity: 0.55 }} /></div>
                 </div>
               </div>
             ) : null}
