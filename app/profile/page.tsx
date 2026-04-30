@@ -153,10 +153,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <main
-      className="min-h-screen"
-      style={{ background: "#fafaf9", color: "#1c1917" }}
-    >
+    <main className="min-h-screen bg-[#0c0c0d] text-stone-100">
       <div className="mx-auto w-full max-w-3xl px-6 py-14 sm:px-10 sm:py-20">
         {loading ? (
           <div className="min-h-[40vh] flex items-center justify-center">
