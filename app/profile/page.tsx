@@ -571,7 +571,7 @@ export default function ProfilePage() {
                           <div className="cat-accent" />
                           <span className="cat-chevron">{isOpen ? "▾" : "›"}</span>
                           <p className="cat-name">{cat}</p>
-                          <p className="cat-pct">{group.totalCount}</p>
+                          <p className="cat-pct">{result?.taste?.[cat] != null ? `${Math.round(result.taste[cat])}%` : String(group.totalCount)}</p>
                           <p className="cat-count">{group.totalCount} pieces</p>
                         </div>
                         {insertDrawerAfter && openCategory && (
