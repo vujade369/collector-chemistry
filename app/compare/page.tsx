@@ -1043,8 +1043,8 @@ export default function ComparePage() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    const a = searchParams.get("walletA") || "";
-    const b = searchParams.get("walletB") || "";
+    const a = searchParams.get("a") || searchParams.get("walletA") || "";
+    const b = searchParams.get("b") || searchParams.get("walletB") || "";
     if (a && b && isLikelyValidInput(a) && isLikelyValidInput(b)) {
       setWalletA(a);
       setWalletB(b);
