@@ -153,7 +153,10 @@ export default function ProfilePage() {
   }
 
   return (
-    <main className="min-h-screen bg-stone-50 text-stone-900">
+    <main
+      className="min-h-screen"
+      style={{ background: "#fafaf9", color: "#1c1917" }}
+    >
       <div className="mx-auto w-full max-w-3xl px-6 py-14 sm:px-10 sm:py-20">
         {loading ? (
           <div className="min-h-[40vh] flex items-center justify-center">
@@ -179,7 +182,8 @@ export default function ProfilePage() {
         {!loading && !error && profile ? (
           <section className="space-y-12 sm:space-y-14">
             <header className="space-y-2">
-              <h1 className="text-2xl font-medium tracking-tight text-stone-950 sm:text-3xl">
+              <h1 className="text-2xl font-medium tracking-tight text-stone-950 sm:text-3xl"
+                style={{ color: "#1c1917" }}>
                 {displayName}
               </h1>
               <p className="text-xs text-stone-500 sm:text-sm break-all">{resolvedWallet}</p>
@@ -188,7 +192,8 @@ export default function ProfilePage() {
             {(profile.patternLine || profile.identityParagraph) ? (
               <section className="space-y-6 sm:space-y-7">
                 {profile.patternLine ? (
-                  <p className="max-w-2xl text-2xl leading-tight font-semibold tracking-tight text-stone-950 sm:text-3xl">
+                  <p className="max-w-2xl text-2xl leading-tight font-semibold tracking-tight text-stone-950 sm:text-3xl"
+                    style={{ color: "#1c1917" }}>
                     {profile.patternLine}
                   </p>
                 ) : null}
