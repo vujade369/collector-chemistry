@@ -34,3 +34,13 @@
 * Clean data flow
 * Strengthen collector profile layer
 * Avoid UI redesign until structure is stable
+
+## Long-term Possibility
+
+A social feed may become a future layer of Collector Chemistry, but it should not drive current architecture prematurely.
+
+Current priority remains:
+1. individual profile
+2. comparison experience
+3. reusable collector components
+4. only then social/discovery surfaces

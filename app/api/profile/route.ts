@@ -881,7 +881,6 @@ export async function GET(req: Request) {
     const fetchStartMs = Date.now();
     const nfts = await fetchWalletNFTs<WalletProfileNFT>(wallet, ALCHEMY_API_KEY);
     const taste = buildTasteDNA(nfts);
-    console.log("RAW NFT SAMPLE:", JSON.stringify(nfts[0], null, 2));
     const fetchNFTsMs = Date.now() - fetchStartMs;
 
     const enrichStartMs = Date.now();
