@@ -13,6 +13,9 @@ const OPENSEA_API_KEY = process.env.OPENSEA_API_KEY;
 const OPENSEA_BASE_URL = "https://api.opensea.io/api/v2";
 const DEFAULT_COLLECTION_CATEGORY_CAP = 25;
 const CATEGORY_ENRICHMENT_TIMEOUT_MS = 4000;
+const OPENSEA_MAX_EVENT_PAGES = 6;
+const OPENSEA_EVENT_PAGE_LIMIT = 50;
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 /**
  * Local test examples:
@@ -117,22 +120,41 @@ type CategoryEnrichmentDebug = {
   }>;
 };
 
-async function fetchOpenSeaJson<T>(path: string): Promise<T | null> {
-  if (!OPENSEA_API_KEY) return null;
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
+  let timeoutHandle: ReturnType<typeof setTimeout>;
+  const timeoutPromise = new Promise<T>((resolve) => {
+    timeoutHandle = setTimeout(() => resolve(fallback), timeoutMs);
+  });
 
-  try {
-    const res = await fetch(`${OPENSEA_BASE_URL}${path}`, {
-      cache: "no-store",
-      headers: {
-        accept: "application/json",
-        "X-API-KEY": OPENSEA_API_KEY,
-      },
-    });
-    if (!res.ok) return null;
-    return (await res.json()) as T;
-  } catch {
-    return null;
-  }
+  const result = await Promise.race([promise, timeoutPromise]);
+  clearTimeout(timeoutHandle!);
+  return result;
+}
+
+async function fetchOpenSeaJson<T>(
+  path: string,
+  fallback: T
+): Promise<T> {
+  if (!OPENSEA_API_KEY) return fallback;
+
+  const request = fetch(`${OPENSEA_BASE_URL}${path}`, {
+    cache: "no-store",
+    headers: {
+      accept: "application/json",
+      "X-API-KEY": OPENSEA_API_KEY,
+    },
+  })
+    .then(async (res) => {
+      if (!res.ok) return fallback;
+      try {
+        return (await res.json()) as T;
+      } catch {
+        return fallback;
+      }
+    })
+    .catch(() => fallback);
+
+  return withTimeout(request, 5000, fallback);
 }
 
 function sanitizeRawResponse(raw: string) {
@@ -273,7 +295,8 @@ async function enrichCollectionCategories(
         resolvedSlug = slugCache.get(contractSlugKey) || "";
       } else {
         const contractData = await fetchOpenSeaJson<OpenSeaContractResponse>(
-          `/chain/ethereum/contract/${contractAddress}`
+          `/chain/ethereum/contract/${contractAddress}`,
+          {} as OpenSeaContractResponse
         );
         resolvedSlug = String(
           contractData?.collection ||
@@ -333,6 +356,273 @@ async function enrichCollectionCategories(
     enrichedNFTs: nfts,
     debug: stats,
   };
+}
+
+type OpenSeaAssetResponse = {
+  nft?: {
+    identifier?: string;
+    name?: string;
+    description?: string;
+    image_url?: string;
+    display_image_url?: string;
+    image_original_url?: string;
+    image_preview_url?: string;
+    collection?: string | { name?: string; slug?: string };
+    collection_slug?: string;
+  };
+};
+
+type OpenSeaAccountEventNft = {
+  contract?: string;
+  identifier?: string | number;
+  collection?: string;
+  image_url?: string;
+  display_image_url?: string;
+  name?: string;
+};
+
+type OpenSeaAccountEvent = {
+  event_timestamp?: string | number;
+  sent_at?: string;
+  from_address?: string;
+  to_address?: string;
+  winner_account?: { address?: string };
+  nft?: OpenSeaAccountEventNft;
+};
+
+type OpenSeaAccountEventsResponse = {
+  asset_events?: OpenSeaAccountEvent[];
+  events?: OpenSeaAccountEvent[];
+  next?: string | null;
+};
+
+type ResolvedDisplayMetadata = {
+  title?: string;
+  collectionName?: string;
+  imageUrl?: string;
+};
+
+function normalizeImageUrl(url?: string) {
+  if (!url) return "";
+  if (url.startsWith("ipfs://ipfs/")) return url.replace("ipfs://ipfs/", "https://ipfs.io/ipfs/");
+  if (url.startsWith("ipfs://")) return url.replace("ipfs://", "https://ipfs.io/ipfs/");
+  if (url.startsWith("ar://")) return url.replace("ar://", "https://arweave.net/");
+  return url;
+}
+
+async function fetchOpenSeaAsset(
+  contractAddress: string,
+  tokenId: string
+): Promise<ResolvedDisplayMetadata> {
+  if (!contractAddress || !tokenId) return {};
+
+  const data = await fetchOpenSeaJson<OpenSeaAssetResponse>(
+    `/chain/ethereum/contract/${contractAddress}/nfts/${tokenId}`,
+    {} as OpenSeaAssetResponse
+  );
+
+  const payload = data.nft || {};
+  const collection = payload.collection;
+  const collectionName =
+    typeof collection === "string"
+      ? collection
+      : collection?.name || "";
+
+  const title = payload.name || "";
+  const imageUrl = normalizeImageUrl(
+    payload.display_image_url ||
+      payload.image_url ||
+      payload.image_preview_url ||
+      payload.image_original_url ||
+      ""
+  );
+
+  return {
+    title,
+    collectionName,
+    imageUrl,
+  };
+}
+
+async function fetchFirstMint(address: string): Promise<{
+  nft: {
+    contractAddress: string;
+    tokenId: string;
+    collectionName: string;
+    imageUrl: string;
+    title: string;
+  };
+  timestamp: string;
+} | null> {
+  if (!ALCHEMY_API_KEY) return null;
+
+  try {
+    const alchemyUrl = `https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`;
+
+    const body = {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "alchemy_getAssetTransfers",
+      params: [
+        {
+          fromBlock: "0x0",
+          toBlock: "latest",
+          toAddress: normalizeAddress(address),
+          fromAddress: ZERO_ADDRESS,
+          category: ["erc721", "erc1155"],
+          withMetadata: true,
+          excludeZeroValue: false,
+          maxCount: "0xa",
+          order: "asc",
+        },
+      ],
+    };
+
+    const res = await withTimeout(
+      fetch(alchemyUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        cache: "no-store",
+      }),
+      8000,
+      null as unknown as Response
+    );
+
+    if (!res || !res.ok) return null;
+
+    const json = (await res.json()) as {
+      result?: {
+        transfers?: Array<{
+          from: string;
+          to: string;
+          contractAddress: string;
+          tokenId: string | null;
+          erc1155Metadata?: Array<{ tokenId: string }> | null;
+          asset: string | null;
+          metadata?: {
+            blockTimestamp?: string;
+          };
+          rawContract?: {
+            address?: string;
+          };
+        }>;
+      };
+    };
+
+    const transfers = json?.result?.transfers || [];
+    if (!transfers.length) return null;
+
+    const first = transfers[0];
+    const contractAddress = normalizeAddress(
+      first.contractAddress || first.rawContract?.address || ""
+    );
+    const rawTokenId = first.tokenId || first.erc1155Metadata?.[0]?.tokenId || "";
+    const tokenId = rawTokenId.startsWith("0x")
+      ? String(BigInt(rawTokenId))
+      : String(rawTokenId);
+    const timestamp = first.metadata?.blockTimestamp || "";
+
+    if (!contractAddress || !tokenId) return null;
+
+    const displayMeta = await fetchOpenSeaAsset(contractAddress, String(tokenId));
+
+    return {
+      nft: {
+        contractAddress,
+        tokenId: String(tokenId),
+        collectionName: displayMeta.collectionName || first.asset || "Unknown collection",
+        imageUrl: displayMeta.imageUrl || "",
+        title: displayMeta.title || (first.asset ? `${first.asset} #${tokenId}` : `#${tokenId}`),
+      },
+      timestamp,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchAcquisitionBreakdown(address: string): Promise<{
+  mintCount: number;
+  acquiredCount: number;
+  totalSampled: number;
+  mintPercent: number;
+  acquiredPercent: number;
+}> {
+  if (!OPENSEA_API_KEY) {
+    return {
+      mintCount: 0,
+      acquiredCount: 0,
+      totalSampled: 0,
+      mintPercent: 0,
+      acquiredPercent: 0,
+    };
+  }
+
+  try {
+    const target = normalizeAddress(address);
+    let next = "";
+    let mintCount = 0;
+    let acquiredCount = 0;
+
+    for (let page = 0; page < OPENSEA_MAX_EVENT_PAGES; page += 1) {
+      const params = new URLSearchParams({
+        limit: String(OPENSEA_EVENT_PAGE_LIMIT),
+        event_type: "transfer",
+      });
+      if (next) params.set("next", next);
+
+      const data = await fetchOpenSeaJson<OpenSeaAccountEventsResponse>(
+        `/events/accounts/${target}?${params.toString()}`,
+        { events: [], asset_events: [], next: null }
+      );
+
+      const events = data.events || data.asset_events || [];
+
+      for (const event of events) {
+        if (normalizeAddress(event.to_address || event.winner_account?.address) !== target) continue;
+
+        if (normalizeAddress(event.from_address) === ZERO_ADDRESS) {
+          mintCount += 1;
+        } else {
+          acquiredCount += 1;
+        }
+      }
+
+      next = String(data.next || "");
+      if (!next || !events.length) break;
+    }
+
+    const totalSampled = mintCount + acquiredCount;
+    if (totalSampled === 0) {
+      return {
+        mintCount,
+        acquiredCount,
+        totalSampled,
+        mintPercent: 0,
+        acquiredPercent: 0,
+      };
+    }
+
+    const mintPercent = Math.round((mintCount / totalSampled) * 100);
+    const acquiredPercent = Math.max(0, 100 - mintPercent);
+
+    return {
+      mintCount,
+      acquiredCount,
+      totalSampled,
+      mintPercent,
+      acquiredPercent,
+    };
+  } catch {
+    return {
+      mintCount: 0,
+      acquiredCount: 0,
+      totalSampled: 0,
+      mintPercent: 0,
+      acquiredPercent: 0,
+    };
+  }
 }
 
 export async function GET(req: Request) {
@@ -396,21 +686,28 @@ export async function GET(req: Request) {
 
     const profileStartMs = Date.now();
     const profile = buildWalletProfile(enrichedNFTs);
+    const firstMint = await fetchFirstMint(wallet);
+    const acquisitionBreakdown = await fetchAcquisitionBreakdown(wallet);
+    const enrichedProfile = {
+      ...profile,
+      firstMint,
+      acquisitionBreakdown,
+    };
     const profileBuildMs = Date.now() - profileStartMs;
     const totalMs = Date.now() - totalStartMs;
 
     return NextResponse.json({
       wallet,
-      profile,
-      sampleTopCollections: profile.topCollections,
-      sampleCategoryDistribution: profile.categoryDistribution,
-      nftCountUsed: profile.totalNFTs,
+      profile: enrichedProfile,
+      sampleTopCollections: enrichedProfile.topCollections,
+      sampleCategoryDistribution: enrichedProfile.categoryDistribution,
+      nftCountUsed: enrichedProfile.totalNFTs,
       collectionsCheckedForCategory: debug.collectionsCheckedForCategory,
       collectionsWithCategory: debug.collectionsWithCategory,
       collectionsWithoutSlug: debug.collectionsWithoutSlug,
       collectionsCategoryCap: debug.collectionsCategoryCap,
       categoryEnrichmentTimedOut: debug.categoryEnrichmentTimedOut,
-      categorySourceBreakdown: profile.categorySourceBreakdown,
+      categorySourceBreakdown: enrichedProfile.categorySourceBreakdown,
       openseaCategorySamples: debug.openseaCategorySamples,
       timing: {
         fetchNFTsMs,
