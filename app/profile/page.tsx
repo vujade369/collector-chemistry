@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import "./profile.css";
 
 type TopCollection = {
   name: string;
@@ -153,20 +154,20 @@ export default function ProfilePage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#0c0c0d] text-stone-100">
-      <div className="mx-auto w-full max-w-3xl px-6 py-14 sm:px-10 sm:py-20">
+    <main className="profile-page">
+      <div className="profile-shell">
         {loading ? (
-          <div className="min-h-[40vh] flex items-center justify-center">
-            <p className="text-sm text-stone-500">Reading your wallet...</p>
+          <div style={{ minHeight: "40vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <p className="profile-eyebrow">Reading your wallet...</p>
           </div>
         ) : null}
 
         {!loading && error ? (
-          <div className="min-h-[40vh] flex items-center justify-center">
-            <p className="text-sm text-stone-600">
+          <div style={{ minHeight: "40vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <p style={{ fontSize: "14px", color: "#666" }}>
               Nothing found for this wallet.{" "}
               <button
-                className="underline underline-offset-4 text-stone-800 hover:text-stone-950"
+                style={{ textDecoration: "underline", color: "#a8a49d" }}
                 onClick={() => router.push("/")}
                 type="button"
               >
@@ -177,112 +178,89 @@ export default function ProfilePage() {
         ) : null}
 
         {!loading && !error && profile ? (
-          <section className="space-y-12 sm:space-y-14">
-            <header className="space-y-2">
-              <h1 className="text-2xl font-medium tracking-tight text-stone-950 sm:text-3xl"
-                style={{ color: "#1c1917" }}>
-                {displayName}
-              </h1>
-              <p className="text-xs text-stone-500 sm:text-sm break-all">{resolvedWallet}</p>
+          <>
+            <header className="profile-header">
+              <p className="profile-eyebrow">Collector profile</p>
+              <h1 className="profile-display-name">{displayName}</h1>
+              <p className="profile-address">{resolvedWallet}</p>
             </header>
 
-            {(profile.patternLine || profile.identityParagraph) ? (
-              <section className="space-y-6 sm:space-y-7">
+            {profile.patternLine || profile.identityParagraph ? (
+              <section style={{ display: "grid", gap: "20px" }}>
                 {profile.patternLine ? (
-                  <p className="max-w-2xl text-2xl leading-tight font-semibold tracking-tight text-stone-950 sm:text-3xl"
-                    style={{ color: "#1c1917" }}>
-                    {profile.patternLine}
-                  </p>
+                  <p className="profile-pattern-line">{profile.patternLine}</p>
                 ) : null}
                 {profile.identityParagraph ? (
-                  <p className="max-w-2xl text-base leading-8 text-stone-700 sm:text-lg sm:leading-9">
-                    {profile.identityParagraph}
-                  </p>
+                  <p className="profile-identity-paragraph">{profile.identityParagraph}</p>
                 ) : null}
               </section>
             ) : null}
 
             {behavioralReads.length > 0 ? (
-              <section>
-                <div className="flex flex-wrap gap-2">
-                  {behavioralReads.map((read, idx) => (
-                    <span
-                      key={`${read}-${idx}`}
-                      className="rounded-full border border-stone-200 px-3 py-1 text-[11px] tracking-[0.04em] text-stone-400"
-                    >
-                      {read}
-                    </span>
-                  ))}
-                </div>
-              </section>
+              <div className="profile-reads">
+                {behavioralReads.map((read, idx) => (
+                  <span key={`${read}-${idx}`} className="profile-read-tag">{read}</span>
+                ))}
+              </div>
             ) : null}
 
             {returnPattern ? (
-              <section className="space-y-1.5">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-stone-500">Return Pattern</p>
-                <p className="text-base text-stone-900">{returnPattern.name}</p>
-                <p className="text-sm text-stone-600">
-                  returned to {returnPattern.count} {returnPattern.count === 1 ? "time" : "times"}
-                </p>
-              </section>
+              <div className="profile-panel">
+                <p className="profile-section-label">Return Pattern</p>
+                <p className="profile-return-name">{returnPattern.name}</p>
+                <p className="profile-return-count">returned to {returnPattern.count} {returnPattern.count === 1 ? "time" : "times"}</p>
+              </div>
             ) : null}
 
             {tasteRows.length > 0 ? (
-              <section className="space-y-3">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-stone-500">Taste map</p>
-                <div className="space-y-3">
+              <div className="profile-panel">
+                <p className="profile-section-label">Taste map</p>
+                <div style={{ display: "grid", gap: "14px" }}>
                   {tasteRows.map((row) => {
                     const pct = Math.max(0, Math.min(100, Math.round(row.percentage)));
                     return (
-                      <div key={row.category} className="space-y-1.5">
-                        <div className="grid grid-cols-[1fr_auto] items-baseline gap-3">
-                          <span className="text-sm text-stone-600">{toTitleCase(row.category)}</span>
-                          <span className="text-xs text-stone-500">{pct}%</span>
+                      <div key={row.category} className="profile-taste-row">
+                        <div className="profile-taste-label-row">
+                          <span className="profile-taste-label">{toTitleCase(row.category)}</span>
+                          <span className="profile-taste-pct">{pct}%</span>
                         </div>
-                        <div className="h-1.5 w-full rounded-full bg-stone-200">
-                          <div
-                            className="h-1.5 rounded-full bg-stone-500"
-                            style={{ width: `${pct}%` }}
-                          />
+                        <div className="profile-taste-track">
+                          <div className="profile-taste-fill" style={{ width: `${pct}%` }} />
                         </div>
                       </div>
                     );
                   })}
                 </div>
-              </section>
+              </div>
             ) : null}
 
             {profile.whatStandsOut ? (
-              <section>
-                <p className="text-sm italic text-stone-500">{profile.whatStandsOut}</p>
-              </section>
+              <p className="profile-standout">{profile.whatStandsOut}</p>
             ) : null}
 
-            <section className="pt-6 sm:pt-8 space-y-4">
-              <div className="space-y-1.5">
-                <p className="text-base font-medium text-stone-900">See who stopped in the same places.</p>
-                <p className="text-sm text-stone-600">
-                  Add another wallet to see where your taste overlaps.
-                </p>
+            <section className="profile-compare-section">
+              <div style={{ display: "grid", gap: "6px" }}>
+                <p className="profile-compare-title">See who stopped in the same places.</p>
+                <p className="profile-compare-sub">Add another wallet to see where your taste overlaps.</p>
               </div>
-              <form className="space-y-3" onSubmit={handleCompareSubmit}>
+              <form style={{ display: "grid", gap: "12px", maxWidth: "480px" }} onSubmit={handleCompareSubmit}>
                 <input
                   type="text"
                   value={compareWallet}
                   onChange={(e) => setCompareWallet(e.target.value)}
                   placeholder="Second wallet address or ENS"
-                  className="block w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-stone-500"
+                  className="profile-input"
                 />
                 <button
                   type="submit"
                   disabled={!canCompare}
-                  className="inline-flex items-center justify-center rounded-full bg-stone-900 px-5 py-3 text-sm font-medium text-stone-50 transition hover:bg-stone-800 disabled:opacity-40"
+                  className="profile-btn-primary"
                 >
                   Compare
                 </button>
               </form>
             </section>
-          </section>
+          </>
         ) : null}
       </div>
     </main>
