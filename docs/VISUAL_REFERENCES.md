@@ -92,14 +92,67 @@ Rules:
 
 ---
 
+## Reference image files
+
+Use a small, curated set of references. Do not add every screenshot or moodboard image to the repo.
+
+### Target profile direction
+
+```txt
+/references/profile-neon-pulse.png
+```
+
+Use the cropped single-profile Neon Pulse mockup as the target image. Do not use the full five-panel board as the implementation target.
+
+### Optional current-state references
+
+If useful, add current screenshots for comparison:
+
+```txt
+/references/profile-current-top.png
+/references/profile-current-taste.png
+/references/profile-current-cta.png
+```
+
+These should only be used to understand what needs improvement. They are not target designs.
+
+### Target compare direction
+
+```txt
+/references/compare-chemistry-bridge.png
+```
+
+Use the selected Chemistry Bridge mockup as the target direction when redesigning compare.
+
+---
+
+## How to use visual references with Codex
+
+Visual references should guide layout, hierarchy, and feeling. They should not be copied blindly.
+
+Every Codex visual task should include:
+
+1. the target reference image
+2. the relevant docs
+3. a written list of what to borrow
+4. a written list of what not to copy
+5. the exact files Codex may edit
+
+Never rely on the screenshot alone.
+
+The image shows vibe.  
+The docs define behavior.
+
+---
+
 ## Profile page direction: Neon Pulse
 
 Preferred direction for the individual wallet profile page.
 
-Reference file, if available:
+Reference file:
 
 ```txt
-docs/references/profile-neon-pulse.png
+/references/profile-neon-pulse.png
 ```
 
 If this image does not exist yet, add the current selected profile mockup there.
@@ -124,6 +177,8 @@ If this image does not exist yet, add the current selected profile mockup there.
 - do not turn the page into a generic dashboard
 - do not let stats overpower interpretation
 - do not reduce the collector read to numbers
+- do not add heavy animation
+- do not hide important information behind hover-only interactions
 
 ### Target profile structure
 
@@ -136,6 +191,58 @@ If this image does not exist yet, add the current selected profile mockup there.
 7. Top collections
 8. Representative holdings
 9. Compare CTA
+
+---
+
+## Profile visual brief
+
+Use this section as the implementation translation for Codex.
+
+### What is wrong with the current profile page
+
+The current page is clean but too quiet.
+
+It feels like a static report instead of a collector readout.
+
+Specific issues:
+
+- weak visual hierarchy
+- too much empty darkness
+- cards feel passive
+- the taste map is not rewarding enough
+- core signals feel like simple rows instead of meaningful collector moments
+- compare CTA feels functional, not inviting
+- the page does not yet create enough recognition, surprise, or delight
+
+### Target feeling
+
+The page should feel like:
+
+- a collector seeing their taste become visible
+- a personal card / readout
+- playful but still tasteful
+- luminous, not loud
+- fast to scan
+- rewarding to explore
+
+### Visual hierarchy
+
+Tier 1:
+- collector identity
+- taste map
+- core signals
+
+Tier 2:
+- top collections
+- supporting stats
+- interpretation text
+
+Tier 3:
+- metadata
+- source details
+- fallback information
+
+Do not let every card have the same visual weight.
 
 ---
 
@@ -226,10 +333,10 @@ Each drawer should show:
 
 Preferred direction for the compare page.
 
-Reference file, if available:
+Reference file:
 
 ```txt
-docs/references/compare-chemistry-bridge.png
+/references/compare-chemistry-bridge.png
 ```
 
 If this image does not exist yet, add the current selected compare mockup there.
@@ -457,6 +564,21 @@ Rules:
 - use graceful fallbacks for missing images
 - avoid adding dependencies for visual effects
 - keep CSS and Tailwind patterns simple
+
+---
+
+## Profile implementation checklist
+
+When implementing the profile visual pass, check:
+
+- Does the collector identity feel like the top of the experience?
+- Are the stats immediately scannable?
+- Does the taste section feel like a visual reward?
+- Do core signals feel like meaningful collector moments?
+- Is the compare CTA more inviting than functional?
+- Is the page still readable on mobile?
+- Did we avoid adding fake data or new API assumptions?
+- Did we avoid touching compare or API files during a profile-only pass?
 
 ---
 
