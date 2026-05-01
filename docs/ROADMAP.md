@@ -183,3 +183,29 @@ Desktop direction:
 
 ```txt
 Wallet 1 NFTs        Shared Collection        Wallet 2 NFTs
+
+## Future Phase — Multi-Wallet Collector Profiles
+
+Goal:
+Allow a collector profile to represent one person across multiple wallets.
+
+Why:
+Many collectors use more than one wallet. A single wallet may not fully represent their collecting behavior.
+
+Conceptual model:
+- wallet = address
+- collector = one or more wallets
+
+The app should eventually support:
+- adding multiple wallets to one profile
+- merging holdings across wallets
+- deduping NFTs by contract + tokenId
+- preserving source wallet metadata
+- showing which wallets contributed to each signal
+- comparing collector profiles made from multiple wallets
+
+Guardrails:
+- do not build this before single-wallet profile and compare are stable
+- do not lose source-wallet context when merging
+- do not treat multiple wallets as verified identity unless the user supplies them
+- keep privacy/respect framing clear
