@@ -157,6 +157,72 @@ async function fetchOpenSeaJson<T>(
   return withTimeout(request, 5000, fallback);
 }
 
+type ProfileIdentity = {
+  displayName: string | null;
+  username: string | null;
+  avatarUrl: string | null;
+  bannerUrl: string | null;
+};
+
+async function fetchOpenSeaProfileIdentity(address: string): Promise<ProfileIdentity> {
+  if (!OPENSEA_API_KEY) {
+    return { displayName: null, username: null, avatarUrl: null, bannerUrl: null };
+  }
+
+  const data = await fetchOpenSeaJson<{
+    username?: string | null;
+    name?: string | null;
+    profile_image_url?: string | null;
+    banner_image_url?: string | null;
+    account?: {
+      username?: string | null;
+      name?: string | null;
+    } | null;
+    user?: {
+      username?: string | null;
+      name?: string | null;
+    } | null;
+  }>(`/accounts/${address}`, {});
+
+  const displayNameCandidates = [
+    data?.name,
+    data?.account?.name,
+    data?.username,
+    data?.account?.username,
+    data?.user?.name,
+    data?.user?.username,
+  ];
+  const displayName =
+    displayNameCandidates
+      .map((value) => String(value || "").trim())
+      .find(Boolean) || null;
+
+  const usernameCandidates = [data?.username, data?.account?.username, data?.user?.username];
+  const username =
+    usernameCandidates
+      .map((value) => String(value || "").trim())
+      .find(Boolean) || null;
+
+  return {
+    displayName,
+    username,
+    avatarUrl: data?.profile_image_url || null,
+    bannerUrl: data?.banner_image_url || null,
+  };
+}
+
+function buildFirstMintLabel(timestamp?: string): string | null {
+  const raw = String(timestamp || "").trim();
+  if (!raw) return null;
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 function sanitizeRawResponse(raw: string) {
   return raw.slice(0, 500).replace(/\s+/g, " ").trim();
 }
@@ -890,11 +956,16 @@ export async function GET(req: Request) {
     const profileStartMs = Date.now();
     const profile = buildWalletProfile(enrichedNFTs);
     const categoryGroups = buildCategoryGroups(enrichedNFTs);
-    const firstMint = await fetchFirstMint(wallet);
-    const acquisitionBreakdown = await fetchAcquisitionBreakdown(wallet);
+    const [firstMint, acquisitionBreakdown, profileIdentity] = await Promise.all([
+      fetchFirstMint(wallet),
+      fetchAcquisitionBreakdown(wallet),
+      fetchOpenSeaProfileIdentity(wallet),
+    ]);
+    const firstMintLabel = buildFirstMintLabel(firstMint?.timestamp);
     const enrichedProfile = {
       ...profile,
       firstMint,
+      firstMintLabel,
       acquisitionBreakdown,
     };
     const profileBuildMs = Date.now() - profileStartMs;
@@ -903,6 +974,7 @@ export async function GET(req: Request) {
     return NextResponse.json({
       wallet,
       profile: enrichedProfile,
+      profileIdentity,
       taste,
       sampleTopCollections: enrichedProfile.topCollections,
       sampleCategoryDistribution: enrichedProfile.categoryDistribution,
