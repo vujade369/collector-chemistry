@@ -906,6 +906,141 @@ async function fetchAcquisitionBreakdown(address: string): Promise<{
   }
 }
 
+
+function weiToEth(wei: string): string {
+  const value = String(wei || "").trim();
+  if (!value || !/^\d+$/.test(value)) return "0";
+  const full = value.padStart(19, "0");
+  const intPart = full.slice(0, -18).replace(/^0+(?=\d)/, "");
+  const fracPart = full.slice(-18).replace(/0+$/, "");
+  if (!fracPart) return intPart || "0";
+  return `${intPart || "0"}.${fracPart}`;
+}
+
+type MarketAttention = {
+  ethAmountLabel: string;
+  collectionName: string | null;
+  title: string | null;
+  imageUrl: string | null;
+  contractAddress: string | null;
+  tokenId: string | null;
+  openseaUrl: string | null;
+};
+
+function normalizeTokenIdForOpenSea(raw: unknown): string | null {
+  const value = String(raw || "").trim();
+  if (!value) return null;
+  if (/^0x[0-9a-f]+$/i.test(value)) {
+    const asInt = parseInt(value, 16);
+    if (!Number.isNaN(asInt)) return String(asInt);
+  }
+  if (/^\d+$/.test(value)) return value;
+  return null;
+}
+
+function pickTokenId(nft: WalletProfileNFT): string | null {
+  const candidate =
+    (nft as WalletProfileNFT & { tokenId?: unknown; identifier?: unknown; id?: unknown }).tokenId ??
+    (nft as WalletProfileNFT & { identifier?: unknown }).identifier ??
+    (nft as WalletProfileNFT & { id?: unknown }).id;
+  return normalizeTokenIdForOpenSea(candidate);
+}
+
+async function fetchMarketAttention(wallet: string, nfts: WalletProfileNFT[]): Promise<MarketAttention | null> {
+  if (!wallet || !OPENSEA_API_KEY) return null;
+
+  try {
+    const seen = new Set<string>();
+    const candidates: Array<{ slug: string; tokenId: string; nft: WalletProfileNFT }> = [];
+
+    for (const nft of nfts) {
+      if (candidates.length >= 8) break;
+      const slug = String(nft.displayCollectionSlug || "").trim();
+      const tokenId = pickTokenId(nft);
+      if (!slug || !tokenId) continue;
+      if (seen.has(slug)) continue;
+      seen.add(slug);
+      candidates.push({ slug, tokenId, nft });
+    }
+
+    if (!candidates.length) return null;
+
+    const task = async () => {
+      const responses = await Promise.all(
+        candidates.map(async ({ slug, tokenId, nft }) => {
+          const data = await fetchOpenSeaJson<{
+            price?: { value?: string; currency?: string };
+            protocol_data?: {
+              parameters?: {
+                offer?: Array<{ startAmount?: string }>;
+                consideration?: Array<{ token?: string; identifierOrCriteria?: string }>;
+              };
+            };
+            protocol_address?: string;
+          }>(`/offers/collection/${encodeURIComponent(slug)}/nfts/${encodeURIComponent(tokenId)}/best`, {});
+
+          const weiValue =
+            String(data?.price?.value || "").trim() ||
+            String(data?.protocol_data?.parameters?.offer?.[0]?.startAmount || "").trim();
+          if (!weiValue || !/^\d+$/.test(weiValue)) return null;
+
+          const eth = Number(weiToEth(weiValue));
+          if (!Number.isFinite(eth) || eth <= 0) return null;
+
+          const contractAddress = normalizeAddress(nft.contract?.address || data?.protocol_data?.parameters?.consideration?.[0]?.token || "");
+          const title = String(nft.name || nft.title || "").trim() || null;
+          const imageUrl = extractNFTImageUrl(nft) || null;
+          const collectionName = resolveCollectionName(nft) || null;
+
+          return {
+            eth,
+            weiValue,
+            contractAddress: contractAddress || null,
+            tokenId,
+            title,
+            imageUrl,
+            collectionName,
+          };
+        })
+      );
+
+      const valid = responses.filter((item): item is NonNullable<typeof item> => Boolean(item));
+      if (!valid.length) return null;
+      valid.sort((a, b) => b.eth - a.eth);
+      return valid[0];
+    };
+
+    const winner = await withTimeout(task(), 5000, null as Awaited<ReturnType<typeof task>>);
+    if (!winner) return null;
+
+    let finalTitle = winner.title;
+    let finalImageUrl = winner.imageUrl;
+    let finalCollectionName = winner.collectionName;
+
+    if ((!finalTitle || !finalImageUrl) && winner.contractAddress && winner.tokenId) {
+      const enriched = await fetchOpenSeaAsset(winner.contractAddress, winner.tokenId);
+      finalTitle = finalTitle || enriched.title || null;
+      finalImageUrl = finalImageUrl || enriched.imageUrl || null;
+      finalCollectionName = finalCollectionName || enriched.collectionName || null;
+    }
+
+    return {
+      ethAmountLabel: `${Number(weiToEth(winner.weiValue)).toFixed(3)} ETH`,
+      collectionName: finalCollectionName || null,
+      title: finalTitle || null,
+      imageUrl: finalImageUrl || null,
+      contractAddress: winner.contractAddress,
+      tokenId: winner.tokenId,
+      openseaUrl:
+        winner.contractAddress && winner.tokenId
+          ? `https://opensea.io/item/ethereum/${winner.contractAddress}/${winner.tokenId}`
+          : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function GET(req: Request) {
   const totalStartMs = Date.now();
   const { searchParams } = new URL(req.url);
@@ -968,10 +1103,11 @@ export async function GET(req: Request) {
     const profileStartMs = Date.now();
     const profile = buildWalletProfile(enrichedNFTs);
     const categoryGroups = buildCategoryGroups(enrichedNFTs);
-    const [firstMint, acquisitionBreakdown, profileIdentity] = await Promise.all([
+    const [firstMint, acquisitionBreakdown, profileIdentity, marketAttention] = await Promise.all([
       fetchFirstMint(wallet),
       fetchAcquisitionBreakdown(wallet),
       fetchOpenSeaProfileIdentity(wallet),
+      fetchMarketAttention(wallet, enrichedNFTs),
     ]);
     const firstMintLabel = buildFirstMintLabel(firstMint?.timestamp);
     const enrichedProfile = {
@@ -987,6 +1123,7 @@ export async function GET(req: Request) {
       wallet,
       profile: enrichedProfile,
       profileIdentity,
+      marketAttention,
       taste,
       sampleTopCollections: enrichedProfile.topCollections,
       sampleCategoryDistribution: enrichedProfile.categoryDistribution,
