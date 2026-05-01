@@ -223,6 +223,14 @@ function buildFirstMintLabel(timestamp?: string): string | null {
   });
 }
 
+function slugToDisplayName(slug: string): string {
+  if (!slug) return "";
+  return slug
+    .split("-")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
 function sanitizeRawResponse(raw: string) {
   return raw.slice(0, 500).replace(/\s+/g, " ").trim();
 }
@@ -692,10 +700,14 @@ async function fetchOpenSeaAsset(
 
   const payload = data.nft || {};
   const collection = payload.collection;
-  const collectionName =
+  const collectionNameRaw =
     typeof collection === "string"
       ? collection
       : collection?.name || "";
+  const collectionName =
+    collectionNameRaw.includes("-") && !collectionNameRaw.includes(" ")
+      ? slugToDisplayName(collectionNameRaw)
+      : collectionNameRaw;
 
   const title = payload.name || "";
   const imageUrl = normalizeImageUrl(
