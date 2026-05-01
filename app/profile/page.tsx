@@ -25,6 +25,7 @@ type WalletProfile = {
     collectionName?: string;
     imageUrl?: string;
   } | null;
+  firstMintLabel?: string | null;
   firstMint?: {
     nft?: {
       imageUrl?: string;
@@ -42,8 +43,16 @@ type WalletProfile = {
   } | null;
 };
 
+type ProfileIdentity = {
+  displayName: string | null;
+  username: string | null;
+  avatarUrl: string | null;
+  bannerUrl: string | null;
+};
+
 type ProfileResponse = {
   wallet: string;
+  profileIdentity?: ProfileIdentity;
   profile?: WalletProfile;
   taste?: Record<string, number>;
   categoryGroups?: Record<
@@ -315,7 +324,16 @@ export default function ProfilePage() {
 
   const profile = result?.profile || null;
   const resolvedWallet = result?.wallet || walletFromQuery;
-  const displayName = useMemo(() => toDisplayName(resolvedWallet), [resolvedWallet]);
+  const fallbackDisplayName = useMemo(() => toDisplayName(resolvedWallet), [resolvedWallet]);
+  const headerDisplayName = useMemo(() => {
+    const identity = result?.profileIdentity;
+    const display = String(identity?.displayName || "").trim();
+    if (display) return display;
+    const username = String(identity?.username || "").trim();
+    if (username) return username;
+    return fallbackDisplayName;
+  }, [result?.profileIdentity, fallbackDisplayName]);
+  const headerAvatarUrl = useMemo(() => normalizeImageUrl(result?.profileIdentity?.avatarUrl || ""), [result?.profileIdentity?.avatarUrl]);
   const behavioralReads = useMemo(() => (profile?.behavioralReads || []).filter(Boolean).slice(0, 3), [profile?.behavioralReads]);
 
   const returnPattern = useMemo(() => {
@@ -353,6 +371,7 @@ export default function ProfilePage() {
       collectionName: mint.nft.collectionName,
       date: formatMintDate(mint.timestamp),
       year: String(new Date(mint.timestamp).getFullYear()),
+      label: profile?.firstMintLabel || null,
     };
   }, [profile]);
 
@@ -381,11 +400,15 @@ export default function ProfilePage() {
               <div className="profile-id-top">
                 <div className="profile-id-main">
                   <div className="profile-avatar-fallback" aria-hidden="true">
-                    {displayName.slice(0, 1).toUpperCase()}
+                    {headerAvatarUrl ? (
+                      <img src={headerAvatarUrl} alt={headerDisplayName} className="profile-avatar-img" />
+                    ) : (
+                      headerDisplayName.slice(0, 1).toUpperCase()
+                    )}
                   </div>
                   <div>
                     <p className="profile-eyebrow">Collector profile</p>
-                    <h1 className="profile-display-name">{displayName}</h1>
+                    <h1 className="profile-display-name">{headerDisplayName}</h1>
                     <p className="profile-address">{resolvedWallet}</p>
                   </div>
                 </div>
@@ -394,7 +417,7 @@ export default function ProfilePage() {
               <div className="profile-stats-row">
                 <div className="profile-stat"><p className="profile-stat-value">{profile.totalNFTs || 0}</p><p className="profile-stat-label">Holdings indexed</p></div>
                 <div className="profile-stat"><p className="profile-stat-value">{totalCollections}</p><p className="profile-stat-label">Collections</p></div>
-                {firstMint?.year ? <div className="profile-stat"><p className="profile-stat-value">{firstMint.year}</p><p className="profile-stat-label">First mint</p></div> : null}
+                {(firstMint?.label || firstMint?.year) ? <div className="profile-stat"><p className="profile-stat-value">{firstMint.label || firstMint.year}</p><p className="profile-stat-label">First mint</p></div> : null}
               </div>
             </header>
 
