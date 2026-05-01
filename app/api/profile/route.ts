@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchWalletNFTs, WalletFetchError } from "@/lib/fetchWalletNFTs";
+import { fetchAndMergeWalletNFTs, fetchWalletNFTs, WalletFetchError } from "@/lib/fetchWalletNFTs";
 import {
   buildWalletProfile,
   normalizeOpenSeaCategory,
@@ -209,6 +209,20 @@ async function fetchOpenSeaProfileIdentity(address: string): Promise<ProfileIden
     avatarUrl: data?.profile_image_url || null,
     bannerUrl: data?.banner_image_url || null,
   };
+}
+
+async function resolveWalletToAddress(wallet: string): Promise<string> {
+  const value = wallet.trim();
+  if (!value) return "";
+  if (isEthAddress(value)) return value;
+  if (!OPENSEA_API_KEY) return value;
+
+  const resolved = await fetchOpenSeaJson<{ address?: string }>(
+    `/accounts/resolve/${encodeURIComponent(value)}`,
+    {}
+  );
+  const address = String(resolved?.address || "").trim();
+  return isEthAddress(address) ? address : value;
 }
 
 function buildFirstMintLabel(timestamp?: string): string | null {
@@ -976,19 +990,16 @@ function pickTokenId(nft: WalletProfileNFT): string | null {
 }
 
 async function fetchMarketAttention(wallet: string, nfts: WalletProfileNFT[]): Promise<MarketAttention | null> {
-  if (!wallet || !OPENSEA_API_KEY) return null;
+  if (!OPENSEA_API_KEY || !nfts.length) return null;
 
   try {
-    const seen = new Set<string>();
     const candidates: Array<{ slug: string; tokenId: string; nft: WalletProfileNFT }> = [];
 
     for (const nft of nfts) {
-      if (candidates.length >= 8) break;
+      if (candidates.length >= 24) break;
       const slug = String(nft.displayCollectionSlug || "").trim();
       const tokenId = pickTokenId(nft);
       if (!slug || !tokenId) continue;
-      if (seen.has(slug)) continue;
-      seen.add(slug);
       candidates.push({ slug, tokenId, nft });
     }
 
@@ -1033,7 +1044,9 @@ async function fetchMarketAttention(wallet: string, nfts: WalletProfileNFT[]): P
         })
       );
 
-      const valid = responses.filter((item): item is NonNullable<typeof item> => Boolean(item));
+      const valid = responses.filter(
+        (item): item is NonNullable<typeof item> => Boolean(item)
+      );
       if (!valid.length) return null;
       valid.sort((a, b) => b.eth - a.eth);
       return valid[0];
@@ -1074,28 +1087,52 @@ export async function GET(req: Request) {
   const totalStartMs = Date.now();
   const { searchParams } = new URL(req.url);
   const walletInput = searchParams.get("wallet")?.trim() || "";
+  const walletInputs = walletInput.split(",").map((v) => v.trim()).filter(Boolean).slice(0, 5);
   const categoryCapInput = Number(searchParams.get("categoryCap"));
   const categoryCap =
     Number.isFinite(categoryCapInput) && categoryCapInput > 0
       ? Math.floor(categoryCapInput)
       : DEFAULT_COLLECTION_CATEGORY_CAP;
-  const resolved = resolveWalletInput(walletInput);
-
-  if (!resolved.ok) {
+  if (walletInputs.length === 0) {
     return NextResponse.json(
       {
-        error: resolved.error,
+        error: "Missing wallet",
         errorType: "INVALID_WALLET_INPUT",
         walletInput,
-        resolverStage: resolved.resolverStage,
+        resolverStage: "input_parse",
         upstreamStatus: null,
-        message: resolved.error,
+        message: "Missing wallet",
       },
       { status: 400 }
     );
   }
 
-  const wallet = resolved.wallet;
+  const resolvedWallets = walletInputs.map(resolveWalletInput);
+  const validWallets = Array.from(
+    new Set(
+      resolvedWallets
+        .filter(
+          (w): w is Extract<ResolveResult, { ok: true }> => w.ok
+        )
+        .map((w) => w.wallet)
+    )
+  );
+  const walletErrors = resolvedWallets.filter((w) => !w.ok);
+  if (validWallets.length === 0) {
+    const first = walletErrors[0];
+    return NextResponse.json(
+      {
+        error: first?.error || "Invalid wallet input",
+        errorType: "INVALID_WALLET_INPUT",
+        walletInput,
+        resolverStage: first?.resolverStage || "input_parse",
+        upstreamStatus: null,
+        message: first?.error || "Invalid wallet input",
+      },
+      { status: 400 }
+    );
+  }
+  const wallet = validWallets[0];
   const alchemyConfigured = Boolean(ALCHEMY_API_KEY);
   const alchemyBaseUrl = ALCHEMY_API_KEY
     ? `https://eth-mainnet.g.alchemy.com/nft/v3/<redacted>`
@@ -1121,7 +1158,10 @@ export async function GET(req: Request) {
     }
 
     const fetchStartMs = Date.now();
-    const nfts = await fetchWalletNFTs<WalletProfileNFT>(wallet, ALCHEMY_API_KEY);
+    const { mergedNFTs, deduplicatedCount, failedWallets } = validWallets.length > 1
+      ? await fetchAndMergeWalletNFTs<WalletProfileNFT>(validWallets, ALCHEMY_API_KEY)
+      : { mergedNFTs: await fetchWalletNFTs<WalletProfileNFT>(wallet, ALCHEMY_API_KEY), deduplicatedCount: 0, failedWallets: [] as string[] };
+    const nfts = mergedNFTs;
     const taste = buildTasteDNA(nfts);
     const fetchNFTsMs = Date.now() - fetchStartMs;
 
@@ -1132,10 +1172,23 @@ export async function GET(req: Request) {
     const profileStartMs = Date.now();
     const profile = buildWalletProfile(enrichedNFTs);
     const categoryGroups = buildCategoryGroups(enrichedNFTs);
+    const earliestMintTask = Promise.all(validWallets.map((entry) => fetchFirstMint(entry)))
+      .then((results) =>
+        results
+          .filter(
+            (item): item is NonNullable<typeof item> =>
+              Boolean(item?.timestamp)
+          )
+          .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())[0] || null
+      );
+    const primaryIdentityTask = resolveWalletToAddress(wallet).then((resolvedWalletAddress) =>
+      fetchOpenSeaProfileIdentity(resolvedWalletAddress || wallet)
+    );
+
     const [firstMint, acquisitionBreakdown, profileIdentity, marketAttention] = await Promise.all([
-      fetchFirstMint(wallet),
+      earliestMintTask,
       fetchAcquisitionBreakdown(wallet),
-      fetchOpenSeaProfileIdentity(wallet),
+      primaryIdentityTask,
       fetchMarketAttention(wallet, enrichedNFTs),
     ]);
     const firstMintLabel = buildFirstMintLabel(firstMint?.timestamp);
@@ -1150,6 +1203,10 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       wallet,
+      wallets: validWallets,
+      walletCount: validWallets.length,
+      deduplicatedCount,
+      failedWallets,
       profile: enrichedProfile,
       profileIdentity,
       marketAttention,
@@ -1174,7 +1231,12 @@ export async function GET(req: Request) {
       diagnostics: {
         walletInput,
         resolvedWallet: wallet,
-        resolverStage: resolved.resolverStage,
+        resolverStage:
+          validWallets.length > 1
+            ? "direct_input"
+            : resolvedWallets[0]?.ok
+              ? resolvedWallets[0].resolverStage
+              : "input_parse",
         alchemyConfigured,
         alchemyBaseUrl,
       },
