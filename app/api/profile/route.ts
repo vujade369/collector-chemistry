@@ -662,26 +662,44 @@ function pickTokenId(nft: WalletProfileNFT): string | null {
   return normalizeTokenIdForOpenSea(candidate);
 }
 
-async function fetchMarketAttention(wallet: string, nfts: WalletProfileNFT[]): Promise<MarketAttention | null> {
+async function fetchMarketAttention(nfts: WalletProfileNFT[]): Promise<MarketAttention | null> {
   if (!OPENSEA_API_KEY || !nfts.length) return null;
 
   try {
+    const slugCache = new Map<string, string | null>();
+    const seenSlugs = new Set<string>();
     const candidates: Array<{ slug: string; tokenId: string; nft: WalletProfileNFT }> = [];
 
     for (const nft of nfts) {
-  if (candidates.length >= 50) break;
-  let slug = String(nft.displayCollectionSlug || "").trim();
-  const tokenId = pickTokenId(nft);
-  if (!tokenId) continue;
-  if (!slug) {
-    const addr = String(nft.contract?.address || "").trim().toLowerCase();
-    if (!addr) continue;
-    const d = await fetchOpenSeaJson<{ collection?: string }>(`/chain/ethereum/contract/${addr}`, {});
-    slug = String(d?.collection || "").trim();
-    if (!slug) continue;
-  }
-  candidates.push({ slug, tokenId, nft });
-}
+      if (candidates.length >= 8) break;
+      let slug = String(nft.displayCollectionSlug || "").trim();
+      const tokenId = pickTokenId(nft);
+      if (!tokenId) continue;
+      if (!slug) {
+        const contractAddress = normalizeAddress(nft.contract?.address || "");
+        if (contractAddress) {
+          if (slugCache.has(contractAddress)) {
+            slug = String(slugCache.get(contractAddress) || "");
+          } else {
+            const contractData = await fetchOpenSeaJson<OpenSeaContractResponse>(
+              `/chain/ethereum/contract/${contractAddress}`,
+              {} as OpenSeaContractResponse
+            );
+            const resolvedSlug = String(
+              contractData?.collection ||
+              contractData?.slug ||
+              contractData?.collections?.[0]?.slug ||
+              ""
+            ).trim();
+            slugCache.set(contractAddress, resolvedSlug || null);
+            slug = resolvedSlug;
+          }
+        }
+      }
+      if (!slug || seenSlugs.has(slug)) continue;
+      seenSlugs.add(slug);
+      candidates.push({ slug, tokenId, nft });
+    }
 
     if (!candidates.length) return null;
 
@@ -720,7 +738,9 @@ async function fetchMarketAttention(wallet: string, nfts: WalletProfileNFT[]): P
         })
       );
 
-      const valid = responses.filter((item): item is NonNullable<typeof item> => Boolean(item));
+      const valid = responses.filter(
+        (item): item is NonNullable<typeof item> => Boolean(item)
+      );
       if (!valid.length) return null;
       valid.sort((a, b) => b.eth - a.eth);
       return valid[0];
@@ -766,20 +786,31 @@ export async function GET(req: Request) {
     Number.isFinite(categoryCapInput) && categoryCapInput > 0
       ? Math.floor(categoryCapInput)
       : DEFAULT_COLLECTION_CATEGORY_CAP;
-
   if (walletInputs.length === 0) {
     return NextResponse.json(
-      { error: "Missing wallet", errorType: "INVALID_WALLET_INPUT", walletInput, resolverStage: "input_parse", upstreamStatus: null, message: "Missing wallet" },
+      {
+        error: "Missing wallet",
+        errorType: "INVALID_WALLET_INPUT",
+        walletInput,
+        resolverStage: "input_parse",
+        upstreamStatus: null,
+        message: "Missing wallet",
+      },
       { status: 400 }
     );
   }
 
   const resolvedWallets = walletInputs.map(resolveWalletInput);
-  const validWallets = Array.from(new Set(
-    resolvedWallets.filter((w): w is Extract<ResolveResult, {ok:true}> => w.ok).map((w) => w.wallet)
-  ));
+  const validWallets = Array.from(
+    new Set(
+      resolvedWallets
+        .filter(
+          (w): w is Extract<ResolveResult, { ok: true }> => w.ok
+        )
+        .map((w) => w.wallet)
+    )
+  );
   const walletErrors = resolvedWallets.filter((w) => !w.ok);
-
   if (validWallets.length === 0) {
     const first = walletErrors[0];
     return NextResponse.json(
@@ -794,7 +825,6 @@ export async function GET(req: Request) {
       { status: 400 }
     );
   }
-
   const wallet = validWallets[0];
   const alchemyConfigured = Boolean(ALCHEMY_API_KEY);
   const alchemyBaseUrl = ALCHEMY_API_KEY ? `https://eth-mainnet.g.alchemy.com/nft/v3/<redacted>` : null;
@@ -830,29 +860,41 @@ export async function GET(req: Request) {
     const profileStartMs = Date.now();
     const profile = buildWalletProfile(enrichedNFTs);
     const categoryGroups = buildCategoryGroups(enrichedNFTs);
-
-    const earliestMintTask = Promise.all(validWallets.map((entry) => fetchFirstMint(entry)))
+    const earliestMintTask = Promise.all(
+      validWallets.map(async (entry) => {
+        const resolvedAddress = await resolveWalletToAddress(entry);
+        return fetchFirstMint(resolvedAddress || entry);
+      })
+    )
       .then((results) =>
         results
-          .filter((item): item is NonNullable<typeof item> => Boolean(item?.timestamp))
+          .filter(
+            (item): item is NonNullable<typeof item> =>
+              Boolean(item?.timestamp)
+          )
           .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())[0] || null
       );
-
     const primaryIdentityTask = resolveWalletToAddress(wallet).then((resolvedWalletAddress) =>
       fetchOpenSeaProfileIdentity(resolvedWalletAddress || wallet)
     );
 
-    // Run market attention independently per wallet then pick the highest bid
     const marketAttentionTask = Promise.all(
-      validWallets.map((w) => fetchMarketAttention(w, enrichedNFTs))
+      validWallets.map((entry) => {
+        const walletNfts = enrichedNFTs.filter(
+          (nft) => normalizeAddress(nft.sourceWallet) === normalizeAddress(entry)
+        );
+        return fetchMarketAttention(walletNfts);
+      })
     ).then((results) => {
-      const valid = results.filter((r): r is NonNullable<typeof r> => r !== null);
-      if (!valid.length) return null;
-      return valid.reduce((best, current) => {
-        const bestEth = parseFloat(best.ethAmountLabel);
-        const currentEth = parseFloat(current.ethAmountLabel);
-        return currentEth > bestEth ? current : best;
-      });
+      const best = results
+        .filter((item): item is NonNullable<typeof item> => Boolean(item))
+        .map((item) => ({
+          item,
+          eth: Number(String(item.ethAmountLabel).replace(" ETH", "")),
+        }))
+        .filter((entry) => Number.isFinite(entry.eth))
+        .sort((a, b) => b.eth - a.eth)[0];
+      return best?.item || null;
     });
 
     const [firstMint, acquisitionBreakdown, profileIdentity, marketAttention] = await Promise.all([
@@ -892,11 +934,12 @@ export async function GET(req: Request) {
       diagnostics: {
         walletInput,
         resolvedWallet: wallet,
-        resolverStage: validWallets.length > 1
-          ? "direct_input"
-          : resolvedWallets[0]?.ok
-          ? resolvedWallets[0].resolverStage
-          : "input_parse",
+        resolverStage:
+          validWallets.length > 1
+            ? "direct_input"
+            : resolvedWallets[0]?.ok
+              ? resolvedWallets[0].resolverStage
+              : "input_parse",
         alchemyConfigured,
         alchemyBaseUrl,
       },
