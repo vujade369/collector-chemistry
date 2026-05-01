@@ -3,6 +3,7 @@
 import React, { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import "./profile.css";
+import WalletConverter from "@/components/profile/WalletConverter";
 
 type TopCollection = {
   name: string;
@@ -543,6 +544,8 @@ export default function ProfilePage() {
               <button className="profile-btn-primary" disabled={!canCompare} type="submit">Compare</button>
             </form>
           </section>
+
+          <WalletConverter wallet={resolvedWallet} />
 
         </>)}
       </div>
