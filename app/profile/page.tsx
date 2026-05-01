@@ -356,7 +356,7 @@ export default function ProfilePage() {
                         <p className="profile-return-count">{marketAttention.collectionName}</p>
                       )}
                       <p className="profile-signal-bid">
-                        <span className="profile-bid-amount">{marketAttention.ethAmountLabel} ETH</span>
+                        <span className="profile-bid-amount">{marketAttention.ethAmountLabel}</span>
                         <span className="profile-bid-label">current best offer</span>
                       </p>
                     </div>
