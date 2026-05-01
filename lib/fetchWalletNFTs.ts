@@ -128,26 +128,52 @@ export async function fetchWalletNFTs<T extends WalletOwnerNFT = WalletOwnerNFT>
     }
 
     const data = await res.json();
-    const pageNfts = ((data.ownedNfts || []) as T[]).filter(
-      (nft) => nft?.spamInfo?.isSpam !== "true"
-    );
+    const pageNfts = (data.ownedNfts || []) as T[];
 
     allNfts.push(...pageNfts);
     pageKey = data.pageKey;
   } while (pageKey);
 
-  const visibleKeys = await fetchOpenSeaVisibleTokenKeys(owner);
+  const resolvedAddress = await resolveEnsToAddress(owner);
+  const visibleKeys = await fetchOpenSeaVisibleTokenKeys(resolvedAddress);
   if (!visibleKeys) return allNfts;
 
   return allNfts.filter((nft) => {
     const key = getNftKey(nft);
-    return key ? visibleKeys.has(key) : true;
+    if (!key) return true;
+    return visibleKeys.has(key);
   });
 }
 
 const OPENSEA_API_KEY = process.env.OPENSEA_API_KEY;
 const OPENSEA_BASE_URL = "https://api.opensea.io/api/v2";
 const OPENSEA_MAX_PAGES = 40;
+
+const OPENSEA_API_KEY_LOCAL = process.env.OPENSEA_API_KEY;
+const OPENSEA_BASE_URL_LOCAL = "https://api.opensea.io/api/v2";
+
+async function resolveEnsToAddress(ensOrAddress: string): Promise<string> {
+  if (isEthAddress(ensOrAddress)) return ensOrAddress;
+  if (!OPENSEA_API_KEY_LOCAL) return ensOrAddress;
+  try {
+    const res = await fetch(
+      `${OPENSEA_BASE_URL_LOCAL}/accounts/resolve/${encodeURIComponent(ensOrAddress)}`,
+      {
+        cache: "no-store",
+        headers: {
+          accept: "application/json",
+          "x-api-key": OPENSEA_API_KEY_LOCAL,
+        },
+      }
+    );
+    if (!res.ok) return ensOrAddress;
+    const data = await res.json();
+    const resolved = String(data?.address || "").trim();
+    return isEthAddress(resolved) ? resolved : ensOrAddress;
+  } catch {
+    return ensOrAddress;
+  }
+}
 
 type OpenSeaAccountNFT = {
   identifier?: string | number;
