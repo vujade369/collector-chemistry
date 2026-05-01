@@ -21,17 +21,10 @@ type WalletProfile = {
   anchorCollection?: { name: string; count: number; imageUrl?: string } | null;
   topCollections?: TopCollection[];
   totalNFTs?: number;
-  signalPiece?: {
-    collectionName?: string;
-    imageUrl?: string;
-  } | null;
+  signalPiece?: { collectionName?: string; imageUrl?: string } | null;
   firstMintLabel?: string | null;
   firstMint?: {
-    nft?: {
-      imageUrl?: string;
-      title?: string;
-      collectionName?: string;
-    };
+    nft?: { imageUrl?: string; title?: string; collectionName?: string };
     timestamp?: string;
   } | null;
   acquisitionBreakdown?: {
@@ -50,44 +43,39 @@ type ProfileIdentity = {
   bannerUrl: string | null;
 };
 
+type MarketAttention = {
+  ethAmountLabel: string;
+  collectionName: string | null;
+  title: string | null;
+  imageUrl: string | null;
+  contractAddress: string | null;
+  tokenId: string | null;
+  openseaUrl: string | null;
+} | null;
+
 type ProfileResponse = {
   wallet: string;
   profileIdentity?: ProfileIdentity;
   profile?: WalletProfile;
   taste?: Record<string, number>;
-  categoryGroups?: Record<
-    string,
-    {
-      totalCount: number;
-      previews: Array<{
-        title: string;
-        collectionName: string;
-        imageUrl: string;
-      }>;
-      collections: Array<{
-        name: string;
-        count: number;
-      }>;
-    }
-  >;
+  marketAttention?: MarketAttention;
+  categoryGroups?: Record<string, {
+    totalCount: number;
+    previews: Array<{ title: string; collectionName: string; imageUrl: string }>;
+    collections: Array<{ name: string; count: number }>;
+  }>;
 };
 
-type TasteSlice = {
-  label: string;
-  value: number;
-};
+type TasteSlice = { label: string; value: number };
 
 function isValidInput(value: string): boolean {
   const trimmed = value.trim();
-  const isEthAddress = /^0x[a-fA-F0-9]{40}$/.test(trimmed);
-  const isEns = trimmed.endsWith(".eth");
-  return isEthAddress || isEns;
+  return /^0x[a-fA-F0-9]{40}$/.test(trimmed) || trimmed.endsWith(".eth");
 }
 
 function shortenAddress(value: string): string {
-  if (!value) return "";
-  if (value.length < 14) return value;
-  return `${value.slice(0, 6)}...${value.slice(-4)}`;
+  if (!value || value.length < 14) return value;
+  return value.slice(0, 6) + "..." + value.slice(-4);
 }
 
 function toDisplayName(wallet: string): string {
@@ -97,7 +85,7 @@ function toDisplayName(wallet: string): string {
   return shortenAddress(trimmed);
 }
 
-function normalizeImageUrl(url?: string) {
+function normalizeImageUrl(url?: string | null) {
   if (!url) return "";
   if (url.startsWith("ipfs://ipfs/")) return url.replace("ipfs://ipfs/", "https://ipfs.io/ipfs/");
   if (url.startsWith("ipfs://")) return url.replace("ipfs://", "https://ipfs.io/ipfs/");
@@ -109,174 +97,111 @@ function formatMintDate(timestamp: string) {
   if (!timestamp) return "";
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    year: "numeric",
-  });
+  return date.toLocaleDateString("en-US", { month: "short", year: "numeric" });
 }
 
 function buildTasteSlices(taste: Record<string, number>, maxSegments = 6): TasteSlice[] {
-  const entries = Object.entries(taste || {})
-    .map(([label, value]) => ({ label, value: Number(value) || 0 }))
-    .filter((entry) => entry.value > 0)
-    .sort((a, b) => b.value - a.value);
-
   const merged = new Map<string, number>();
-  for (const entry of entries) {
-    merged.set(entry.label, (merged.get(entry.label) || 0) + entry.value);
+  for (const [label, value] of Object.entries(taste || {})) {
+    if (Number(value) > 0) merged.set(label, (merged.get(label) || 0) + Number(value));
   }
   const normalized = [...merged.entries()]
     .map(([label, value]) => ({ label, value }))
     .sort((a, b) => b.value - a.value);
 
   if (normalized.length <= maxSegments) {
-    const nonOther = normalized.filter((entry) => entry.label !== "Other");
-    const other = normalized.filter((entry) => entry.label === "Other");
-    return [...nonOther, ...other];
+    return [...normalized.filter(e => e.label !== "Other"), ...normalized.filter(e => e.label === "Other")];
   }
-
-  const nonOther = normalized.filter((entry) => entry.label !== "Other");
-  const otherTotal = normalized
-    .filter((entry) => entry.label === "Other")
-    .reduce((sum, entry) => sum + entry.value, 0);
+  const nonOther = normalized.filter(e => e.label !== "Other");
+  const otherTotal = normalized.filter(e => e.label === "Other").reduce((s, e) => s + e.value, 0);
   const head = nonOther.slice(0, maxSegments - 1);
-  const tailTotal =
-    nonOther.slice(maxSegments - 1).reduce((sum, entry) => sum + entry.value, 0) + otherTotal;
-  if (tailTotal <= 0) return head;
-  return [...head, { label: "Other", value: tailTotal }];
+  const tailTotal = nonOther.slice(maxSegments - 1).reduce((s, e) => s + e.value, 0) + otherTotal;
+  return tailTotal > 0 ? [...head, { label: "Other", value: tailTotal }] : head;
 }
 
-function polarToCartesian(cx: number, cy: number, radius: number, angleDeg: number) {
-  const rad = ((angleDeg - 90) * Math.PI) / 180;
-  return {
-    x: cx + radius * Math.cos(rad),
-    y: cy + radius * Math.sin(rad),
-  };
+function polarToCartesian(cx: number, cy: number, r: number, deg: number) {
+  const rad = ((deg - 90) * Math.PI) / 180;
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
 }
 
-function describeArcPath(cx: number, cy: number, radius: number, startAngle: number, endAngle: number) {
-  const start = polarToCartesian(cx, cy, radius, startAngle);
-  const end = polarToCartesian(cx, cy, radius, endAngle);
-  const largeArcFlag = endAngle - startAngle > 180 ? 1 : 0;
-  return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${end.x} ${end.y}`;
-}
-
-function hexToRgb(hex: string) {
-  const clean = hex.replace("#", "");
-  const full = clean.length === 3 ? clean.split("").map((x) => `${x}${x}`).join("") : clean;
-  const int = Number.parseInt(full, 16);
-  return {
-    r: (int >> 16) & 255,
-    g: (int >> 8) & 255,
-    b: int & 255,
-  };
+function arcPath(cx: number, cy: number, r: number, s: number, e: number) {
+  const start = polarToCartesian(cx, cy, r, s);
+  const end = polarToCartesian(cx, cy, r, e);
+  return `M ${start.x} ${start.y} A ${r} ${r} 0 ${e - s > 180 ? 1 : 0} 1 ${end.x} ${end.y}`;
 }
 
 function toRgba(hex: string, alpha: number) {
-  const { r, g, b } = hexToRgb(hex);
-  return `rgba(${r}, ${g}, ${b}, ${Math.max(0, Math.min(alpha, 1))})`;
+  const c = hex.replace("#", "");
+  const f = c.length === 3 ? c.split("").map(x => x + x).join("") : c;
+  const n = parseInt(f, 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${Math.max(0, Math.min(alpha, 1))})`;
 }
 
-function TasteSignature({ title, slices }: { title: string; slices: TasteSlice[] }) {
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+function TasteSignature({ slices }: { slices: TasteSlice[] }) {
+  const [hovered, setHovered] = useState<number | null>(null);
   const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  const toneHex = "#ff3399";
-  const total = slices.reduce((sum, slice) => sum + slice.value, 0) || 1;
-  const size = 188;
-  const cx = size / 2;
-  const cy = size / 2;
-  const radius = 64;
-  const baseStrokeWidth = 18;
-  const startAngle = -100;
-  const gapAngle = slices.length > 1 ? 1.2 : 0;
+  const total = slices.reduce((s, x) => s + x.value, 0) || 1;
+  const cx = 94; const cy = 94; const r = 64;
+  const base = 18; const gap = slices.length > 1 ? 1.2 : 0;
   const rankOpacity = [1, 0.74, 0.56, 0.4];
+  const ranked = [...slices].filter(s => s.label !== "Other").sort((a, b) => b.value - a.value);
 
-  const rankedNonOther = [...slices].filter((slice) => slice.label !== "Other").sort((a, b) => b.value - a.value);
-
-  let currentAngle = startAngle;
-  const arcs = slices.map((slice, index) => {
-    const rawSweep = (slice.value / total) * 360;
-    const adjustedSweep = Math.max(rawSweep - gapAngle, 0.85);
-    const arcStart = currentAngle + gapAngle / 2;
-    const arcEnd = arcStart + adjustedSweep;
-    currentAngle += rawSweep;
-
-    const rank = rankedNonOther.findIndex((item) => item.label === slice.label) + 1;
+  let angle = -100;
+  const arcs = slices.map((slice, i) => {
+    const sweep = (slice.value / total) * 360;
+    const adj = Math.max(sweep - gap, 0.85);
+    const s = angle + gap / 2;
+    const e = s + adj;
+    angle += sweep;
+    const rank = ranked.findIndex(x => x.label === slice.label) + 1;
     const isOther = slice.label === "Other";
-    const baseOpacity = isOther ? 0.28 : rank > 0 ? rankOpacity[Math.min(rank - 1, rankOpacity.length - 1)] || 0.26 : 0.26;
-    const isHovered = hoveredIndex === index;
-    const isDimmed = hoveredIndex !== null && !isHovered;
-    const opacity = isHovered ? 1 : isDimmed ? Math.max(0.14, baseOpacity * 0.45) : baseOpacity;
-    const baseRankStrokeWidth = rank === 1 ? baseStrokeWidth + 1.2 : baseStrokeWidth;
-    const strokeWidth = isHovered ? baseRankStrokeWidth + 3 : baseRankStrokeWidth;
-
-    return {
-      index,
-      label: slice.label,
-      value: Math.round(slice.value),
-      path: describeArcPath(cx, cy, radius, arcStart, arcEnd),
-      stroke: toRgba(toneHex, opacity),
-      strokeWidth,
-    };
+    const baseOp = isOther ? 0.28 : rankOpacity[Math.min(rank - 1, rankOpacity.length - 1)] || 0.26;
+    const isH = hovered === i;
+    const isDim = hovered !== null && !isH;
+    const op = isH ? 1 : isDim ? Math.max(0.14, baseOp * 0.45) : baseOp;
+    const sw = isH ? (rank === 1 ? base + 4.2 : base + 3) : rank === 1 ? base + 1.2 : base;
+    return { i, label: slice.label, value: Math.round(slice.value), path: arcPath(cx, cy, r, s, e), stroke: toRgba("#ff3399", op), sw };
   });
 
-  const orderedArcs = hoveredIndex === null ? arcs : [...arcs.filter((arc) => arc.index !== hoveredIndex), ...arcs.filter((arc) => arc.index === hoveredIndex)];
+  const ordered = hovered === null ? arcs : [...arcs.filter(a => a.i !== hovered), ...arcs.filter(a => a.i === hovered)];
 
-  const legendRows = (() => {
-    const bucket = new Map<string, number>();
-    for (const slice of slices) {
-      bucket.set(slice.label, (bucket.get(slice.label) || 0) + slice.value);
-    }
-    const merged = [...bucket.entries()].map(([label, value]) => ({ label, value }));
-    const nonOther = merged.filter((entry) => entry.label !== "Other").sort((a, b) => b.value - a.value);
-    const other = merged.filter((entry) => entry.label === "Other");
-    return [...nonOther, ...other].slice(0, 5);
+  const legend = (() => {
+    const b = new Map<string, number>();
+    for (const s of slices) b.set(s.label, (b.get(s.label) || 0) + s.value);
+    const m = [...b.entries()].map(([label, value]) => ({ label, value }));
+    return [...m.filter(e => e.label !== "Other").sort((a, b) => b.value - a.value), ...m.filter(e => e.label === "Other")].slice(0, 5);
   })();
 
-  const leadSlice = legendRows[0] || null;
-  const centerLabel = hoveredIndex !== null ? slices[hoveredIndex]?.label : leadSlice?.label;
-  const centerValue = hoveredIndex !== null ? Math.round(slices[hoveredIndex]?.value || 0) : Math.round(leadSlice?.value || 0);
+  const lead = legend[0];
+  const cLabel = hovered !== null ? slices[hovered]?.label : lead?.label;
+  const cVal = hovered !== null ? Math.round(slices[hovered]?.value || 0) : Math.round(lead?.value || 0);
 
   return (
-    <div className="profile-panel profile-panel-glow">
-      <p className="profile-section-label">{title}</p>
-      <div className="profile-taste-signature">
-        <svg viewBox={`0 0 ${size} ${size}`} role="img" aria-label={`${title} taste signature`} className="profile-taste-chart">
-          <circle cx={cx} cy={cy} r={radius} fill="none" stroke="#1b1b1b" strokeWidth={baseStrokeWidth} />
-          {orderedArcs.map((arc, index) => (
-            <path
-              key={`${arc.label}-${arc.index}`}
-              d={arc.path}
-              fill="none"
-              stroke={arc.stroke}
-              strokeWidth={arc.strokeWidth}
-              strokeLinecap="butt"
-              style={{ opacity: mounted ? 1 : 0, transition: `opacity 0.6s ease ${index * 0.1}s` }}
-              onMouseEnter={() => setHoveredIndex(arc.index)}
-              onMouseLeave={() => setHoveredIndex(null)}
-            />
+    <div className="taste-layout">
+      <div className="taste-donut-wrap">
+        <svg viewBox="0 0 188 188" className="profile-taste-chart" role="img" aria-label="Taste signature">
+          <circle cx={cx} cy={cy} r={r} fill="none" stroke="#1b1b1b" strokeWidth={base} />
+          {ordered.map((a, idx) => (
+            <path key={`${a.label}-${a.i}`} d={a.path} fill="none" stroke={a.stroke} strokeWidth={a.sw} strokeLinecap="butt"
+              style={{ opacity: mounted ? 1 : 0, transition: `opacity 0.6s ease ${idx * 0.1}s` }}
+              onMouseEnter={() => setHovered(a.i)} onMouseLeave={() => setHovered(null)} />
           ))}
-          <circle cx={cx} cy={cy} r={radius - baseStrokeWidth / 2 + 1} fill="#111" />
-          {centerLabel ? (
-            <>
-              <text x={cx} y={cy - 4} textAnchor="middle" className="profile-taste-center-label">{centerLabel}</text>
-              <text x={cx} y={cy + 13} textAnchor="middle" className="profile-taste-center-value">{centerValue}%</text>
-            </>
-          ) : null}
+          <circle cx={cx} cy={cy} r={r - base / 2 + 1} fill="#111" />
+          {cLabel && <>
+            <text x={cx} y={cy - 4} textAnchor="middle" className="profile-taste-center-label">{cLabel}</text>
+            <text x={cx} y={cy + 13} textAnchor="middle" className="profile-taste-center-value">{cVal}%</text>
+          </>}
         </svg>
-        <div className="profile-taste-legend">
-          {legendRows.map((row) => (
-            <div key={`legend-${row.label}`} className="profile-taste-label-row">
-              <span className="profile-taste-label">{row.label}</span>
-              <span className="profile-taste-pct">{Math.round(row.value)}%</span>
-            </div>
-          ))}
-        </div>
+      </div>
+      <div className="taste-legend-col">
+        {legend.map((row, i) => (
+          <div key={`leg-${row.label}`} className={`taste-legend-row${i === 0 ? " taste-legend-row--lead" : ""}`}>
+            <span className="taste-legend-label">{row.label}</span>
+            <span className="taste-legend-pct">{Math.round(row.value)}%</span>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -296,28 +221,18 @@ export default function ProfilePage() {
   useEffect(() => {
     async function load() {
       if (!walletFromQuery || !isValidInput(walletFromQuery)) {
-        setError("Nothing found for this wallet.");
-        setResult(null);
-        return;
+        setError("Nothing found for this wallet."); setResult(null); return;
       }
-      setLoading(true);
-      setError("");
-      setResult(null);
+      setLoading(true); setError(""); setResult(null);
       try {
         const res = await fetch(`/api/profile?wallet=${encodeURIComponent(walletFromQuery)}`);
-        const json = (await res.json()) as ProfileResponse | { error?: string };
+        const json = await res.json() as ProfileResponse | { error?: string };
         if (!res.ok || !("profile" in json) || !json.profile) {
-          setError("Nothing found for this wallet.");
-          setResult(null);
-          return;
+          setError("Nothing found for this wallet."); setResult(null); return;
         }
         setResult(json as ProfileResponse);
-      } catch {
-        setError("Nothing found for this wallet.");
-        setResult(null);
-      } finally {
-        setLoading(false);
-      }
+      } catch { setError("Nothing found for this wallet."); setResult(null); }
+      finally { setLoading(false); }
     }
     void load();
   }, [walletFromQuery]);
@@ -325,63 +240,49 @@ export default function ProfilePage() {
   const profile = result?.profile || null;
   const resolvedWallet = result?.wallet || walletFromQuery;
   const fallbackDisplayName = useMemo(() => toDisplayName(resolvedWallet), [resolvedWallet]);
+
   const headerDisplayName = useMemo(() => {
-    const identity = result?.profileIdentity;
-    const display = String(identity?.displayName || "").trim();
-    if (display) return display;
-    const username = String(identity?.username || "").trim();
-    if (username) return username;
-    return fallbackDisplayName;
+    const id = result?.profileIdentity;
+    return String(id?.displayName || "").trim() || String(id?.username || "").trim() || fallbackDisplayName;
   }, [result?.profileIdentity, fallbackDisplayName]);
-  const headerAvatarUrl = useMemo(() => normalizeImageUrl(result?.profileIdentity?.avatarUrl || ""), [result?.profileIdentity?.avatarUrl]);
+
+  const headerAvatarUrl = useMemo(() => normalizeImageUrl(result?.profileIdentity?.avatarUrl), [result?.profileIdentity?.avatarUrl]);
   const behavioralReads = useMemo(() => (profile?.behavioralReads || []).filter(Boolean).slice(0, 3), [profile?.behavioralReads]);
 
-  const returnPattern = useMemo(() => {
-    if (!profile) return null;
-    if (profile.anchorCollection?.name && profile.anchorCollection?.count) {
-      return {
-        name: profile.anchorCollection.name,
-        count: profile.anchorCollection.count,
-        imageUrl: normalizeImageUrl(profile.anchorCollection.imageUrl),
-      };
-    }
-    const fallback = (profile.topCollections || [])[0];
-    if (fallback?.name && fallback?.count) {
-      return { name: fallback.name, count: fallback.count, imageUrl: normalizeImageUrl(fallback.imageUrl || fallback.previewImages?.[0]) };
-    }
-    return null;
-  }, [profile]);
-
-  const signalPiece = useMemo(() => {
-    if (!profile) return null;
-    if (profile.signalPiece?.collectionName && profile.signalPiece?.imageUrl) {
-      return { collectionName: profile.signalPiece.collectionName, imageUrl: normalizeImageUrl(profile.signalPiece.imageUrl) };
-    }
-    if (returnPattern?.name && returnPattern?.imageUrl) {
-      return { collectionName: returnPattern.name, imageUrl: returnPattern.imageUrl };
-    }
-    return null;
-  }, [profile, returnPattern]);
-
   const firstMint = useMemo(() => {
-    const mint = profile?.firstMint;
-    if (!mint?.nft?.collectionName || !mint?.timestamp) return null;
+    const m = profile?.firstMint;
+    if (!m?.nft?.collectionName || !m?.timestamp) return null;
     return {
-      imageUrl: normalizeImageUrl(mint.nft.imageUrl),
-      collectionName: mint.nft.collectionName,
-      date: formatMintDate(mint.timestamp),
-      year: String(new Date(mint.timestamp).getFullYear()),
+      imageUrl: normalizeImageUrl(m.nft.imageUrl),
+      collectionName: m.nft.collectionName,
+      date: formatMintDate(m.timestamp),
+      year: String(new Date(m.timestamp).getFullYear()),
       label: profile?.firstMintLabel || null,
     };
   }, [profile]);
 
+  const signalPiece = useMemo(() => {
+    if (!profile?.signalPiece?.collectionName || !profile?.signalPiece?.imageUrl) return null;
+    return { collectionName: profile.signalPiece.collectionName, imageUrl: normalizeImageUrl(profile.signalPiece.imageUrl) };
+  }, [profile]);
+
+  const marketAttention = result?.marketAttention || null;
+
+  const showSignalPiece = signalPiece && (!marketAttention ||
+    (signalPiece.collectionName || "").toLowerCase() !== (marketAttention.collectionName || "").toLowerCase());
+
   const tasteSlices = useMemo(() => buildTasteSlices(result?.taste || {}, 6), [result?.taste]);
-  const sortedCategoryEntries = useMemo(() => Object.entries(result?.categoryGroups || {}).sort((a, b) => b[1].totalCount - a[1].totalCount), [result?.categoryGroups]);
+
+  const sortedCategoryEntries = useMemo(() =>
+    Object.entries(result?.categoryGroups || {}).sort((a, b) => b[1].totalCount - a[1].totalCount),
+    [result?.categoryGroups]);
+
   const categoryList = sortedCategoryEntries.slice(0, 6);
   const remainingCategories = sortedCategoryEntries.slice(6);
   const canCompare = isValidInput(compareWallet);
   const totalCollections = profile?.topCollections?.length || 0;
   const topCollections = (profile?.topCollections || []).slice(0, 5);
+  const totalNFTsForBar = profile?.totalNFTs || 1;
 
   function handleCompareSubmit(e: FormEvent) {
     e.preventDefault();
@@ -392,125 +293,258 @@ export default function ProfilePage() {
   return (
     <main className="profile-page">
       <div className="profile-shell">
-        {loading ? <div className="profile-center"><p className="profile-eyebrow">Reading your wallet...</p></div> : null}
-        {!loading && error ? <div className="profile-center"><p className="profile-error">Nothing found for this wallet. <button className="profile-error-link" onClick={() => router.push("/")} type="button">Try another wallet</button></p></div> : null}
-        {!loading && !error && profile ? (
-          <>
-            <header className="profile-panel profile-header-card">
-              <div className="profile-id-top">
-                <div className="profile-id-main">
-                  <div className="profile-avatar-fallback" aria-hidden="true">
-                    {headerAvatarUrl ? (
-                      <img src={headerAvatarUrl} alt={headerDisplayName} className="profile-avatar-img" />
-                    ) : (
-                      headerDisplayName.slice(0, 1).toUpperCase()
+        {loading && <div className="profile-center"><p className="profile-eyebrow">Reading your wallet...</p></div>}
+        {!loading && error && (
+          <div className="profile-center">
+            <p className="profile-error">Nothing found for this wallet.{" "}
+              <button className="profile-error-link" onClick={() => router.push("/")} type="button">Try another wallet</button>
+            </p>
+          </div>
+        )}
+        {!loading && !error && profile && (<>
+
+          {/* ZONE 1: HERO */}
+          <header className="profile-panel profile-hero-card">
+            <div className="profile-id-top">
+              <div className="profile-id-main">
+                <div className="profile-avatar-fallback" aria-hidden="true">
+                  {headerAvatarUrl
+                    ? <img src={headerAvatarUrl} alt={headerDisplayName} className="profile-avatar-img" />
+                    : headerDisplayName.slice(0, 1).toUpperCase()}
+                </div>
+                <div>
+                  <p className="profile-eyebrow">Collector profile</p>
+                  <h1 className="profile-display-name">{headerDisplayName}</h1>
+                  <p className="profile-address">{shortenAddress(resolvedWallet)}</p>
+                </div>
+              </div>
+              {profile.collectorIdentityLabel && <span className="profile-identity-pill">{profile.collectorIdentityLabel}</span>}
+            </div>
+
+            <div className="profile-stats-row">
+              <div className="profile-stat">
+                <p className="profile-stat-value">{profile.totalNFTs || 0}</p>
+                <p className="profile-stat-label">Holdings</p>
+              </div>
+              <div className="profile-stat">
+                <p className="profile-stat-value">{totalCollections}</p>
+                <p className="profile-stat-label">Collections</p>
+              </div>
+              {(firstMint?.label || firstMint?.year) && (
+                <div className="profile-stat">
+                  <p className="profile-stat-value">{firstMint.label || firstMint.year}</p>
+                  <p className="profile-stat-label">First mint</p>
+                </div>
+              )}
+            </div>
+
+            <div className="profile-hero-divider" />
+
+            <div className="profile-signal-grid">
+              {marketAttention && (
+                <article className="profile-signal-card profile-signal-card--primary">
+                  <p className="profile-section-label">Market attention</p>
+                  <div className="profile-signal-body">
+                    <div className="profile-thumb profile-thumb--lg">
+                      {marketAttention.imageUrl
+                        ? <img src={normalizeImageUrl(marketAttention.imageUrl)} alt={marketAttention.collectionName || "NFT"} className="profile-thumb-img" />
+                        : <div className="profile-thumb-placeholder">{(marketAttention.collectionName || "?").slice(0, 1).toUpperCase()}</div>}
+                    </div>
+                    <div className="profile-signal-text">
+                      <p className="profile-return-name">{marketAttention.title || marketAttention.collectionName || "Unknown"}</p>
+                      {marketAttention.collectionName && marketAttention.title && (
+                        <p className="profile-return-count">{marketAttention.collectionName}</p>
+                      )}
+                      <p className="profile-signal-bid">
+                        <span className="profile-bid-amount">{marketAttention.ethAmountLabel} ETH</span>
+                        <span className="profile-bid-label">current best offer</span>
+                      </p>
+                    </div>
+                  </div>
+                </article>
+              )}
+
+              {showSignalPiece && (
+                <article className="profile-signal-card">
+                  <p className="profile-section-label">Signal piece</p>
+                  <div className="profile-signal-body">
+                    <div className="profile-thumb">
+                      {signalPiece.imageUrl
+                        ? <img src={signalPiece.imageUrl} alt={signalPiece.collectionName} className="profile-thumb-img" />
+                        : <div className="profile-thumb-placeholder">{signalPiece.collectionName.slice(0, 1).toUpperCase()}</div>}
+                    </div>
+                    <div className="profile-signal-text">
+                      <p className="profile-return-name">{signalPiece.collectionName}</p>
+                      <p className="profile-return-count">Your wallet keeps returning here.</p>
+                    </div>
+                  </div>
+                </article>
+              )}
+
+              {firstMint && (
+                <article className="profile-signal-card">
+                  <p className="profile-section-label">First mint</p>
+                  <div className="profile-signal-body">
+                    <div className="profile-thumb">
+                      {firstMint.imageUrl
+                        ? <img src={firstMint.imageUrl} alt={firstMint.collectionName} className="profile-thumb-img" />
+                        : <div className="profile-thumb-placeholder">{firstMint.collectionName.slice(0, 1).toUpperCase()}</div>}
+                    </div>
+                    <div className="profile-signal-text">
+                      <p className="profile-return-name">{firstMint.collectionName}</p>
+                      <p className="profile-return-count">First recorded mint {firstMint.date}.</p>
+                    </div>
+                  </div>
+                </article>
+              )}
+            </div>
+          </header>
+
+          {/* ZONE 2: INTERPRETATION */}
+          {(profile.patternLine || profile.identityParagraph) && (
+            <section className="profile-panel profile-interpretation-card">
+              {profile.patternLine && <p className="profile-pattern-line">{profile.patternLine}</p>}
+              {profile.identityParagraph && <p className="profile-identity-paragraph">{profile.identityParagraph}</p>}
+              {(behavioralReads.length > 0 || profile.acquisitionBreakdown) && (
+                <div className="profile-interpretation-footer">
+                  {behavioralReads.length > 0 && (
+                    <div className="profile-reads">
+                      {behavioralReads.map((read, idx) => <span key={`${read}-${idx}`} className="profile-read-tag">{read}</span>)}
+                    </div>
+                  )}
+                  {profile.acquisitionBreakdown && profile.acquisitionBreakdown.totalSampled > 0 && (
+                    <div className="profile-acq-row">
+                      <div className="profile-acq-bar-group">
+                        <div className="profile-acq-label-row">
+                          <span className="profile-acq-label">Minted</span>
+                          <span className="profile-acq-pct">{profile.acquisitionBreakdown.mintPercent}%</span>
+                        </div>
+                        <div className="profile-taste-track">
+                          <div className="profile-taste-fill" style={{ width: `${profile.acquisitionBreakdown.mintPercent}%` }} />
+                        </div>
+                      </div>
+                      <div className="profile-acq-bar-group">
+                        <div className="profile-acq-label-row">
+                          <span className="profile-acq-label">Acquired</span>
+                          <span className="profile-acq-pct">{profile.acquisitionBreakdown.acquiredPercent}%</span>
+                        </div>
+                        <div className="profile-taste-track">
+                          <div className="profile-taste-fill" style={{ width: `${profile.acquisitionBreakdown.acquiredPercent}%`, opacity: 0.55 }} />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* ZONE 3: TASTE SYSTEM */}
+          {tasteSlices.length > 0 && (
+            <section className="profile-panel profile-panel-glow profile-taste-section">
+              <p className="profile-section-label">Taste map</p>
+              <TasteSignature slices={tasteSlices} />
+              {categoryList.length > 0 && (
+                <div className="cat-subsection">
+                  <p className="profile-section-label">Explore by category</p>
+                  <div className="cat-grid">
+                    {(showAllCategories ? [...categoryList, ...remainingCategories] : categoryList).map(([cat, group], idx) => {
+                      const isOpen = openCategory === cat;
+                      const entries = showAllCategories ? [...categoryList, ...remainingCategories] : categoryList;
+                      const insertDrawerAfter = idx % 2 === 1 || idx === entries.length - 1;
+                      return (
+                        <React.Fragment key={cat}>
+                          <div className={`cat-card${isOpen ? " cat-card--open" : ""}`} onClick={() => setOpenCategory(isOpen ? null : cat)}>
+                            <div className="cat-accent" />
+                            <span className="cat-chevron">{isOpen ? "▾" : "›"}</span>
+                            <p className="cat-name">{cat}</p>
+                            <p className="cat-pct">{result?.taste?.[cat] != null ? `${Math.round(result.taste[cat])}%` : String(group.totalCount)}</p>
+                            <p className="cat-count">{group.totalCount} pieces</p>
+                          </div>
+                          {insertDrawerAfter && openCategory && (() => {
+                            const rowStart = idx % 2 === 0 ? idx : idx - 1;
+                            const rowCats = entries.slice(rowStart, rowStart + 2).map(([c]) => c);
+                            if (!rowCats.includes(openCategory)) return null;
+                            const openGroup = result?.categoryGroups?.[openCategory];
+                            if (!openGroup) return null;
+                            return (
+                              <div className="cat-drawer">
+                                <div className="cat-drawer-header">
+                                  <span className="cat-drawer-label">{openCategory}</span>
+                                  <span className="cat-drawer-count">{openGroup.totalCount} pieces · {openGroup.collections.length} collections</span>
+                                </div>
+                                <div className="cat-nft-grid">
+                                  {openGroup.previews.slice(0, 3).map((p, i) => (
+                                    <div key={i} className="cat-nft-thumb">
+                                      {p.imageUrl ? <img src={p.imageUrl} alt={p.title} className="profile-thumb-img" /> : <div className="profile-thumb-placeholder">{p.collectionName.slice(0, 1).toUpperCase()}</div>}
+                                    </div>
+                                  ))}
+                                  {openGroup.totalCount > 3 && <div className="cat-nft-more">+{openGroup.totalCount - 3}</div>}
+                                </div>
+                                <div className="cat-collections">
+                                  {openGroup.collections.slice(0, 3).map((c, i) => (
+                                    <div key={i} className="cat-coll-row">
+                                      <span className="cat-coll-name">{c.name}</span>
+                                      <span className="cat-coll-count">{c.count}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </React.Fragment>
+                      );
+                    })}
+                    {!showAllCategories && remainingCategories.length > 0 && (
+                      <button type="button" className="cat-show-more" onClick={() => setShowAllCategories(true)}>Show remaining categories ›</button>
                     )}
                   </div>
-                  <div>
-                    <p className="profile-eyebrow">Collector profile</p>
-                    <h1 className="profile-display-name">{headerDisplayName}</h1>
-                    <p className="profile-address">{resolvedWallet}</p>
-                  </div>
                 </div>
-                {profile.collectorIdentityLabel ? <span className="profile-identity-pill">{profile.collectorIdentityLabel}</span> : null}
-              </div>
-              <div className="profile-stats-row">
-                <div className="profile-stat"><p className="profile-stat-value">{profile.totalNFTs || 0}</p><p className="profile-stat-label">Holdings indexed</p></div>
-                <div className="profile-stat"><p className="profile-stat-value">{totalCollections}</p><p className="profile-stat-label">Collections</p></div>
-                {(firstMint?.label || firstMint?.year) ? <div className="profile-stat"><p className="profile-stat-value">{firstMint.label || firstMint.year}</p><p className="profile-stat-label">First mint</p></div> : null}
-              </div>
-            </header>
-
-            {(profile.patternLine || profile.identityParagraph) && (
-              <section className="profile-panel">
-                {profile.patternLine ? <p className="profile-pattern-line">{profile.patternLine}</p> : null}
-                {profile.identityParagraph ? <p className="profile-identity-paragraph">{profile.identityParagraph}</p> : null}
-                {behavioralReads.length > 0 ? (
-                  <div className="profile-reads">
-                    {behavioralReads.map((read, idx) => <span key={`${read}-${idx}`} className="profile-read-tag">{read}</span>)}
-                  </div>
-                ) : null}
-              </section>
-            )}
-
-            {profile.acquisitionBreakdown && profile.acquisitionBreakdown.totalSampled > 0 ? (
-              <div className="profile-panel">
-                <p className="profile-section-label">How you collect</p>
-                <div className="profile-taste-row">
-                  <div className="profile-taste-label-row"><span className="profile-taste-label">Minted</span><span className="profile-taste-pct">{profile.acquisitionBreakdown.mintPercent}%</span></div>
-                  <div className="profile-taste-track"><div className="profile-taste-fill" style={{ width: `${profile.acquisitionBreakdown.mintPercent}%` }} /></div>
-                  <div className="profile-taste-label-row"><span className="profile-taste-label">Acquired</span><span className="profile-taste-pct">{profile.acquisitionBreakdown.acquiredPercent}%</span></div>
-                  <div className="profile-taste-track"><div className="profile-taste-fill" style={{ width: `${profile.acquisitionBreakdown.acquiredPercent}%`, opacity: 0.55 }} /></div>
-                </div>
-              </div>
-            ) : null}
-
-            {tasteSlices.length > 0 ? <TasteSignature title="Taste map" slices={tasteSlices} /> : null}
-
-            {(returnPattern || signalPiece || firstMint) ? (
-              <section className="profile-panel">
-                <p className="profile-section-label">Core signals</p>
-                <div className="profile-signal-grid">
-                  {returnPattern ? <article className="profile-signal-card"><p className="profile-section-label">Return pattern</p><div className="profile-signal-body"><div className="profile-thumb">{returnPattern.imageUrl ? <img src={returnPattern.imageUrl} alt={returnPattern.name} className="profile-thumb-img" /> : null}</div><div><p className="profile-return-name">{returnPattern.name}</p><p className="profile-return-count">You keep returning to {returnPattern.count} works here.</p></div></div></article> : null}
-                  {signalPiece ? <article className="profile-signal-card"><p className="profile-section-label">Signal piece</p><div className="profile-signal-body"><div className="profile-thumb">{signalPiece.imageUrl ? <img src={signalPiece.imageUrl} alt={signalPiece.collectionName} className="profile-thumb-img" /> : null}</div><div><p className="profile-return-name">{signalPiece.collectionName}</p><p className="profile-return-count">Your wallet seems to trust this world.</p></div></div></article> : null}
-                  {firstMint ? <article className="profile-signal-card"><p className="profile-section-label">First mint</p><div className="profile-signal-body"><div className="profile-thumb">{firstMint.imageUrl ? <img src={firstMint.imageUrl} alt={firstMint.collectionName} className="profile-thumb-img" /> : null}</div><div><p className="profile-return-name">{firstMint.collectionName}</p><p className="profile-return-count">Your first recorded mint was {firstMint.date}.</p></div></div></article> : null}
-                </div>
-              </section>
-            ) : null}
-
-            {categoryList.length > 0 ? (
-              <div className="profile-panel">
-                <p className="profile-section-label">Tap a category to explore</p>
-                <div className="cat-grid">
-                  {(showAllCategories ? [...categoryList, ...remainingCategories] : categoryList).map(([cat, group], idx) => {
-                    const isOpen = openCategory === cat;
-                    const entries = showAllCategories ? [...categoryList, ...remainingCategories] : categoryList;
-                    const insertDrawerAfter = idx % 2 === 1 || idx === entries.length - 1;
-                    return (
-                      <React.Fragment key={cat}>
-                        <div className={`cat-card${isOpen ? " cat-card--open" : ""}`} onClick={() => setOpenCategory(isOpen ? null : cat)}>
-                          <div className="cat-accent" />
-                          <span className="cat-chevron">{isOpen ? "▾" : "›"}</span>
-                          <p className="cat-name">{cat}</p>
-                          <p className="cat-pct">{result?.taste?.[cat] != null ? `${Math.round(result.taste[cat])}%` : String(group.totalCount)}</p>
-                          <p className="cat-count">{group.totalCount} pieces</p>
-                        </div>
-                        {insertDrawerAfter && openCategory && (() => {
-                          const rowStart = idx % 2 === 0 ? idx : idx - 1;
-                          const rowCats = entries.slice(rowStart, rowStart + 2).map(([c]) => c);
-                          if (!rowCats.includes(openCategory)) return null;
-                          const openGroup = result?.categoryGroups?.[openCategory];
-                          if (!openGroup) return null;
-                          return (
-                            <div className="cat-drawer">
-                              <div className="cat-drawer-header"><span className="cat-drawer-label">{openCategory}</span><span className="cat-drawer-count">{openGroup.totalCount} pieces across {openGroup.collections.length} collections</span></div>
-                              <div className="cat-nft-grid">
-                                {openGroup.previews.slice(0, 3).map((p, i) => <div key={i} className="cat-nft-thumb">{p.imageUrl ? <img src={p.imageUrl} alt={p.title} className="profile-thumb-img" /> : null}</div>)}
-                                {openGroup.totalCount > 3 ? <div className="cat-nft-more">+{openGroup.totalCount - 3}</div> : null}
-                              </div>
-                              <div className="cat-collections">
-                                {openGroup.collections.slice(0, 3).map((c, i) => <div key={i} className="cat-coll-row"><span className="cat-coll-name">{c.name}</span><span className="cat-coll-count">{c.count}</span></div>)}
-                              </div>
-                            </div>
-                          );
-                        })()}
-                      </React.Fragment>
-                    );
-                  })}
-                  {!showAllCategories && remainingCategories.length > 0 ? <button type="button" className="cat-show-more" onClick={() => setShowAllCategories(true)}>Show remaining categories ›</button> : null}
-                </div>
-              </div>
-            ) : null}
-
-            {topCollections.length > 0 ? <section className="profile-panel"><p className="profile-section-label">Top collections</p><div className="profile-collection-list">{topCollections.map((collection, index) => <div key={`${collection.name}-${index}`} className="profile-collection-row"><span className="profile-collection-rank">{String(index + 1).padStart(2, "0")}</span><span className="profile-collection-name">{collection.name}</span><span className="profile-collection-count">{collection.count}</span></div>)}</div></section> : null}
-
-            <section className="profile-compare-section">
-              <p className="profile-compare-title">See who stopped in the same places.</p>
-              <p className="profile-compare-sub">Drop in another wallet. See where your worlds overlap.</p>
-              <form onSubmit={handleCompareSubmit} className="profile-compare-form"><input className="profile-input" value={compareWallet} onChange={(e) => setCompareWallet(e.target.value)} placeholder="Second wallet address or ENS" /><button className="profile-btn-primary" disabled={!canCompare} type="submit">Compare</button></form>
+              )}
             </section>
-          </>
-        ) : null}
+          )}
+
+          {/* ZONE 4: TOP COLLECTIONS */}
+          {topCollections.length > 0 && (
+            <section className="profile-panel">
+              <p className="profile-section-label">Top collections</p>
+              <div className="profile-collection-list">
+                {topCollections.map((collection, index) => {
+                  const thumbUrl = normalizeImageUrl(collection.imageUrl || collection.previewImages?.[0] || "");
+                  const barWidth = Math.max(Math.round((collection.count / totalNFTsForBar) * 100), 4);
+                  return (
+                    <div key={`${collection.name}-${index}`} className="profile-collection-row">
+                      <span className="profile-collection-rank">{String(index + 1).padStart(2, "0")}</span>
+                      <div className="profile-collection-thumb">
+                        {thumbUrl
+                          ? <img src={thumbUrl} alt={collection.name} className="profile-thumb-img" />
+                          : <div className="profile-thumb-placeholder profile-thumb-placeholder--sm">{collection.name.slice(0, 1).toUpperCase()}</div>}
+                      </div>
+                      <div className="profile-collection-meta">
+                        <span className="profile-collection-name">{collection.name}</span>
+                        <div className="profile-collection-bar-wrap">
+                          <div className="profile-collection-bar" style={{ width: `${barWidth}%` }} />
+                        </div>
+                      </div>
+                      <span className="profile-collection-count">{collection.count}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {/* ZONE 5: COMPARE CTA */}
+          <section className="profile-compare-section">
+            <p className="profile-compare-title">See who stopped in the same places.</p>
+            <p className="profile-compare-sub">Drop in another wallet. See where your worlds overlap.</p>
+            <form onSubmit={handleCompareSubmit} className="profile-compare-form">
+              <input className="profile-input" value={compareWallet} onChange={e => setCompareWallet(e.target.value)} placeholder="Second wallet address or ENS" />
+              <button className="profile-btn-primary" disabled={!canCompare} type="submit">Compare</button>
+            </form>
+          </section>
+
+        </>)}
       </div>
     </main>
   );
