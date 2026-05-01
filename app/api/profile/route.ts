@@ -468,6 +468,16 @@ type ResolvedDisplayMetadata = {
   imageUrl?: string;
 };
 
+function weiToEth(rawPrice: string): string {
+  try {
+    const num = Number(rawPrice);
+    if (!Number.isFinite(num)) return "0";
+    return (num / 1e18).toFixed(4).replace(/\.?0+$/, "");
+  } catch {
+    return "0";
+  }
+}
+
 function normalizeImageUrl(url?: string) {
   if (!url) return "";
   if (url.startsWith("ipfs://ipfs/")) return url.replace("ipfs://ipfs/", "https://ipfs.io/ipfs/");
@@ -713,6 +723,102 @@ async function fetchOpenSeaAsset(
   };
 }
 
+type OpenSeaOfferOrder = {
+  current_price?: string;
+  maker?: string;
+  taker?: string;
+  asset?: {
+    name?: string;
+    image_url?: string;
+    collection?: string;
+  };
+  protocol_data?: {
+    parameters?: {
+      offer?: Array<{ startAmount?: string }>;
+      consideration?: Array<{
+        token?: string;
+        identifierOrCriteria?: string;
+        recipient?: string;
+      }>;
+    };
+  };
+  criteria?: {
+    contract?: { address?: string };
+    collection?: { slug?: string };
+  };
+};
+
+type OpenSeaOffersResponse = {
+  orders?: OpenSeaOfferOrder[];
+};
+
+async function fetchMarketAttention(wallet: string): Promise<{
+  priceEth: string;
+  contractAddress: string;
+  tokenId: string;
+  title: string;
+  imageUrl: string;
+  collectionName: string;
+} | null> {
+  if (!OPENSEA_API_KEY) return null;
+
+  try {
+    const params = new URLSearchParams({
+      taker: normalizeAddress(wallet),
+      order_by: "eth_price",
+      order_direction: "desc",
+      limit: "1",
+    });
+
+    const data = await fetchOpenSeaJson<OpenSeaOffersResponse>(
+      `/orders/ethereum/seaport/offers?${params.toString()}`,
+      { orders: [] }
+    );
+
+    const order = data?.orders?.[0];
+    if (!order) return null;
+
+    const rawPrice =
+      String(order.current_price || "") ||
+      String(order.protocol_data?.parameters?.offer?.[0]?.startAmount || "");
+    if (!rawPrice) return null;
+
+    const consideration = order.protocol_data?.parameters?.consideration || [];
+    const nftTarget = consideration.find((item) => {
+      const token = normalizeAddress(item.token);
+      const recipient = normalizeAddress(item.recipient);
+      return token && token !== ZERO_ADDRESS && recipient === normalizeAddress(wallet);
+    });
+
+    const contractAddress =
+      normalizeAddress(order.criteria?.contract?.address || nftTarget?.token || "");
+    const tokenId = String(nftTarget?.identifierOrCriteria || "").trim();
+    if (!contractAddress || !tokenId) return null;
+
+    let title = String(order.asset?.name || "").trim();
+    let imageUrl = normalizeImageUrl(order.asset?.image_url || "");
+    let collectionName = String(order.asset?.collection || "").trim();
+
+    if (!title || !imageUrl) {
+      const enriched = await fetchOpenSeaAsset(contractAddress, tokenId);
+      title = title || enriched.title || "";
+      imageUrl = imageUrl || enriched.imageUrl || "";
+      collectionName = collectionName || enriched.collectionName || "";
+    }
+
+    return {
+      priceEth: weiToEth(rawPrice),
+      contractAddress,
+      tokenId,
+      title: title || `#${tokenId}`,
+      imageUrl,
+      collectionName: collectionName || "Unknown collection",
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function fetchFirstMint(address: string): Promise<{
   nft: {
     contractAddress: string;
@@ -956,10 +1062,11 @@ export async function GET(req: Request) {
     const profileStartMs = Date.now();
     const profile = buildWalletProfile(enrichedNFTs);
     const categoryGroups = buildCategoryGroups(enrichedNFTs);
-    const [firstMint, acquisitionBreakdown, profileIdentity] = await Promise.all([
+    const [firstMint, acquisitionBreakdown, profileIdentity, marketAttention] = await Promise.all([
       fetchFirstMint(wallet),
       fetchAcquisitionBreakdown(wallet),
       fetchOpenSeaProfileIdentity(wallet),
+      fetchMarketAttention(wallet),
     ]);
     const firstMintLabel = buildFirstMintLabel(firstMint?.timestamp);
     const enrichedProfile = {
@@ -979,6 +1086,7 @@ export async function GET(req: Request) {
       sampleTopCollections: enrichedProfile.topCollections,
       sampleCategoryDistribution: enrichedProfile.categoryDistribution,
       categoryGroups,
+      marketAttention,
       nftCountUsed: enrichedProfile.totalNFTs,
       collectionsCheckedForCategory: debug.collectionsCheckedForCategory,
       collectionsWithCategory: debug.collectionsWithCategory,
