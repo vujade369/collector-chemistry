@@ -13,7 +13,6 @@ function isValidInput(value: string): boolean {
 export default function Home() {
   const router = useRouter();
   const [wallet, setWallet] = useState("");
-
   const isValid = isValidInput(wallet);
 
   function handleSubmit(e: React.FormEvent) {
@@ -23,43 +22,36 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen">
-      <div className="mx-auto flex min-h-screen w-full max-w-3xl items-center px-6 py-16 sm:px-10 sm:py-24">
-        <section className="w-full">
-          <div className="mb-12 sm:mb-16">
-            <p className="mb-4 text-xs uppercase tracking-[0.24em] text-stone-500">
-              Collector Chemistry
-            </p>
-            <h1 className="max-w-2xl text-4xl font-semibold tracking-tight text-stone-100 sm:text-5xl">
-              What your wallet says about you.
-            </h1>
-            <p className="mt-5 max-w-xl text-base leading-7 text-stone-400 sm:text-lg">
-              Paste a wallet address or ENS name to see the collecting pattern inside it.
-            </p>
-          </div>
+    <main className="min-h-screen bg-[#0e0e0e] text-stone-100">
+      <div className="mx-auto flex min-h-screen w-full max-w-[560px] items-center px-6 py-16">
+        <section className="relative w-full rounded-[20px] border border-[#222] bg-[#111] p-8 shadow-[0_0_0_0.5px_rgba(255,51,153,0.08)]">
+          <div className="pointer-events-none absolute inset-0 rounded-[20px] bg-[radial-gradient(circle_at_50%_20%,rgba(255,51,153,0.08),transparent_60%)]" aria-hidden="true" />
+          <div className="relative grid gap-6">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-[#555]">COLLECTOR CHEMISTRY</p>
+            <h1 className="text-4xl font-light tracking-[-0.03em] text-[#f0ede6]">What your wallet says about you.</h1>
+            <p className="text-[15px] leading-7 text-[#a8a49d]">Paste a wallet address or ENS name to see the collecting pattern inside it.</p>
 
-          <form className="space-y-5" onSubmit={handleSubmit}>
-            <div className="space-y-2">
+            <form className="grid gap-4" onSubmit={handleSubmit}>
               <input
                 id="wallet"
                 type="text"
                 placeholder="Wallet address or ENS"
                 value={wallet}
                 onChange={(e) => setWallet(e.target.value)}
-                className="block w-full rounded-2xl border border-stone-700 bg-stone-950 px-4 py-3 text-sm text-stone-100 outline-none transition placeholder:text-stone-500 focus:border-stone-500"
+                className="w-full rounded-[10px] border border-[#2e2e2e] bg-[#141414] px-4 py-3 text-sm text-[#f0ede6] outline-none placeholder:text-[#3a3a3a] focus:border-[#555]"
               />
-            </div>
 
-            <div className="pt-3">
               <button
                 type="submit"
                 disabled={!isValid}
-                className="inline-flex items-center justify-center rounded-full bg-stone-100 px-5 py-3 text-sm font-medium text-stone-950 transition hover:bg-white disabled:opacity-40"
+                className="inline-flex items-center justify-center rounded-full bg-[#f0ede6] px-6 py-3 text-sm font-medium text-[#0e0e0e] transition hover:opacity-90 disabled:opacity-40"
               >
                 Read my wallet
               </button>
-            </div>
-          </form>
+            </form>
+
+            <p className="text-xs text-[#666]">Also works with ENS. Try vitalik.eth</p>
+          </div>
         </section>
       </div>
     </main>
