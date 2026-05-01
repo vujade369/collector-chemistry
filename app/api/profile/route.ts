@@ -989,17 +989,42 @@ function pickTokenId(nft: WalletProfileNFT): string | null {
   return normalizeTokenIdForOpenSea(candidate);
 }
 
-async function fetchMarketAttention(wallet: string, nfts: WalletProfileNFT[]): Promise<MarketAttention | null> {
+async function fetchMarketAttention(nfts: WalletProfileNFT[]): Promise<MarketAttention | null> {
   if (!OPENSEA_API_KEY || !nfts.length) return null;
 
   try {
+    const slugCache = new Map<string, string | null>();
+    const seenSlugs = new Set<string>();
     const candidates: Array<{ slug: string; tokenId: string; nft: WalletProfileNFT }> = [];
 
     for (const nft of nfts) {
-      if (candidates.length >= 24) break;
-      const slug = String(nft.displayCollectionSlug || "").trim();
+      if (candidates.length >= 8) break;
+      let slug = String(nft.displayCollectionSlug || "").trim();
       const tokenId = pickTokenId(nft);
-      if (!slug || !tokenId) continue;
+      if (!tokenId) continue;
+      if (!slug) {
+        const contractAddress = normalizeAddress(nft.contract?.address || "");
+        if (contractAddress) {
+          if (slugCache.has(contractAddress)) {
+            slug = String(slugCache.get(contractAddress) || "");
+          } else {
+            const contractData = await fetchOpenSeaJson<OpenSeaContractResponse>(
+              `/chain/ethereum/contract/${contractAddress}`,
+              {} as OpenSeaContractResponse
+            );
+            const resolvedSlug = String(
+              contractData?.collection ||
+              contractData?.slug ||
+              contractData?.collections?.[0]?.slug ||
+              ""
+            ).trim();
+            slugCache.set(contractAddress, resolvedSlug || null);
+            slug = resolvedSlug;
+          }
+        }
+      }
+      if (!slug || seenSlugs.has(slug)) continue;
+      seenSlugs.add(slug);
       candidates.push({ slug, tokenId, nft });
     }
 
@@ -1172,7 +1197,12 @@ export async function GET(req: Request) {
     const profileStartMs = Date.now();
     const profile = buildWalletProfile(enrichedNFTs);
     const categoryGroups = buildCategoryGroups(enrichedNFTs);
-    const earliestMintTask = Promise.all(validWallets.map((entry) => fetchFirstMint(entry)))
+    const earliestMintTask = Promise.all(
+      validWallets.map(async (entry) => {
+        const resolvedAddress = await resolveWalletToAddress(entry);
+        return fetchFirstMint(resolvedAddress || entry);
+      })
+    )
       .then((results) =>
         results
           .filter(
@@ -1185,11 +1215,30 @@ export async function GET(req: Request) {
       fetchOpenSeaProfileIdentity(resolvedWalletAddress || wallet)
     );
 
+    const marketAttentionTask = Promise.all(
+      validWallets.map((entry) => {
+        const walletNfts = enrichedNFTs.filter(
+          (nft) => normalizeAddress(nft.sourceWallet) === normalizeAddress(entry)
+        );
+        return fetchMarketAttention(walletNfts);
+      })
+    ).then((results) => {
+      const best = results
+        .filter((item): item is NonNullable<typeof item> => Boolean(item))
+        .map((item) => ({
+          item,
+          eth: Number(String(item.ethAmountLabel).replace(" ETH", "")),
+        }))
+        .filter((entry) => Number.isFinite(entry.eth))
+        .sort((a, b) => b.eth - a.eth)[0];
+      return best?.item || null;
+    });
+
     const [firstMint, acquisitionBreakdown, profileIdentity, marketAttention] = await Promise.all([
       earliestMintTask,
       fetchAcquisitionBreakdown(wallet),
       primaryIdentityTask,
-      fetchMarketAttention(wallet, enrichedNFTs),
+      marketAttentionTask,
     ]);
     const firstMintLabel = buildFirstMintLabel(firstMint?.timestamp);
     const enrichedProfile = {
