@@ -4,6 +4,7 @@ import React, { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import "./profile.css";
 import WalletConverter from "@/components/profile/WalletConverter";
+import WalletBanner from "@/components/profile/WalletBanner";
 
 type TopCollection = {
   name: string;
@@ -56,6 +57,8 @@ type MarketAttention = {
 
 type ProfileResponse = {
   wallet: string;
+  wallets?: string[];
+  walletCount?: number;
   profileIdentity?: ProfileIdentity;
   profile?: WalletProfile;
   taste?: Record<string, number>;
@@ -212,6 +215,7 @@ export default function ProfilePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const walletFromQuery = (searchParams.get("wallet") || "").trim();
+  const initialWalletsFromQuery = walletFromQuery.split(",").map((v) => v.trim()).filter(Boolean);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<ProfileResponse | null>(null);
@@ -221,12 +225,12 @@ export default function ProfilePage() {
 
   useEffect(() => {
     async function load() {
-      if (!walletFromQuery || !isValidInput(walletFromQuery)) {
+      if (!walletFromQuery || initialWalletsFromQuery.length === 0 || !initialWalletsFromQuery.some(isValidInput)) {
         setError("Nothing found for this wallet."); setResult(null); return;
       }
       setLoading(true); setError(""); setResult(null);
       try {
-        const res = await fetch(`/api/profile?wallet=${encodeURIComponent(walletFromQuery)}`);
+        const res = await fetch(`/api/profile?wallet=${encodeURIComponent(initialWalletsFromQuery.join(","))}`);
         const json = await res.json() as ProfileResponse | { error?: string };
         if (!res.ok || !("profile" in json) || !json.profile) {
           setError("Nothing found for this wallet."); setResult(null); return;
@@ -237,6 +241,21 @@ export default function ProfilePage() {
     }
     void load();
   }, [walletFromQuery]);
+
+  function updateWalletQuery(wallets: string[]) {
+    router.push(`/profile?wallet=${encodeURIComponent(wallets.join(","))}`);
+  }
+
+  function addWallet(wallet: string) {
+    const next = Array.from(new Set([...(result?.wallets || initialWalletsFromQuery), wallet.trim()])).slice(0, 5);
+    updateWalletQuery(next);
+  }
+
+  function removeWallet(wallet: string) {
+    const next = (result?.wallets || initialWalletsFromQuery).filter((w) => w !== wallet);
+    if (next.length === 0) return;
+    updateWalletQuery(next);
+  }
 
   const profile = result?.profile || null;
   const resolvedWallet = result?.wallet || walletFromQuery;
@@ -317,6 +336,7 @@ export default function ProfilePage() {
                   <p className="profile-eyebrow">Collector profile</p>
                   <h1 className="profile-display-name">{headerDisplayName}</h1>
                   <p className="profile-address">{shortenAddress(resolvedWallet)}</p>
+                  {(result?.walletCount || 1) > 1 && <p className="profile-wallet-count">{result?.walletCount} wallets</p>}
                 </div>
               </div>
               {profile.collectorIdentityLabel && <span className="profile-identity-pill">{profile.collectorIdentityLabel}</span>}
@@ -400,6 +420,7 @@ export default function ProfilePage() {
               )}
             </div>
           </header>
+          <WalletBanner wallets={result?.wallets || initialWalletsFromQuery} onAdd={addWallet} onRemove={removeWallet} />
 
           {/* ZONE 2: INTERPRETATION */}
           {(profile.patternLine || profile.identityParagraph) && (

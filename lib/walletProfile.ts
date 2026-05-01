@@ -1,4 +1,5 @@
 export type WalletProfileNFT = {
+  sourceWallet?: string;
   displayCollectionName?: string;
   displayCollectionSlug?: string;
   displayCollectionCategory?: string;
