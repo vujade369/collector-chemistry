@@ -20,18 +20,16 @@ It is a translation layer between reference images, product intent, and implemen
 
 ## Current visual direction
 
-Collector Chemistry is moving toward a more vivid, playful, collector-facing interface.
-
-The early editorial direction was useful, but the product should now feel more alive.
+Collector Chemistry is a dark collector dossier. Immersive, personal, culturally readable, and slightly playful without tipping into noise.
 
 The desired direction is:
 
-- dark base
-- high contrast
-- luminous accents
+- deep black base
+- high contrast text and accents
+- multi-color accent system (not just one color)
 - collector-card energy
 - playful visual reward
-- restrained glow
+- restrained glow on featured elements only
 - moments of surprise
 - object-based exploration
 - strong hierarchy
@@ -39,7 +37,7 @@ The desired direction is:
 
 The page should create curiosity and a little awe when someone sees their result.
 
-It should still feel tasteful.
+It should still feel tasteful. Not a casino. Not a trading terminal.
 
 ---
 
@@ -47,11 +45,11 @@ It should still feel tasteful.
 
 The interface should feel like:
 
-- a collector readout
+- a collector dossier
 - a personal taste artifact
-- a shared-world map
+- a dark gallery readout
 - a luminous field guide
-- a playful dossier
+- a playful character sheet for a collector
 - a visual instrument for understanding collecting behavior
 
 It should not feel like:
@@ -61,34 +59,31 @@ It should not feel like:
 - a marketplace page
 - a leaderboard
 - a generic analytics page
-- a dating app compatibility app
+- a dating app compatibility score
 - a noisy neon web3 template
+- a casino dashboard
 
 ---
 
 ## Accent system
 
-Primary accent:
-- magenta / pink
+The product uses a multi-color accent system. Colors are assigned by context, not used randomly.
 
-Secondary accent:
-- purple
-
-Comparison accent:
-- cyan / blue for wallet two
-
-Optional support accents:
-- orange, green, or yellow only for small category pills or rare emphasis
+Primary accent: `#ff3399` magenta — collector identity, wallet A, primary highlights
+Secondary accent: `#9575ff` purple — secondary signals, third-ranked elements
+Cyan accent: `#29b6f6` — wallet B in compare, second-ranked elements
+Green accent: `#39d353` — market attention, external signals
+Orange accent: `#ff8c42` — fine art category
+Teal accent: `#00e5cc` — music category
+Yellow accent: `#ffcc00` — photography category
 
 Rules:
 
-- use accent color to guide attention
-- do not decorate every card equally
-- each wallet should have a consistent accent identity
-- magenta and cyan should help distinguish collectors in compare
-- glows should be subtle and purposeful
+- each stat card, signal card, and category bar gets its own assigned accent (see DESIGN_SYSTEM.md)
+- do not use all colors on every page — use them where they are contextually assigned
+- glows should be subtle and purposeful, not decorative
 - avoid full neon backgrounds
-- avoid rainbow color systems unless category-specific
+- avoid rainbow color systems outside of category-specific contexts
 
 ---
 
@@ -99,30 +94,26 @@ Use a small, curated set of references. Do not add every screenshot or moodboard
 ### Target profile direction
 
 ```txt
-/references/profile-neon-pulse.png
+docs/references/Wallet-Results-Mockup-1.png
 ```
 
-Use the cropped single-profile Neon Pulse mockup as the target image. Do not use the full five-panel board as the implementation target.
+This is the current target for the individual wallet profile page.
 
-### Optional current-state references
-
-If useful, add current screenshots for comparison:
+### Legacy reference (for historical context only)
 
 ```txt
-/references/profile-current-top.png
-/references/profile-current-taste.png
-/references/profile-current-cta.png
+docs/references/profile-neon-pulse.png
 ```
 
-These should only be used to understand what needs improvement. They are not target designs.
+This was the earlier target direction. It has been superseded by Wallet-Results-Mockup-1. Do not use it as the current implementation target.
 
 ### Target compare direction
 
 ```txt
-/references/compare-chemistry-bridge.png
+docs/references/compare-chemistry-bridge.png
 ```
 
-Use the selected Chemistry Bridge mockup as the target direction when redesigning compare.
+Use the Chemistry Bridge mockup as the target direction when redesigning compare. This has not changed.
 
 ---
 
@@ -140,109 +131,61 @@ Every Codex visual task should include:
 
 Never rely on the screenshot alone.
 
-The image shows vibe.  
+The image shows vibe.
 The docs define behavior.
 
 ---
 
-## Profile page direction: Neon Pulse
+## Profile page direction: Wallet-Results-Mockup-1
 
-Preferred direction for the individual wallet profile page.
+Current target for the individual wallet profile page.
 
 Reference file:
 
 ```txt
-/references/profile-neon-pulse.png
+docs/references/Wallet-Results-Mockup-1.png
 ```
-
-If this image does not exist yet, add the current selected profile mockup there.
 
 ### What to borrow
 
-- dark compact layout
-- glowing magenta card border
-- collector identity at top
-- stats row with strong hierarchy
-- archetype / interpretation card
-- taste map as a centerpiece
-- core signals displayed as compact collectible cards
-- top collections as clean ranked rows
-- compare CTA as a strong final action
+- dark dossier layout with three-column hero
+- collector identity on the left (name, class, statement, short paragraph)
+- center framed profile/PFP image (gallery-wall treatment, bordered, slight glow)
+- First Minted NFT artifact card on the right of the hero
+- stats row with four cards, each using a distinct accent color
+- taste map donut as a visual centrepiece
+- Taste DNA bars using real category data and per-category accent colors
+- Key Signals panel with accent top borders per signal type
+- ranked top collections with progress bars in rank-ordered accent colors
+- compare CTA at the bottom with NFT imagery cluster
 
-### What not to copy literally
+### What not to copy from the mockup
 
-- do not make every card equally neon
-- do not overcompress text
-- do not use fake data
-- do not turn the page into a generic dashboard
-- do not let stats overpower interpretation
-- do not reduce the collector read to numbers
-- do not add heavy animation
-- do not hide important information behind hover-only interactions
+- the left sidebar navigation — it does not exist in this product
+- the top navigation bar — it does not exist yet
+- the "Pro Tip" footer strip — omit it
+- the neon gallery hallway image in Collected Works — that is AI-generated mood reference, not a real UI element
+- the invented Taste DNA scores ("Meme Gravity 86/100", "Conviction 71/100") — these are mockup copy, not real data. Use actual category percentages from the API.
+- hardcoded collection descriptions ("Keeping it real since forever") — mockup copy only, never hardcode
 
-### Target profile structure
+### Current implemented profile page structure
 
-1. Collector header
-2. Stats row
-3. Archetype / interpretation
-4. Taste map
-5. Category drill-down
-6. Core signals
-7. Top collections
-8. Representative holdings
-9. Compare CTA
+This is what is currently built. Future passes should extend this structure, not replace it.
 
----
+1. Hero (three-column: identity left, profile image center, first mint card right)
+2. Stats row (four cards: Holdings, Collections, Top Category, Market Attention)
+3. The Pattern (taste map donut + Taste DNA bars side by side)
+4. Key Signals (First Mint, Signal Piece, Anchor Collection)
+5. Collected Works (summary strip)
+6. Top Collections (ranked cards with progress bars)
+7. Compare CTA
 
-## Profile visual brief
+### Current known gaps
 
-Use this section as the implementation translation for Codex.
-
-### What is wrong with the current profile page
-
-The current page is clean but too quiet.
-
-It feels like a static report instead of a collector readout.
-
-Specific issues:
-
-- weak visual hierarchy
-- too much empty darkness
-- cards feel passive
-- the taste map is not rewarding enough
-- core signals feel like simple rows instead of meaningful collector moments
-- compare CTA feels functional, not inviting
-- the page does not yet create enough recognition, surprise, or delight
-
-### Target feeling
-
-The page should feel like:
-
-- a collector seeing their taste become visible
-- a personal card / readout
-- playful but still tasteful
-- luminous, not loud
-- fast to scan
-- rewarding to explore
-
-### Visual hierarchy
-
-Tier 1:
-- collector identity
-- taste map
-- core signals
-
-Tier 2:
-- top collections
-- supporting stats
-- interpretation text
-
-Tier 3:
-- metadata
-- source details
-- fallback information
-
-Do not let every card have the same visual weight.
+- First Minted NFT card is hitting the fallback state (image unavailable) for the current test wallet
+- Taste Map does not yet implement full segment-hover isolation behavior from DESIGN_SYSTEM.md spec
+- Hero identity paragraph may be too long — target is 2 sentences maximum in the hero
+- Wallet input should be moved to the compare CTA section, not sitting between hero and stats row
 
 ---
 
@@ -250,41 +193,28 @@ Do not let every card have the same visual weight.
 
 Core signals should feel like collector observations, not dashboard metrics.
 
-Recommended cards:
+Implemented signals:
 
-1. Top Collection / Signal Piece
-2. Return Pattern
-3. First Mint
-4. Most Recent Acquisition
-5. Highest Bid / Market Attention
-6. Collecting Style
+1. First Mint — where this wallet started
+2. Signal Piece — the collection the wallet keeps returning to
+3. Anchor Collection — if different from signal piece
 
-### Signal card behavior
-
-Each card should include:
-
-- small label
-- primary object or stat
-- one short explanatory line
-- image if available
-- graceful fallback if data is missing
+If a signal does not have data, hide the card gracefully. Do not show empty cards.
 
 ### Signal card tone
 
 Use:
-- “You keep circling back to…”
-- “Your largest position sits in…”
-- “Recently, you picked up…”
-- “Your first recorded mint was…”
-- “The strongest current bid sits here…”
+- "Where it started."
+- "Your wallet keeps returning here."
+- "Your largest anchor."
 
 Avoid:
-- “best”
-- “most valuable”
-- “top performing”
-- “portfolio”
-- “investment”
-- “ROI”
+- "best"
+- "most valuable"
+- "top performing"
+- "portfolio"
+- "investment"
+- "ROI"
 
 ---
 
@@ -305,8 +235,8 @@ It should feel like:
 - tap open card again to close
 - drawer shows NFT previews and collection breakdown
 - top 6 categories shown initially
-- remaining categories behind “show more”
-- hide “Other” from the main drill-down where possible
+- remaining categories behind "show more"
+- hide "Other" from the main drill-down where possible
 
 ### Drawer contents
 
@@ -321,7 +251,7 @@ Each drawer should show:
 ### Visual style
 
 - dark cards
-- subtle accent top line
+- subtle accent top line in the category's assigned accent color
 - active state glow
 - compact but readable
 - no heavy animation
@@ -331,21 +261,19 @@ Each drawer should show:
 
 ## Compare page direction: Chemistry Bridge
 
-Preferred direction for the compare page.
+Preferred direction for the compare page. Not yet redesigned.
 
 Reference file:
 
 ```txt
-/references/compare-chemistry-bridge.png
+docs/references/compare-chemistry-bridge.png
 ```
-
-If this image does not exist yet, add the current selected compare mockup there.
 
 ### What to borrow
 
 - two collectors on opposite sides
 - central chemistry bridge
-- pink wallet one / cyan wallet two
+- magenta for wallet one, cyan for wallet two
 - strong central relationship moment
 - shared-world section as the primary proof
 - object-based NFT comparison
@@ -365,7 +293,7 @@ If this image does not exist yet, add the current selected compare mockup there.
 
 ## Compare page structure
 
-Preferred compare structure:
+Preferred compare structure (not yet implemented):
 
 1. Result hero
 2. Bridge stats
@@ -376,99 +304,13 @@ Preferred compare structure:
 7. Short interpretation
 8. Optional collector profile cards
 
-### Result hero
-
-Should include:
-
-- wallet one identity
-- wallet two identity
-- chemistry label
-- optional percentage as orientation cue
-- one short interpretive line
-
-The hero should feel like two collectors entering the same frame.
-
-### Bridge stats
-
-Use strong language:
-
-- Shared Worlds
-- Shared Artists
-- Exact Matches
-- Taste Signals
-
-Avoid overly generic metric labels.
-
-### Shared-world spotlight
-
-This is the most important compare section.
-
-Desktop structure:
-
-```txt
-Wallet 1 NFTs        Shared Collection        Wallet 2 NFTs
-```
-
-Mobile structure:
-
-```txt
-Shared Collection
-Wallet 1 NFTs
-Wallet 2 NFTs
-```
-
-The center collection card should include:
-
-- collection image
-- collection name
-- category if known
-- entry dates for both wallets
-- total shared count if available
-- clickable link if available
-
-Each wallet side should include:
-
-- wallet name
-- number owned in that collection
-- NFT previews
-- first acquired / first minted date if available
-- “goes deeper here” indicator if relevant
-
-### Exact overlap
-
-Exact overlap is the clearest direct intersection.
-
-Show it clearly, but do not let it overpower shared collections unless there are many exact overlaps.
-
-### Shared artists
-
-Shared artists should feel like another layer of shared attention.
-
-If artist data is weak or incomplete, keep this section secondary.
-
-### Taste comparison
-
-Useful, but should not dominate the page.
-
-One main visual is enough by default.
-
-Possible visuals:
-- mirrored bars
-- overlapping donuts
-- radar / spider chart
-- category face-off rows
-
-Avoid overloading with multiple charts unless they reveal different truths.
-
 ---
 
 ## Visual hierarchy rules
 
 Every page should have a clear hierarchy.
 
-### Tier 1
-
-The main moment.
+### Tier 1 — The main moment
 
 Profile:
 - collector identity
@@ -479,9 +321,7 @@ Compare:
 - chemistry hero
 - shared-world spotlight
 
-### Tier 2
-
-Supporting proof.
+### Tier 2 — Supporting proof
 
 Profile:
 - category drill-down
@@ -494,9 +334,7 @@ Compare:
 - shared artists
 - taste comparison
 
-### Tier 3
-
-Context.
+### Tier 3 — Context
 
 - footnotes
 - methodology
@@ -563,20 +401,22 @@ Rules:
 - avoid fetching unnecessary enrichment before first render
 - use graceful fallbacks for missing images
 - avoid adding dependencies for visual effects
-- keep CSS and Tailwind patterns simple
+- keep CSS patterns simple
 
 ---
 
 ## Profile implementation checklist
 
-When implementing the profile visual pass, check:
+When implementing or refining the profile visual pass, check:
 
 - Does the collector identity feel like the top of the experience?
-- Are the stats immediately scannable?
+- Is the First Mint card showing real data or a clean fallback (not a broken placeholder)?
+- Are the stats immediately scannable with distinct accent colors per card?
 - Does the taste section feel like a visual reward?
+- Do Taste DNA bars use real category data, not invented scores?
 - Do core signals feel like meaningful collector moments?
 - Is the compare CTA more inviting than functional?
-- Is the page still readable on mobile?
+- Is the page readable on mobile?
 - Did we avoid adding fake data or new API assumptions?
 - Did we avoid touching compare or API files during a profile-only pass?
 
@@ -586,7 +426,7 @@ When implementing the profile visual pass, check:
 
 The best version of Collector Chemistry feels like:
 
-> a quiet interface that occasionally surprises you with something beautiful.
+> a dark, personal readout that makes a collector's taste visible and legible for the first time.
 
 For profile:
 

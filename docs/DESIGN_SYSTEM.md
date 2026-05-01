@@ -89,7 +89,11 @@ All borders are `0.5px`. Never use `1px` borders on dark surfaces.
 | Primary accent | `#ff3399` | Taste map (profile), wallet A (compare), active fills |
 | Secondary accent | `#9575ff` | Taste map alternate, purple fills |
 | Cyan accent | `#29b6f6` | Wallet B taste map (compare page only) |
-| Accent gradient | `linear-gradient(90deg, #ff3399, #9575ff)` | Progress bars, fills |
+| Green accent | `#39d353` | Market attention, external signals |
+| Orange accent | `#ff8c42` | Fine art category |
+| Teal accent | `#00e5cc` | Music category |
+| Yellow accent | `#ffcc00` | Photography category |
+| Accent gradient | `linear-gradient(90deg, #ff3399, #9575ff)` | Hero fills, featured progress bars |
 | Accent glow | `rgba(255,51,153,0.04)` | Subtle background glow behind taste map |
 
 Use accents only for:
@@ -97,8 +101,78 @@ Use accents only for:
 - Progress bar fills
 - Hover and active states
 - Key visual anchors
+- Context-assigned stat cards and signal cards (see Accent color assignments below)
 
 Never use accents for general text, borders, backgrounds, or decorative elements.
+
+---
+
+## Accent color assignments by context
+
+These assignments are fixed. Codex must not derive or invent color choices — use these exactly.
+
+### Stats row — one accent per card
+
+| Card | Accent color |
+|---|---|
+| Total Holdings | `#ff3399` magenta |
+| Collections | `#29b6f6` cyan |
+| Top Category | `#9575ff` purple |
+| Market Attention | `#39d353` green |
+
+If Market Attention is unavailable and falls back to another field, still use green for that card slot.
+
+Apply the accent to: the large number value and the small icon or indicator for that card.
+Also apply a `2px solid [accent]` top border at opacity `0.6` to each card.
+
+### Taste DNA bars — one accent per category
+
+Each category gets a fixed accent color. Use this mapping exactly:
+
+| Category | Color |
+|---|---|
+| meme | `#ff3399` |
+| pfp | `#29b6f6` |
+| generative | `#9575ff` |
+| fine_art | `#ff8c42` |
+| utility | `#39d353` |
+| music | `#00e5cc` |
+| photography | `#ffcc00` |
+| gaming | `#a78bfa` |
+| other | `#444` |
+| any unlisted category | `#555` |
+
+Bar fill: solid color from the mapping above. Do not use gradient for category bars — solid colors make categories distinguishable.
+Bar height: `6px` minimum.
+Bar track height: `6px`, color `#1e1e1e`.
+Bar border radius: `3px`.
+
+### Top Collections progress bars — rank-ordered accents
+
+| Rank | Bar color |
+|---|---|
+| 1 | `#ff3399` |
+| 2 | `#29b6f6` |
+| 3 | `#9575ff` |
+| 4 and beyond | `#444` |
+
+### Key Signals cards — accent top border per signal type
+
+Each signal card gets a `2px solid [accent]` top border.
+
+| Signal type | Top border color |
+|---|---|
+| First Mint | `#9575ff` purple |
+| Signal Piece | `#ff3399` magenta |
+| Anchor Collection | `#29b6f6` cyan |
+| Market Attention | `#39d353` green |
+
+The signal label eyebrow text should also use the card's accent color.
+
+### Category card drill-down — active state
+
+The active category card uses `#ff3399` for the accent top line and active text.
+If future passes assign per-category colors to drill-down cards, use the Taste DNA mapping above.
 
 ---
 
@@ -283,7 +357,11 @@ All section labels use the eyebrow style.
 ```
 
 ### Progress bars
-Two-bar layout for minted/acquired breakdown.
+Track height: `6px`
+Fill: solid accent color per context (see Accent color assignments above)
+Border radius: `3px`
+
+For the two-bar minted/acquired breakdown:
 Track height: `3px`
 Fill uses accent gradient.
 Acquired bar fill opacity: `0.55`
@@ -430,18 +508,31 @@ Collection list inside drawer (below thumbnails):
 - Hover: color `#888`, border color `#333`
 - Clicking hides the row and reveals remaining category cards
 
+---
+
 ## Profile Page Visual Direction
 
-The individual profile page should feel more vivid and collector-facing than the earlier editorial version.
+The individual profile page is a dark collector dossier.
 
-Use the “Neon Pulse” reference in `docs/VISUAL_REFERENCES.md` as the main visual guide.
+Target reference: `docs/references/Wallet-Results-Mockup-1.png`
+
+The page should feel like a personal readout — specific, legible, a little playful. Not a dashboard.
+
+Current implemented section order:
+1. Hero (three-column: identity left, profile image center, first mint card right)
+2. Stats row (four cards with per-card accent colors)
+3. The Pattern (taste map donut + Taste DNA bars side by side)
+4. Key Signals (First Mint, Signal Piece, Anchor Collection)
+5. Collected Works (summary strip)
+6. Top Collections (ranked cards with rank-colored progress bars)
+7. Compare CTA
 
 Design priorities:
-- stronger hierarchy
-- more visual reward
-- compact modular cards
-- glowing accents used selectively
-- playful collector energy
-- clear mobile-first layout
+- stronger hierarchy than earlier editorial version
+- multi-color accent system — do not use only magenta
+- each stat card and signal card has its own assigned accent color (see Accent color assignments)
+- Taste DNA bars use per-category colors, not gradient
+- first mint card in the hero is a featured artifact, not a sidebar note
+- compare CTA is an invitation, not a form
 
 The page should still be readable, restrained, and fast.
