@@ -1,0 +1,3 @@
+import { NextResponse } from "next/server";
+import { buildWalletEstimate, isEns, isEthAddress } from "./shared";
+export async function GET(req: Request) { const { searchParams } = new URL(req.url); const wallet = String(searchParams.get("wallet") || "").trim(); if (!wallet || (!isEthAddress(wallet) && !isEns(wallet))) return NextResponse.json({ wallet, collections: [], estimatedValueETH: 0, collectionsWithFloor: 0, collectionsWithoutFloor: 0, estimateQuality: "low", error: "invalid_wallet" }); try { return NextResponse.json(await buildWalletEstimate(wallet)); } catch { return NextResponse.json({ wallet, collections: [], estimatedValueETH: 0, collectionsWithFloor: 0, collectionsWithoutFloor: 0, estimateQuality: "low", error: "estimate_failed" }); } }

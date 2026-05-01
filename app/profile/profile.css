@@ -149,3 +149,32 @@
 @media (max-width: 380px) {
   .profile-stats-row { grid-template-columns: 1fr 1fr; }
 }
+
+/* Wallet Converter */
+.wallet-converter { padding-top: 64px; padding-bottom: 96px; border-top: 0.5px solid #1e1e1e; margin-top: 48px; }
+.converter-headline { font-size: 26px; font-weight: 300; letter-spacing: -0.025em; color: #f0ede6; margin: 0 0 8px 0; }
+.converter-subline { font-size: 14px; color: #a8a49d; margin: 0 0 28px 0; }
+.converter-input { width: 100%; background: #141414; border: 0.5px solid #2e2e2e; border-radius: 10px; padding: 12px 14px; font-size: 14px; color: #f0ede6; outline: none; transition: border-color 150ms ease; }
+.converter-input:focus { border-color: #555; }
+.converter-input::placeholder { color: #3a3a3a; }
+.converter-search { position: relative; }
+.converter-dropdown { position: absolute; top: calc(100% + 6px); left: 0; right: 0; background: #111; border: 0.5px solid #222; border-radius: 10px; overflow: hidden; z-index: 10; list-style: none; margin: 0; padding: 0; }
+.converter-dropdown li { display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; transition: background 150ms ease; }
+.converter-dropdown li:hover { background: #141414; }
+.converter-dropdown li img { width: 32px; height: 32px; border-radius: 6px; object-fit: cover; background: #1a1a1a; flex-shrink: 0; }
+.converter-result-name { font-size: 13px; color: #d8d5ce; flex: 1; }
+.converter-result-floor { font-size: 11px; color: #444; }
+.converter-loading { font-size: 13px; color: #555; padding: 24px 0; }
+.converter-result { padding-top: 8px; }
+.converter-count { font-size: 64px; font-weight: 300; letter-spacing: -0.04em; color: #f0ede6; line-height: 1; opacity: 0; transform: translateY(8px); transition: opacity 400ms ease, transform 400ms ease; }
+.converter-count.visible { opacity: 1; transform: translateY(0); }
+.converter-collection-name { font-size: 16px; color: #a8a49d; margin-top: 10px; opacity: 0; transition: opacity 300ms ease 200ms; }
+.converter-collection-name.visible { opacity: 1; }
+.converter-caveat { font-size: 11px; color: #444; letter-spacing: 0.02em; margin-top: 16px; opacity: 0; transition: opacity 300ms ease 400ms; }
+.converter-caveat.visible { opacity: 1; }
+.converter-reset { display: inline-block; margin-top: 20px; font-size: 12px; color: #555; background: none; border: none; cursor: pointer; padding: 0; transition: opacity 300ms ease 600ms, color 150ms ease; opacity: 0; }
+.converter-reset.visible { opacity: 1; }
+.converter-reset:hover { color: #888; }
+.converter-zero { font-size: 18px; color: #a8a49d; font-weight: 300; margin: 0 0 6px 0; }
+.converter-zero-sub { font-size: 13px; color: #555; margin: 0 0 20px 0; }
+@media (max-width: 640px) { .converter-count { font-size: 48px; } }
