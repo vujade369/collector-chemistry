@@ -39,24 +39,30 @@ function resolveWalletInput(walletInput: string): ResolveResult {
   if (!trimmed) {
     return { ok: false, error: "Missing wallet", resolverStage: "input_parse" };
   }
+
   if (isLikelyValidInput(trimmed)) {
     return { ok: true, wallet: trimmed, resolverStage: "direct_input" };
   }
+
   try {
     const parsed = new URL(trimmed);
     const host = parsed.hostname.toLowerCase();
     const isOpenSeaHost = host === "opensea.io" || host === "www.opensea.io";
+
     if (!isOpenSeaHost) {
       return { ok: false, error: "Enter a valid Ethereum address or ENS name.", resolverStage: "input_parse" };
     }
+
     const addressesParam = parsed.searchParams.get("addresses");
     if (addressesParam && isEthAddress(addressesParam)) {
       return { ok: true, wallet: addressesParam, resolverStage: "opensea_url" };
     }
+
     const pathSegment = parsed.pathname.split("/").filter(Boolean).pop() || "";
     if (isLikelyValidInput(pathSegment)) {
       return { ok: true, wallet: pathSegment, resolverStage: "opensea_url" };
     }
+
     return { ok: false, error: "OpenSea username resolution not supported yet. Please provide a 0x address or ENS.", resolverStage: "username_resolution" };
   } catch {
     const looksLikeHandle = /^[a-zA-Z0-9._-]+$/.test(trimmed);
@@ -100,15 +106,21 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: 
 
 async function fetchOpenSeaJson<T>(path: string, fallback: T): Promise<T> {
   if (!OPENSEA_API_KEY) return fallback;
+
   const request = fetch(`${OPENSEA_BASE_URL}${path}`, {
     cache: "no-store",
     headers: { accept: "application/json", "X-API-KEY": OPENSEA_API_KEY },
   })
     .then(async (res) => {
       if (!res.ok) return fallback;
-      try { return (await res.json()) as T; } catch { return fallback; }
+      try {
+        return (await res.json()) as T;
+      } catch {
+        return fallback;
+      }
     })
     .catch(() => fallback);
+
   return withTimeout(request, 5000, fallback);
 }
 
@@ -123,15 +135,7 @@ async function fetchOpenSeaProfileIdentity(address: string): Promise<ProfileIden
   if (!OPENSEA_API_KEY) {
     return { displayName: null, username: null, avatarUrl: null, bannerUrl: null };
   }
-  let resolvedAddress = address;
-  if (!isEthAddress(address) && isEns(address)) {
-    const resolved = await fetchOpenSeaJson<{ address?: string }>(
-      `/accounts/resolve/${encodeURIComponent(address)}`, {}
-    );
-    if (resolved?.address && isEthAddress(resolved.address)) {
-      resolvedAddress = resolved.address;
-    }
-  }
+
   const data = await fetchOpenSeaJson<{
     username?: string | null;
     name?: string | null;
@@ -139,19 +143,38 @@ async function fetchOpenSeaProfileIdentity(address: string): Promise<ProfileIden
     banner_image_url?: string | null;
     account?: { username?: string | null; name?: string | null } | null;
     user?: { username?: string | null; name?: string | null } | null;
-  }>(`/accounts/${resolvedAddress}`, {});
+  }>(`/accounts/${address}`, {});
 
   const displayName =
     [data?.name, data?.account?.name, data?.username, data?.account?.username, data?.user?.name, data?.user?.username]
-      .map((v) => String(v || "").trim())
+      .map((value) => String(value || "").trim())
       .find(Boolean) || null;
 
   const username =
     [data?.username, data?.account?.username, data?.user?.username]
-      .map((v) => String(v || "").trim())
+      .map((value) => String(value || "").trim())
       .find(Boolean) || null;
 
-  return { displayName, username, avatarUrl: data?.profile_image_url || null, bannerUrl: data?.banner_image_url || null };
+  return {
+    displayName,
+    username,
+    avatarUrl: data?.profile_image_url || null,
+    bannerUrl: data?.banner_image_url || null,
+  };
+}
+
+async function resolveWalletToAddress(wallet: string): Promise<string> {
+  const value = wallet.trim();
+  if (!value) return "";
+  if (isEthAddress(value)) return value;
+  if (!OPENSEA_API_KEY) return value;
+
+  const resolved = await fetchOpenSeaJson<{ address?: string }>(
+    `/accounts/resolve/${encodeURIComponent(value)}`,
+    {}
+  );
+  const address = String(resolved?.address || "").trim();
+  return isEthAddress(address) ? address : value;
 }
 
 function buildFirstMintLabel(timestamp?: string): string | null {
@@ -173,19 +196,31 @@ function sanitizeRawResponse(raw: string) {
 
 async function fetchCollectionCategoryWithSample(slug: string, samples: CategoryEnrichmentDebug["openseaCategorySamples"]) {
   if (!OPENSEA_API_KEY || !slug) return null;
+
   const endpoint = `${OPENSEA_BASE_URL}/collections/${slug}`;
   try {
-    const res = await fetch(endpoint, { cache: "no-store", headers: { accept: "application/json", "X-API-KEY": OPENSEA_API_KEY } });
+    const res = await fetch(endpoint, {
+      cache: "no-store",
+      headers: { accept: "application/json", "X-API-KEY": OPENSEA_API_KEY },
+    });
     const rawText = await res.text();
     const rawPreview = sanitizeRawResponse(rawText);
+
     let parsed: { category?: string; collection?: { category?: string } } = {};
-    try { parsed = JSON.parse(rawText) as typeof parsed; } catch { parsed = {}; }
+    try {
+      parsed = JSON.parse(rawText) as { category?: string; collection?: { category?: string } };
+    } catch {
+      parsed = {};
+    }
+
     const rawCategory = parsed.collection?.category || parsed.category || null;
     const normalizedCategory = normalizeOpenSeaCategory(rawCategory || "");
     const finalCategory = normalizedCategory || null;
+
     if (samples.length < 5) {
       samples.push({ slug, endpoint, rawResponse: rawPreview, category: rawCategory, success: Boolean(finalCategory) });
     }
+
     return finalCategory;
   } catch {
     if (samples.length < 5) {
@@ -201,11 +236,16 @@ function normalizeAddress(value?: string) {
 
 async function enrichCollectionCategories(nfts: WalletProfileNFT[], categoryCap: number): Promise<{ enrichedNFTs: WalletProfileNFT[]; debug: CategoryEnrichmentDebug }> {
   const collectionBuckets = new Map<string, { nfts: WalletProfileNFT[]; count: number; name: string }>();
+
   for (const nft of nfts) {
     const collectionName = resolveCollectionName(nft);
     const key = normalizeText(collectionName);
     const bucket = collectionBuckets.get(key);
-    if (bucket) { bucket.nfts.push(nft); bucket.count += 1; continue; }
+    if (bucket) {
+      bucket.nfts.push(nft);
+      bucket.count += 1;
+      continue;
+    }
     collectionBuckets.set(key, { nfts: [nft], count: 1, name: collectionName });
   }
 
@@ -213,18 +253,27 @@ async function enrichCollectionCategories(nfts: WalletProfileNFT[], categoryCap:
   const categoryCache = new Map<string, string | null>();
   const slugCache = new Map<string, string | null>();
   const stats: CategoryEnrichmentDebug = {
-    collectionsCheckedForCategory: 0, collectionsWithCategory: 0, collectionsWithoutSlug: 0,
-    collectionsCategoryCap: categoryCap, categoryEnrichmentTimedOut: false, openseaCategorySamples: [],
+    collectionsCheckedForCategory: 0,
+    collectionsWithCategory: 0,
+    collectionsWithoutSlug: 0,
+    collectionsCategoryCap: categoryCap,
+    categoryEnrichmentTimedOut: false,
+    openseaCategorySamples: [],
   };
   const enrichStartMs = Date.now();
 
   for (const collection of topCollections) {
-    if (Date.now() - enrichStartMs >= CATEGORY_ENRICHMENT_TIMEOUT_MS) { stats.categoryEnrichmentTimedOut = true; break; }
+    if (Date.now() - enrichStartMs >= CATEGORY_ENRICHMENT_TIMEOUT_MS) {
+      stats.categoryEnrichmentTimedOut = true;
+      break;
+    }
+
     stats.collectionsCheckedForCategory += 1;
     const sample = collection.nfts[0];
     const contractAddress = normalizeAddress(sample?.contract?.address);
     const normalizedName = normalizeText(collection.name);
     const prefilledSlug = String(sample?.displayCollectionSlug || "").trim();
+
     const cacheKeys = [
       prefilledSlug ? `slug:${prefilledSlug}` : "",
       contractAddress ? `contract:${contractAddress}` : "",
@@ -233,7 +282,10 @@ async function enrichCollectionCategories(nfts: WalletProfileNFT[], categoryCap:
 
     let resolvedCategory: string | null = null;
     for (const key of cacheKeys) {
-      if (categoryCache.has(key)) { resolvedCategory = categoryCache.get(key) || null; break; }
+      if (categoryCache.has(key)) {
+        resolvedCategory = categoryCache.get(key) || null;
+        break;
+      }
     }
 
     let resolvedSlug = prefilledSlug || "";
@@ -242,7 +294,10 @@ async function enrichCollectionCategories(nfts: WalletProfileNFT[], categoryCap:
       if (slugCache.has(contractSlugKey)) {
         resolvedSlug = slugCache.get(contractSlugKey) || "";
       } else {
-        const contractData = await fetchOpenSeaJson<OpenSeaContractResponse>(`/chain/ethereum/contract/${contractAddress}`, {} as OpenSeaContractResponse);
+        const contractData = await fetchOpenSeaJson<OpenSeaContractResponse>(
+          `/chain/ethereum/contract/${contractAddress}`,
+          {} as OpenSeaContractResponse
+        );
         resolvedSlug = String(contractData?.collection || contractData?.slug || contractData?.collections?.[0]?.slug || "").trim();
         slugCache.set(contractSlugKey, resolvedSlug || null);
       }
@@ -261,16 +316,26 @@ async function enrichCollectionCategories(nfts: WalletProfileNFT[], categoryCap:
     if (!resolvedCategory) {
       const contractKey = contractAddress ? `contract:${contractAddress}` : "";
       const nameKey = normalizedName ? `name:${normalizedName}` : "";
-      if (contractKey && categoryCache.has(contractKey)) { resolvedCategory = categoryCache.get(contractKey) || null; }
-      else if (nameKey && categoryCache.has(nameKey)) { resolvedCategory = categoryCache.get(nameKey) || null; }
+      if (contractKey && categoryCache.has(contractKey)) {
+        resolvedCategory = categoryCache.get(contractKey) || null;
+      } else if (nameKey && categoryCache.has(nameKey)) {
+        resolvedCategory = categoryCache.get(nameKey) || null;
+      }
     }
 
     if (!resolvedSlug) stats.collectionsWithoutSlug += 1;
     if (resolvedCategory) stats.collectionsWithCategory += 1;
-    for (const key of cacheKeys) { if (!categoryCache.has(key)) categoryCache.set(key, resolvedCategory); }
+
+    for (const key of cacheKeys) {
+      if (!categoryCache.has(key)) categoryCache.set(key, resolvedCategory);
+    }
+
     for (const nft of collection.nfts) {
       nft.displayCollectionSlug = nft.displayCollectionSlug || resolvedSlug || undefined;
-      if (resolvedCategory) { nft.displayCollectionCategory = resolvedCategory; nft.displayCategorySource = "opensea"; }
+      if (resolvedCategory) {
+        nft.displayCollectionCategory = resolvedCategory;
+        nft.displayCategorySource = "opensea";
+      }
     }
   }
 
@@ -279,25 +344,40 @@ async function enrichCollectionCategories(nfts: WalletProfileNFT[], categoryCap:
 
 type OpenSeaAssetResponse = {
   nft?: {
-    identifier?: string; name?: string; description?: string;
-    image_url?: string; display_image_url?: string; image_original_url?: string; image_preview_url?: string;
-    collection?: string | { name?: string; slug?: string }; collection_slug?: string;
+    identifier?: string;
+    name?: string;
+    description?: string;
+    image_url?: string;
+    display_image_url?: string;
+    image_original_url?: string;
+    image_preview_url?: string;
+    collection?: string | { name?: string; slug?: string };
+    collection_slug?: string;
   };
 };
 
 type OpenSeaAccountEventNft = {
-  contract?: string; identifier?: string | number; collection?: string;
-  image_url?: string; display_image_url?: string; name?: string;
+  contract?: string;
+  identifier?: string | number;
+  collection?: string;
+  image_url?: string;
+  display_image_url?: string;
+  name?: string;
 };
 
 type OpenSeaAccountEvent = {
-  event_timestamp?: string | number; sent_at?: string;
-  from_address?: string; to_address?: string;
-  winner_account?: { address?: string }; nft?: OpenSeaAccountEventNft;
+  event_timestamp?: string | number;
+  sent_at?: string;
+  from_address?: string;
+  to_address?: string;
+  winner_account?: { address?: string };
+  nft?: OpenSeaAccountEventNft;
 };
 
 type OpenSeaAccountEventsResponse = {
-  asset_events?: OpenSeaAccountEvent[]; events?: OpenSeaAccountEvent[]; next?: string | null;
+  asset_events?: OpenSeaAccountEvent[];
+  events?: OpenSeaAccountEvent[];
+  next?: string | null;
 };
 
 type ResolvedDisplayMetadata = { title?: string; collectionName?: string; imageUrl?: string };
@@ -311,7 +391,9 @@ function normalizeImageUrl(url?: string) {
 }
 
 function extractNFTImageUrl(nft: WalletProfileNFT) {
-  return normalizeImageUrl(nft.image?.cachedUrl || nft.image?.thumbnailUrl || nft.contract?.openSeaMetadata?.imageUrl || "");
+  return normalizeImageUrl(
+    nft.image?.cachedUrl || nft.image?.thumbnailUrl || nft.contract?.openSeaMetadata?.imageUrl || ""
+  );
 }
 
 function classify(nft: WalletProfileNFT) {
@@ -331,11 +413,16 @@ function classify(nft: WalletProfileNFT) {
 
 function buildTasteDNA(nfts: WalletProfileNFT[]) {
   const counts: Record<string, number> = {};
-  nfts.forEach((nft) => { const type = classify(nft); counts[type] = (counts[type] || 0) + 1; });
+  nfts.forEach((nft) => {
+    const type = classify(nft);
+    counts[type] = (counts[type] || 0) + 1;
+  });
   const total = nfts.length;
   const percentages: Record<string, number> = {};
   if (total === 0) return percentages;
-  Object.keys(counts).forEach((key) => { percentages[key] = Math.round((counts[key] / total) * 100); });
+  Object.keys(counts).forEach((key) => {
+    percentages[key] = Math.round((counts[key] / total) * 100);
+  });
   return percentages;
 }
 
@@ -345,12 +432,18 @@ function buildCategoryGroups(nfts: WalletProfileNFT[]): Record<string, {
   collections: Array<{ name: string; count: number }>;
 }> {
   const grouped = new Map<string, WalletProfileNFT[]>();
+
   for (const nft of nfts) {
     const category = classify(nft);
     if (category === "Other") continue;
     const bucket = grouped.get(category);
-    if (bucket) { bucket.push(nft); } else { grouped.set(category, [nft]); }
+    if (bucket) {
+      bucket.push(nft);
+    } else {
+      grouped.set(category, [nft]);
+    }
   }
+
   const entries = [...grouped.entries()]
     .filter(([, items]) => items.length > 0)
     .map(([category, items]) => {
@@ -359,28 +452,44 @@ function buildCategoryGroups(nfts: WalletProfileNFT[]): Record<string, {
         const imageUrl = extractNFTImageUrl(nft) || nft.contract?.openSeaMetadata?.imageUrl || "";
         return { title: nft.name || nft.title || collectionName, collectionName, imageUrl };
       });
+
       const collectionCounts = new Map<string, number>();
       for (const nft of items) {
         const collectionName = resolveCollectionName(nft);
         if (collectionName === "Unknown collection") continue;
         collectionCounts.set(collectionName, (collectionCounts.get(collectionName) || 0) + 1);
       }
-      const collections = [...collectionCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name, count]) => ({ name, count }));
+
+      const collections = [...collectionCounts.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([name, count]) => ({ name, count }));
+
       return [category, { totalCount: items.length, previews, collections }] as const;
     })
     .sort((a, b) => b[1].totalCount - a[1].totalCount);
+
   return Object.fromEntries(entries);
 }
 
 async function fetchOpenSeaAsset(contractAddress: string, tokenId: string): Promise<ResolvedDisplayMetadata> {
   if (!contractAddress || !tokenId) return {};
-  const data = await fetchOpenSeaJson<OpenSeaAssetResponse>(`/chain/ethereum/contract/${contractAddress}/nfts/${tokenId}`, {} as OpenSeaAssetResponse);
+
+  const data = await fetchOpenSeaJson<OpenSeaAssetResponse>(
+    `/chain/ethereum/contract/${contractAddress}/nfts/${tokenId}`,
+    {} as OpenSeaAssetResponse
+  );
+
   const payload = data.nft || {};
   const collection = payload.collection;
   const collectionNameRaw = typeof collection === "string" ? collection : collection?.name || "";
-  const collectionName = collectionNameRaw.includes("-") && !collectionNameRaw.includes(" ") ? slugToDisplayName(collectionNameRaw) : collectionNameRaw;
+  const collectionName = collectionNameRaw.includes("-") && !collectionNameRaw.includes(" ")
+    ? slugToDisplayName(collectionNameRaw)
+    : collectionNameRaw;
   const title = payload.name || "";
-  const imageUrl = normalizeImageUrl(payload.display_image_url || payload.image_url || payload.image_preview_url || payload.image_original_url || "");
+  const imageUrl = normalizeImageUrl(
+    payload.display_image_url || payload.image_url || payload.image_preview_url || payload.image_original_url || ""
+  );
   return { title, collectionName, imageUrl };
 }
 
@@ -389,56 +498,129 @@ async function fetchFirstMint(address: string): Promise<{
   timestamp: string;
 } | null> {
   if (!ALCHEMY_API_KEY) return null;
+
   try {
     const alchemyUrl = `https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`;
     const body = {
-      jsonrpc: "2.0", id: 1, method: "alchemy_getAssetTransfers",
-      params: [{ fromBlock: "0x0", toBlock: "latest", toAddress: normalizeAddress(address), fromAddress: ZERO_ADDRESS, category: ["erc721", "erc1155"], withMetadata: true, excludeZeroValue: false, maxCount: "0xa", order: "asc" }],
+      jsonrpc: "2.0",
+      id: 1,
+      method: "alchemy_getAssetTransfers",
+      params: [{
+        fromBlock: "0x0",
+        toBlock: "latest",
+        toAddress: normalizeAddress(address),
+        fromAddress: ZERO_ADDRESS,
+        category: ["erc721", "erc1155"],
+        withMetadata: true,
+        excludeZeroValue: false,
+        maxCount: "0xa",
+        order: "asc",
+      }],
     };
-    const res = await withTimeout(fetch(alchemyUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), cache: "no-store" }), 8000, null as unknown as Response);
+
+    const res = await withTimeout(
+      fetch(alchemyUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), cache: "no-store" }),
+      8000,
+      null as unknown as Response
+    );
+
     if (!res || !res.ok) return null;
-    const json = (await res.json()) as { result?: { transfers?: Array<{ from: string; to: string; contractAddress: string; tokenId: string | null; erc1155Metadata?: Array<{ tokenId: string }> | null; asset: string | null; metadata?: { blockTimestamp?: string }; rawContract?: { address?: string } }> } } };
+
+    const json = (await res.json()) as {
+      result?: {
+        transfers?: Array<{
+          from: string;
+          to: string;
+          contractAddress: string;
+          tokenId: string | null;
+          erc1155Metadata?: Array<{ tokenId: string }> | null;
+          asset: string | null;
+          metadata?: { blockTimestamp?: string };
+          rawContract?: { address?: string };
+        }>;
+      };
+    };
+
     const transfers = json?.result?.transfers || [];
     if (!transfers.length) return null;
+
     const first = transfers[0];
     const contractAddress = normalizeAddress(first.contractAddress || first.rawContract?.address || "");
     const rawTokenId = first.tokenId || first.erc1155Metadata?.[0]?.tokenId || "";
     const tokenId = rawTokenId.startsWith("0x") ? String(BigInt(rawTokenId)) : String(rawTokenId);
     const timestamp = first.metadata?.blockTimestamp || "";
+
     if (!contractAddress || !tokenId) return null;
+
     const displayMeta = await fetchOpenSeaAsset(contractAddress, String(tokenId));
+
     return {
-      nft: { contractAddress, tokenId: String(tokenId), collectionName: displayMeta.collectionName || first.asset || "Unknown collection", imageUrl: displayMeta.imageUrl || "", title: displayMeta.title || (first.asset ? `${first.asset} #${tokenId}` : `#${tokenId}`) },
+      nft: {
+        contractAddress,
+        tokenId: String(tokenId),
+        collectionName: displayMeta.collectionName || first.asset || "Unknown collection",
+        imageUrl: displayMeta.imageUrl || "",
+        title: displayMeta.title || (first.asset ? `${first.asset} #${tokenId}` : `#${tokenId}`),
+      },
       timestamp,
     };
-  } catch (_e) { return null; }
+  } catch {
+    return null;
+  }
 }
 
-async function fetchAcquisitionBreakdown(address: string): Promise<{ mintCount: number; acquiredCount: number; totalSampled: number; mintPercent: number; acquiredPercent: number }> {
-  if (!OPENSEA_API_KEY) return { mintCount: 0, acquiredCount: 0, totalSampled: 0, mintPercent: 0, acquiredPercent: 0 };
+async function fetchAcquisitionBreakdown(address: string): Promise<{
+  mintCount: number;
+  acquiredCount: number;
+  totalSampled: number;
+  mintPercent: number;
+  acquiredPercent: number;
+}> {
+  if (!OPENSEA_API_KEY) {
+    return { mintCount: 0, acquiredCount: 0, totalSampled: 0, mintPercent: 0, acquiredPercent: 0 };
+  }
+
   try {
     const target = normalizeAddress(address);
     let next = "";
     let mintCount = 0;
     let acquiredCount = 0;
+
     for (let page = 0; page < OPENSEA_MAX_EVENT_PAGES; page += 1) {
       const params = new URLSearchParams({ limit: String(OPENSEA_EVENT_PAGE_LIMIT), event_type: "transfer" });
       if (next) params.set("next", next);
-      const data = await fetchOpenSeaJson<OpenSeaAccountEventsResponse>(`/events/accounts/${target}?${params.toString()}`, { events: [], asset_events: [], next: null });
+
+      const data = await fetchOpenSeaJson<OpenSeaAccountEventsResponse>(
+        `/events/accounts/${target}?${params.toString()}`,
+        { events: [], asset_events: [], next: null }
+      );
+
       const events = data.events || data.asset_events || [];
+
       for (const event of events) {
         if (normalizeAddress(event.to_address || event.winner_account?.address) !== target) continue;
-        if (normalizeAddress(event.from_address) === ZERO_ADDRESS) { mintCount += 1; } else { acquiredCount += 1; }
+        if (normalizeAddress(event.from_address) === ZERO_ADDRESS) {
+          mintCount += 1;
+        } else {
+          acquiredCount += 1;
+        }
       }
+
       next = String(data.next || "");
       if (!next || !events.length) break;
     }
+
     const totalSampled = mintCount + acquiredCount;
-    if (totalSampled === 0) return { mintCount, acquiredCount, totalSampled, mintPercent: 0, acquiredPercent: 0 };
+    if (totalSampled === 0) {
+      return { mintCount, acquiredCount, totalSampled, mintPercent: 0, acquiredPercent: 0 };
+    }
+
     const mintPercent = Math.round((mintCount / totalSampled) * 100);
     const acquiredPercent = Math.max(0, 100 - mintPercent);
     return { mintCount, acquiredCount, totalSampled, mintPercent, acquiredPercent };
-  } catch { return { mintCount: 0, acquiredCount: 0, totalSampled: 0, mintPercent: 0, acquiredPercent: 0 }; }
+  } catch {
+    return { mintCount: 0, acquiredCount: 0, totalSampled: 0, mintPercent: 0, acquiredPercent: 0 };
+  }
 }
 
 function weiToEth(wei: string): string {
@@ -464,7 +646,10 @@ type MarketAttention = {
 function normalizeTokenIdForOpenSea(raw: unknown): string | null {
   const value = String(raw || "").trim();
   if (!value) return null;
-  if (/^0x[0-9a-f]+$/i.test(value)) { const asInt = parseInt(value, 16); if (!Number.isNaN(asInt)) return String(asInt); }
+  if (/^0x[0-9a-f]+$/i.test(value)) {
+    const asInt = parseInt(value, 16);
+    if (!Number.isNaN(asInt)) return String(asInt);
+  }
   if (/^\d+$/.test(value)) return value;
   return null;
 }
@@ -479,40 +664,55 @@ function pickTokenId(nft: WalletProfileNFT): string | null {
 
 async function fetchMarketAttention(wallet: string, nfts: WalletProfileNFT[]): Promise<MarketAttention | null> {
   if (!OPENSEA_API_KEY || !nfts.length) return null;
+
   try {
-    const seen = new Set<string>();
     const candidates: Array<{ slug: string; tokenId: string; nft: WalletProfileNFT }> = [];
+
     for (const nft of nfts) {
-      if (candidates.length >= 8) break;
+      if (candidates.length >= 50) break;
       const slug = String(nft.displayCollectionSlug || "").trim();
       const tokenId = pickTokenId(nft);
       if (!slug || !tokenId) continue;
-      if (seen.has(slug)) continue;
-      seen.add(slug);
       candidates.push({ slug, tokenId, nft });
     }
+
     if (!candidates.length) return null;
 
     const task = async () => {
       const responses = await Promise.all(
         candidates.map(async ({ slug, tokenId, nft }) => {
           const data = await fetchOpenSeaJson<{
-            price?: { value?: string; currency?: string; current?: { value?: string } };
-            protocol_data?: { parameters?: { offer?: Array<{ startAmount?: string }>; consideration?: Array<{ token?: string; identifierOrCriteria?: string }> } };
+            price?: { value?: string; currency?: string };
+            protocol_data?: {
+              parameters?: {
+                offer?: Array<{ startAmount?: string }>;
+                consideration?: Array<{ token?: string; identifierOrCriteria?: string }>;
+              };
+            };
             protocol_address?: string;
           }>(`/offers/collection/${encodeURIComponent(slug)}/nfts/${encodeURIComponent(tokenId)}/best`, {});
 
           const weiValue =
             String(data?.price?.value || "").trim() ||
-            String((data?.price as { current?: { value?: string } })?.current?.value || "").trim() ||
             String(data?.protocol_data?.parameters?.offer?.[0]?.startAmount || "").trim();
           if (!weiValue || !/^\d+$/.test(weiValue)) return null;
+
           const eth = Number(weiToEth(weiValue));
           if (!Number.isFinite(eth) || eth <= 0) return null;
+
           const contractAddress = normalizeAddress(nft.contract?.address || data?.protocol_data?.parameters?.consideration?.[0]?.token || "");
-          return { eth, weiValue, contractAddress: contractAddress || null, tokenId, title: String(nft.name || nft.title || "").trim() || null, imageUrl: extractNFTImageUrl(nft) || null, collectionName: resolveCollectionName(nft) || null };
+          return {
+            eth,
+            weiValue,
+            contractAddress: contractAddress || null,
+            tokenId,
+            title: String(nft.name || nft.title || "").trim() || null,
+            imageUrl: extractNFTImageUrl(nft) || null,
+            collectionName: resolveCollectionName(nft) || null,
+          };
         })
       );
+
       const valid = responses.filter((item): item is NonNullable<typeof item> => Boolean(item));
       if (!valid.length) return null;
       valid.sort((a, b) => b.eth - a.eth);
@@ -525,6 +725,7 @@ async function fetchMarketAttention(wallet: string, nfts: WalletProfileNFT[]): P
     let finalTitle = winner.title;
     let finalImageUrl = winner.imageUrl;
     let finalCollectionName = winner.collectionName;
+
     if ((!finalTitle || !finalImageUrl) && winner.contractAddress && winner.tokenId) {
       const enriched = await fetchOpenSeaAsset(winner.contractAddress, winner.tokenId);
       finalTitle = finalTitle || enriched.title || null;
@@ -534,11 +735,18 @@ async function fetchMarketAttention(wallet: string, nfts: WalletProfileNFT[]): P
 
     return {
       ethAmountLabel: `${Number(weiToEth(winner.weiValue)).toFixed(3)} ETH`,
-      collectionName: finalCollectionName || null, title: finalTitle || null, imageUrl: finalImageUrl || null,
-      contractAddress: winner.contractAddress, tokenId: winner.tokenId,
-      openseaUrl: winner.contractAddress && winner.tokenId ? `https://opensea.io/item/ethereum/${winner.contractAddress}/${winner.tokenId}` : null,
+      collectionName: finalCollectionName || null,
+      title: finalTitle || null,
+      imageUrl: finalImageUrl || null,
+      contractAddress: winner.contractAddress,
+      tokenId: winner.tokenId,
+      openseaUrl: winner.contractAddress && winner.tokenId
+        ? `https://opensea.io/item/ethereum/${winner.contractAddress}/${winner.tokenId}`
+        : null,
     };
-  } catch (_e) { return null; }
+  } catch {
+    return null;
+  }
 }
 
 export async function GET(req: Request) {
@@ -547,19 +755,37 @@ export async function GET(req: Request) {
   const walletInput = searchParams.get("wallet")?.trim() || "";
   const walletInputs = walletInput.split(",").map((v) => v.trim()).filter(Boolean).slice(0, 5);
   const categoryCapInput = Number(searchParams.get("categoryCap"));
-  const categoryCap = Number.isFinite(categoryCapInput) && categoryCapInput > 0 ? Math.floor(categoryCapInput) : DEFAULT_COLLECTION_CATEGORY_CAP;
+  const categoryCap =
+    Number.isFinite(categoryCapInput) && categoryCapInput > 0
+      ? Math.floor(categoryCapInput)
+      : DEFAULT_COLLECTION_CATEGORY_CAP;
 
   if (walletInputs.length === 0) {
-    return NextResponse.json({ error: "Missing wallet", errorType: "INVALID_WALLET_INPUT", walletInput, resolverStage: "input_parse", upstreamStatus: null, message: "Missing wallet" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Missing wallet", errorType: "INVALID_WALLET_INPUT", walletInput, resolverStage: "input_parse", upstreamStatus: null, message: "Missing wallet" },
+      { status: 400 }
+    );
   }
 
   const resolvedWallets = walletInputs.map(resolveWalletInput);
-  const validWallets = Array.from(new Set(resolvedWallets.filter((w): w is Extract<ResolveResult, {ok:true}> => w.ok).map((w) => w.wallet)));
+  const validWallets = Array.from(new Set(
+    resolvedWallets.filter((w): w is Extract<ResolveResult, {ok:true}> => w.ok).map((w) => w.wallet)
+  ));
   const walletErrors = resolvedWallets.filter((w) => !w.ok);
 
   if (validWallets.length === 0) {
     const first = walletErrors[0];
-    return NextResponse.json({ error: first?.error || "Invalid wallet input", errorType: "INVALID_WALLET_INPUT", walletInput, resolverStage: first?.resolverStage || "input_parse", upstreamStatus: null, message: first?.error || "Invalid wallet input" }, { status: 400 });
+    return NextResponse.json(
+      {
+        error: first?.error || "Invalid wallet input",
+        errorType: "INVALID_WALLET_INPUT",
+        walletInput,
+        resolverStage: first?.resolverStage || "input_parse",
+        upstreamStatus: null,
+        message: first?.error || "Invalid wallet input",
+      },
+      { status: 400 }
+    );
   }
 
   const wallet = validWallets[0];
@@ -568,7 +794,18 @@ export async function GET(req: Request) {
 
   try {
     if (!alchemyConfigured) {
-      return NextResponse.json({ error: "Alchemy API key missing.", errorType: "MISSING_API_KEY", walletInput, resolverStage: "fetch_init", upstreamStatus: null, message: "ALCHEMY_API_KEY is not configured.", diagnostics: { alchemyConfigured, alchemyBaseUrl } }, { status: 500 });
+      return NextResponse.json(
+        {
+          error: "Alchemy API key missing.",
+          errorType: "MISSING_API_KEY",
+          walletInput,
+          resolverStage: "fetch_init",
+          upstreamStatus: null,
+          message: "ALCHEMY_API_KEY is not configured for profile debug endpoint.",
+          diagnostics: { alchemyConfigured, alchemyBaseUrl },
+        },
+        { status: 500 }
+      );
     }
 
     const fetchStartMs = Date.now();
@@ -587,32 +824,36 @@ export async function GET(req: Request) {
     const profile = buildWalletProfile(enrichedNFTs);
     const categoryGroups = buildCategoryGroups(enrichedNFTs);
 
-    const [firstMints, acquisitionBreakdown, profileIdentity, marketAttention] = await Promise.all([
-      Promise.all(validWallets.map(w => fetchFirstMint(w))),
-      fetchAcquisitionBreakdown(validWallets[0]),
-      fetchOpenSeaProfileIdentity(validWallets[0]),
-      Promise.all(validWallets.map(w => {
-        const walletNFTs = enrichedNFTs.filter((nft: WalletProfileNFT) =>
-          !nft.sourceWallet || nft.sourceWallet === w
-        );
-        return fetchMarketAttention(w, walletNFTs.length > 0 ? walletNFTs : enrichedNFTs);
-      })).then(results => {
-        const valid = results.filter((r): r is NonNullable<typeof r> => r !== null);
-        if (!valid.length) return null;
-        return valid.reduce((best, current) => {
-          const bestEth = parseFloat(best.ethAmountLabel);
-          const currentEth = parseFloat(current.ethAmountLabel);
-          return currentEth > bestEth ? current : best;
-        });
-      }),
-    ]);
-
-    const firstMint = firstMints
-      .filter((r): r is NonNullable<typeof r> => r !== null)
-      .reduce<NonNullable<(typeof firstMints)[number]> | null>((earliest, current) =>
-        !earliest || new Date(current.timestamp) < new Date(earliest.timestamp) ? current : earliest,
-        null
+    const earliestMintTask = Promise.all(validWallets.map((entry) => fetchFirstMint(entry)))
+      .then((results) =>
+        results
+          .filter((item): item is NonNullable<typeof item> => Boolean(item?.timestamp))
+          .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())[0] || null
       );
+
+    const primaryIdentityTask = resolveWalletToAddress(wallet).then((resolvedWalletAddress) =>
+      fetchOpenSeaProfileIdentity(resolvedWalletAddress || wallet)
+    );
+
+    // Run market attention independently per wallet then pick the highest bid
+    const marketAttentionTask = Promise.all(
+      validWallets.map((w) => fetchMarketAttention(w, enrichedNFTs))
+    ).then((results) => {
+      const valid = results.filter((r): r is NonNullable<typeof r> => r !== null);
+      if (!valid.length) return null;
+      return valid.reduce((best, current) => {
+        const bestEth = parseFloat(best.ethAmountLabel);
+        const currentEth = parseFloat(current.ethAmountLabel);
+        return currentEth > bestEth ? current : best;
+      });
+    });
+
+    const [firstMint, acquisitionBreakdown, profileIdentity, marketAttention] = await Promise.all([
+      earliestMintTask,
+      fetchAcquisitionBreakdown(wallet),
+      primaryIdentityTask,
+      marketAttentionTask,
+    ]);
 
     const firstMintLabel = buildFirstMintLabel(firstMint?.timestamp);
     const enrichedProfile = { ...profile, firstMint, firstMintLabel, acquisitionBreakdown };
@@ -620,11 +861,19 @@ export async function GET(req: Request) {
     const totalMs = Date.now() - totalStartMs;
 
     return NextResponse.json({
-      wallet, wallets: validWallets, walletCount: validWallets.length, deduplicatedCount, failedWallets,
-      profile: enrichedProfile, profileIdentity, marketAttention, taste,
+      wallet,
+      wallets: validWallets,
+      walletCount: validWallets.length,
+      deduplicatedCount,
+      failedWallets,
+      profile: enrichedProfile,
+      profileIdentity,
+      marketAttention,
+      taste,
       sampleTopCollections: enrichedProfile.topCollections,
       sampleCategoryDistribution: enrichedProfile.categoryDistribution,
-      categoryGroups, nftCountUsed: enrichedProfile.totalNFTs,
+      categoryGroups,
+      nftCountUsed: enrichedProfile.totalNFTs,
       collectionsCheckedForCategory: debug.collectionsCheckedForCategory,
       collectionsWithCategory: debug.collectionsWithCategory,
       collectionsWithoutSlug: debug.collectionsWithoutSlug,
@@ -634,21 +883,49 @@ export async function GET(req: Request) {
       openseaCategorySamples: debug.openseaCategorySamples,
       timing: { fetchNFTsMs, categoryEnrichmentMs, profileBuildMs, totalMs },
       diagnostics: {
-        walletInput, resolvedWallet: wallet,
-        resolverStage: validWallets.length > 1 ? "direct_input" : resolvedWallets[0]?.ok ? resolvedWallets[0].resolverStage : "input_parse",
-        alchemyConfigured, alchemyBaseUrl,
+        walletInput,
+        resolvedWallet: wallet,
+        resolverStage: validWallets.length > 1
+          ? "direct_input"
+          : resolvedWallets[0]?.ok
+          ? resolvedWallets[0].resolverStage
+          : "input_parse",
+        alchemyConfigured,
+        alchemyBaseUrl,
       },
     });
   } catch (error) {
     if (error instanceof WalletFetchError) {
       return NextResponse.json(
-        { error: "Wallet profile debug fetch failed.", errorType: error.errorType, walletInput, resolverStage: error.resolverStage, upstreamStatus: error.upstreamStatus ?? null, message: error.message, diagnostics: { resolvedWallet: wallet, alchemyConfigured, alchemyBaseUrl, ...error.diagnostics } },
+        {
+          error: "Wallet profile debug fetch failed.",
+          errorType: error.errorType,
+          walletInput,
+          resolverStage: error.resolverStage,
+          upstreamStatus: error.upstreamStatus ?? null,
+          message: error.message,
+          diagnostics: {
+            resolvedWallet: wallet,
+            alchemyConfigured,
+            alchemyBaseUrl,
+            ...error.diagnostics,
+          },
+        },
         { status: 500 }
       );
     }
+
     const message = error instanceof Error ? error.message : "Failed to build wallet profile";
     return NextResponse.json(
-      { error: "Wallet profile debug failed.", errorType: "UNEXPECTED_PROFILE_ERROR", walletInput, resolverStage: "fetch_init", upstreamStatus: null, message, diagnostics: { resolvedWallet: wallet, alchemyConfigured, alchemyBaseUrl } },
+      {
+        error: "Wallet profile debug failed.",
+        errorType: "UNEXPECTED_PROFILE_ERROR",
+        walletInput,
+        resolverStage: "fetch_init",
+        upstreamStatus: null,
+        message,
+        diagnostics: { resolvedWallet: wallet, alchemyConfigured, alchemyBaseUrl },
+      },
       { status: 500 }
     );
   }
