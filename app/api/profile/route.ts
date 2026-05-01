@@ -669,12 +669,19 @@ async function fetchMarketAttention(wallet: string, nfts: WalletProfileNFT[]): P
     const candidates: Array<{ slug: string; tokenId: string; nft: WalletProfileNFT }> = [];
 
     for (const nft of nfts) {
-      if (candidates.length >= 50) break;
-      const slug = String(nft.displayCollectionSlug || "").trim();
-      const tokenId = pickTokenId(nft);
-      if (!slug || !tokenId) continue;
-      candidates.push({ slug, tokenId, nft });
-    }
+  if (candidates.length >= 50) break;
+  let slug = String(nft.displayCollectionSlug || "").trim();
+  const tokenId = pickTokenId(nft);
+  if (!tokenId) continue;
+  if (!slug) {
+    const addr = String(nft.contract?.address || "").trim().toLowerCase();
+    if (!addr) continue;
+    const d = await fetchOpenSeaJson<{ collection?: string }>(`/chain/ethereum/contract/${addr}`, {});
+    slug = String(d?.collection || "").trim();
+    if (!slug) continue;
+  }
+  candidates.push({ slug, tokenId, nft });
+}
 
     if (!candidates.length) return null;
 
