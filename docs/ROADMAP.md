@@ -339,3 +339,48 @@ Guardrails:
 - do not lose source-wallet context when merging
 - do not treat multiple wallets as verified identity unless the user supplies them
 - keep privacy/respect framing clear
+
+---
+
+## Future Phase — SimpleHash Integration
+
+Goal:
+Replace the floor-price approximation in the Wallet Converter with a real,
+accurate wallet valuation using SimpleHash's portfolio value endpoint.
+
+Why SimpleHash:
+The current Converter estimates wallet value by fetching floor prices for
+the top 5 held collections. This is a rough approximation — it undercounts
+collections with no floor listings, ignores NFT-level pricing, and can't
+account for liquidity. It's honest enough for a toy but not defensible
+as a real number.
+
+SimpleHash solves this with a single API call:
+  GET /api/v0/nfts/owners/value?chains=ethereum&wallet_addresses={address}
+
+This returns an estimated portfolio value across all NFTs in the wallet,
+using their own pricing model that accounts for floor prices, recent sales,
+and liquidity signals. It also supports multi-wallet input natively, which
+means it will work correctly once multi-wallet profiles ship.
+
+What this unlocks:
+- Accurate Wallet Converter results
+- A real wallet value signal for the Activity Timeline
+- Potential for a "wallet value over time" feature
+- Stronger compare signals (relative wallet scale between two collectors)
+
+What this is not:
+- A financial dashboard feature
+- A number shown prominently in the profile
+- A ranking or status signal
+
+The number stays behind the scenes. It only surfaces as the input to the
+Converter calculation and any other features that need a value estimate.
+
+Prerequisites:
+- SimpleHash API key added to .env.local as SIMPLEHASH_API_KEY
+- New lib/fetchWalletValue.ts helper
+- Converter shared.ts updated to call SimpleHash instead of floor price loop
+- Multi-wallet support compatible (SimpleHash accepts comma-separated addresses)
+
+Do not build this until the Converter and multi-wallet features are stable.
