@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchWalletNFTs, WalletFetchError } from "@/lib/fetchWalletNFTs";
+import { fetchAndMergeWalletNFTs, fetchWalletNFTs, WalletFetchError } from "@/lib/fetchWalletNFTs";
 import {
   buildWalletProfile,
   normalizeOpenSeaCategory,
@@ -1074,28 +1074,37 @@ export async function GET(req: Request) {
   const totalStartMs = Date.now();
   const { searchParams } = new URL(req.url);
   const walletInput = searchParams.get("wallet")?.trim() || "";
+  const walletInputs = walletInput.split(",").map((v) => v.trim()).filter(Boolean).slice(0, 5);
   const categoryCapInput = Number(searchParams.get("categoryCap"));
   const categoryCap =
     Number.isFinite(categoryCapInput) && categoryCapInput > 0
       ? Math.floor(categoryCapInput)
       : DEFAULT_COLLECTION_CATEGORY_CAP;
-  const resolved = resolveWalletInput(walletInput);
-
-  if (!resolved.ok) {
+  if (walletInputs.length === 0) {
     return NextResponse.json(
       {
-        error: resolved.error,
+        error: "Missing wallet",
         errorType: "INVALID_WALLET_INPUT",
         walletInput,
-        resolverStage: resolved.resolverStage,
+        resolverStage: "input_parse",
         upstreamStatus: null,
-        message: resolved.error,
+        message: "Missing wallet",
       },
       { status: 400 }
     );
   }
 
-  const wallet = resolved.wallet;
+  const resolvedWallets = walletInputs.map(resolveWalletInput);
+  const validWallets = Array.from(new Set(resolvedWallets.filter((w): w is Extract<ResolveResult, {ok:true}> => w.ok).map((w) => w.wallet)));
+  const walletErrors = resolvedWallets.filter((w) => !w.ok);
+  if (validWallets.length === 0) {
+    const first = walletErrors[0];
+    return NextResponse.json(
+      { error: first?.error || "Invalid wallet input", errorType: "INVALID_WALLET_INPUT", walletInput, resolverStage: first?.resolverStage || "input_parse", upstreamStatus: null, message: first?.error || "Invalid wallet input" },
+      { status: 400 }
+    );
+  }
+  const wallet = validWallets[0];
   const alchemyConfigured = Boolean(ALCHEMY_API_KEY);
   const alchemyBaseUrl = ALCHEMY_API_KEY
     ? `https://eth-mainnet.g.alchemy.com/nft/v3/<redacted>`
@@ -1121,7 +1130,10 @@ export async function GET(req: Request) {
     }
 
     const fetchStartMs = Date.now();
-    const nfts = await fetchWalletNFTs<WalletProfileNFT>(wallet, ALCHEMY_API_KEY);
+    const { mergedNFTs, deduplicatedCount, failedWallets } = validWallets.length > 1
+      ? await fetchAndMergeWalletNFTs<WalletProfileNFT>(validWallets, ALCHEMY_API_KEY)
+      : { mergedNFTs: await fetchWalletNFTs<WalletProfileNFT>(wallet, ALCHEMY_API_KEY), deduplicatedCount: 0, failedWallets: [] as string[] };
+    const nfts = mergedNFTs;
     const taste = buildTasteDNA(nfts);
     const fetchNFTsMs = Date.now() - fetchStartMs;
 
@@ -1150,6 +1162,10 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       wallet,
+      wallets: validWallets,
+      walletCount: validWallets.length,
+      deduplicatedCount,
+      failedWallets,
       profile: enrichedProfile,
       profileIdentity,
       marketAttention,
@@ -1174,7 +1190,7 @@ export async function GET(req: Request) {
       diagnostics: {
         walletInput,
         resolvedWallet: wallet,
-        resolverStage: resolved.resolverStage,
+        resolverStage: validWallets.length > 1 ? "direct_input" : resolvedWallets[0]?.ok ? resolvedWallets[0].resolverStage : "input_parse",
         alchemyConfigured,
         alchemyBaseUrl,
       },
