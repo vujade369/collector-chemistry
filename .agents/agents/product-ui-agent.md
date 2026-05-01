@@ -13,6 +13,8 @@ Use this agent for:
 - interactive UI patterns
 - component composition
 
+Always consult `docs/DISPLAY_CONTRACT.md` before implementing UI that displays wallets, NFTs, collections, artists, images, links, or marketplace actions.
+
 ## Primary docs to read
 
 - `docs/PRODUCT_SOUL.md`

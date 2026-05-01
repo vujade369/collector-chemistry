@@ -9,6 +9,13 @@ The goal is not analysis or ranking.
 The goal is to make cultural patterns visible.
 
 ---
+## Required reference for UI/entity display work
+
+Before changing profile UI, compare UI, wallet displays, NFT cards, collection cards, artist/creator displays, image handling, or OpenSea/marketplace links, read:
+
+- `docs/DISPLAY_CONTRACT.md`
+
+Use it as the source of truth for entity display standards, image fallbacks, click behavior, OpenSea integration, empty states, and acceptance criteria.
 
 ## Results page philosophy
 

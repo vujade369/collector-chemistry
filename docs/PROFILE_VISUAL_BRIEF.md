@@ -12,6 +12,7 @@ Use this with:
 - `docs/BUILD_LOG.md`
 
 ---
+This visual brief defines the look and feel of the profile page. For entity display rules, image/link behavior, fallbacks, OpenSea integration, and required dynamic data standards, follow `docs/DISPLAY_CONTRACT.md`.
 
 ## Reference image
 
