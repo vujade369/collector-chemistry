@@ -15,6 +15,8 @@ const DEFAULT_COLLECTION_CATEGORY_CAP = 25;
 const CATEGORY_ENRICHMENT_TIMEOUT_MS = 4000;
 const OPENSEA_MAX_EVENT_PAGES = 6;
 const OPENSEA_EVENT_PAGE_LIMIT = 50;
+const MARKET_ATTENTION_CANDIDATE_CAP = 10;
+const MARKET_ATTENTION_TOTAL_TIMEOUT_MS = 2500;
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 /**
@@ -155,6 +157,72 @@ async function fetchOpenSeaJson<T>(
     .catch(() => fallback);
 
   return withTimeout(request, 5000, fallback);
+}
+
+type ProfileIdentity = {
+  displayName: string | null;
+  username: string | null;
+  avatarUrl: string | null;
+  bannerUrl: string | null;
+};
+
+async function fetchOpenSeaProfileIdentity(address: string): Promise<ProfileIdentity> {
+  if (!OPENSEA_API_KEY) {
+    return { displayName: null, username: null, avatarUrl: null, bannerUrl: null };
+  }
+
+  const data = await fetchOpenSeaJson<{
+    username?: string | null;
+    name?: string | null;
+    profile_image_url?: string | null;
+    banner_image_url?: string | null;
+    account?: {
+      username?: string | null;
+      name?: string | null;
+    } | null;
+    user?: {
+      username?: string | null;
+      name?: string | null;
+    } | null;
+  }>(`/accounts/${address}`, {});
+
+  const displayNameCandidates = [
+    data?.name,
+    data?.account?.name,
+    data?.username,
+    data?.account?.username,
+    data?.user?.name,
+    data?.user?.username,
+  ];
+  const displayName =
+    displayNameCandidates
+      .map((value) => String(value || "").trim())
+      .find(Boolean) || null;
+
+  const usernameCandidates = [data?.username, data?.account?.username, data?.user?.username];
+  const username =
+    usernameCandidates
+      .map((value) => String(value || "").trim())
+      .find(Boolean) || null;
+
+  return {
+    displayName,
+    username,
+    avatarUrl: data?.profile_image_url || null,
+    bannerUrl: data?.banner_image_url || null,
+  };
+}
+
+function buildFirstMintLabel(timestamp?: string): string | null {
+  const raw = String(timestamp || "").trim();
+  if (!raw) return null;
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 }
 
 function sanitizeRawResponse(raw: string) {
@@ -370,6 +438,39 @@ type OpenSeaAssetResponse = {
     collection?: string | { name?: string; slug?: string };
     collection_slug?: string;
   };
+};
+
+type OpenSeaBestOfferResponse = {
+  price?: {
+    current?: {
+      value?: string | number | null;
+      currency?: string | null;
+      decimals?: number | null;
+    } | null;
+    value?: string | number | null;
+  } | null;
+  protocol_data?: {
+    parameters?: {
+      offer?: Array<{ startAmount?: string | number | null }>;
+    };
+  } | null;
+  order_hash?: string | null;
+};
+
+type MarketAttention = {
+  ethAmountLabel: string;
+  collectionName: string | null;
+  title: string | null;
+  imageUrl: string | null;
+  contractAddress: string | null;
+  tokenId: string | null;
+  openseaUrl: string | null;
+};
+
+type MarketAttentionCandidate = {
+  slug: string;
+  tokenId: string;
+  contractAddress: string | null;
 };
 
 type OpenSeaAccountEventNft = {
@@ -647,6 +748,135 @@ async function fetchOpenSeaAsset(
   };
 }
 
+function weiToEthNumber(rawPrice: string): number | null {
+  try {
+    const num = Number(rawPrice);
+    if (!Number.isFinite(num) || num <= 0) return null;
+    return num / 1e18;
+  } catch {
+    return null;
+  }
+}
+
+function formatEthLabel(eth: number): string {
+  return `${eth.toFixed(4).replace(/\.?0+$/, "")} ETH`;
+}
+
+function parseOfferEthAmount(data: OpenSeaBestOfferResponse): number | null {
+  const current = data?.price?.current;
+  const currentValue = String(current?.value ?? "").trim();
+  if (currentValue) {
+    const decimals = Number(current?.decimals);
+    if (Number.isFinite(decimals) && decimals >= 0) {
+      const scaled = Number(currentValue) / Math.pow(10, decimals || 0);
+      if (Number.isFinite(scaled) && scaled > 0) return scaled;
+    }
+    const eth = weiToEthNumber(currentValue);
+    if (eth !== null) return eth;
+  }
+
+  const fallbackPriceValue = String(data?.price?.value ?? "").trim();
+  if (fallbackPriceValue) {
+    const eth = weiToEthNumber(fallbackPriceValue);
+    if (eth !== null) return eth;
+  }
+
+  const protocolAmount = String(data?.protocol_data?.parameters?.offer?.[0]?.startAmount ?? "").trim();
+  if (protocolAmount) {
+    const eth = weiToEthNumber(protocolAmount);
+    if (eth !== null) return eth;
+  }
+
+  return null;
+}
+
+function extractCandidateSlug(nft: WalletProfileNFT): string {
+  return String(nft.displayCollectionSlug || "").trim();
+}
+
+function extractCandidateTokenId(nft: WalletProfileNFT): string {
+  const fromTopLevel = (nft as unknown as { tokenId?: string | number }).tokenId;
+  if (fromTopLevel !== undefined && fromTopLevel !== null) {
+    return String(fromTopLevel).trim();
+  }
+
+  const fromId = (nft as unknown as { id?: { tokenId?: string | number } }).id?.tokenId;
+  if (fromId !== undefined && fromId !== null) {
+    return String(fromId).trim();
+  }
+
+  return "";
+}
+
+function buildMarketAttentionCandidates(nfts: WalletProfileNFT[]): MarketAttentionCandidate[] {
+  const seen = new Set<string>();
+  const candidates: MarketAttentionCandidate[] = [];
+
+  for (const nft of nfts) {
+    const slug = extractCandidateSlug(nft);
+    const rawTokenId = extractCandidateTokenId(nft);
+    if (!slug || !rawTokenId) continue;
+    const tokenId = rawTokenId;
+    if (!tokenId) continue;
+
+    const key = `${slug}:${tokenId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    candidates.push({
+      slug,
+      tokenId,
+      contractAddress: normalizeAddress(nft.contract?.address || "") || null,
+    });
+
+    if (candidates.length >= MARKET_ATTENTION_CANDIDATE_CAP) break;
+  }
+
+  return candidates;
+}
+
+async function fetchMarketAttention(nfts: WalletProfileNFT[]): Promise<MarketAttention | null> {
+  if (!OPENSEA_API_KEY) return null;
+
+  const candidates = buildMarketAttentionCandidates(nfts);
+  if (!candidates.length) return null;
+
+  const checks = candidates.map(async (candidate) => {
+    const offer = await fetchOpenSeaJson<OpenSeaBestOfferResponse>(
+      `/offers/collection/${encodeURIComponent(candidate.slug)}/nfts/${encodeURIComponent(candidate.tokenId)}/best`,
+      {} as OpenSeaBestOfferResponse
+    );
+
+    const ethAmount = parseOfferEthAmount(offer);
+    if (ethAmount === null) return null;
+
+    let metadata: ResolvedDisplayMetadata = {};
+    if (candidate.contractAddress && candidate.tokenId) {
+      metadata = await fetchOpenSeaAsset(candidate.contractAddress, candidate.tokenId);
+    }
+
+    return {
+      ethAmount,
+      payload: {
+        ethAmountLabel: formatEthLabel(ethAmount),
+        collectionName: metadata.collectionName || null,
+        title: metadata.title || null,
+        imageUrl: metadata.imageUrl || null,
+        contractAddress: candidate.contractAddress,
+        tokenId: candidate.tokenId,
+        openseaUrl: `https://opensea.io/assets/ethereum/${candidate.contractAddress}/${candidate.tokenId}`,
+      } as MarketAttention,
+    };
+  });
+
+  const settled = await Promise.all(checks);
+  const valid = settled.filter((entry): entry is { ethAmount: number; payload: MarketAttention } => Boolean(entry));
+  if (!valid.length) return null;
+
+  valid.sort((a, b) => b.ethAmount - a.ethAmount);
+  return valid[0].payload;
+}
+
 async function fetchFirstMint(address: string): Promise<{
   nft: {
     contractAddress: string;
@@ -890,11 +1120,23 @@ export async function GET(req: Request) {
     const profileStartMs = Date.now();
     const profile = buildWalletProfile(enrichedNFTs);
     const categoryGroups = buildCategoryGroups(enrichedNFTs);
-    const firstMint = await fetchFirstMint(wallet);
-    const acquisitionBreakdown = await fetchAcquisitionBreakdown(wallet);
+    const marketAttentionPromise = withTimeout(
+      fetchMarketAttention(enrichedNFTs),
+      MARKET_ATTENTION_TOTAL_TIMEOUT_MS,
+      null as MarketAttention | null
+    );
+
+    const [firstMint, acquisitionBreakdown, profileIdentity, marketAttention] = await Promise.all([
+      fetchFirstMint(wallet),
+      fetchAcquisitionBreakdown(wallet),
+      fetchOpenSeaProfileIdentity(wallet),
+      marketAttentionPromise,
+    ]);
+    const firstMintLabel = buildFirstMintLabel(firstMint?.timestamp);
     const enrichedProfile = {
       ...profile,
       firstMint,
+      firstMintLabel,
       acquisitionBreakdown,
     };
     const profileBuildMs = Date.now() - profileStartMs;
@@ -903,6 +1145,8 @@ export async function GET(req: Request) {
     return NextResponse.json({
       wallet,
       profile: enrichedProfile,
+      profileIdentity,
+      marketAttention,
       taste,
       sampleTopCollections: enrichedProfile.topCollections,
       sampleCategoryDistribution: enrichedProfile.categoryDistribution,
