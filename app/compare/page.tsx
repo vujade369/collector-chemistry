@@ -169,6 +169,11 @@ function shortenAddress(value: string) {
   return `${value.slice(0, 6)}...${value.slice(-4)}`;
 }
 
+function getProfileLine(profileLine?: string | null) {
+  const trimmed = profileLine?.trim();
+  return trimmed || "Collecting pattern";
+}
+
 function normalizeImageUrl(url?: string) {
   if (!url) return "";
   if (url.startsWith("ipfs://ipfs/")) return url.replace("ipfs://ipfs/", "https://ipfs.io/ipfs/");
@@ -738,9 +743,8 @@ function CollectorProfileCard({
             secondaryAddress={secondaryAddress}
           />
           <h3 className="compare-profile-archetype" style={{ marginTop: "10px" }}>
-            {wallet.profile.archetype}
+            {getProfileLine(wallet.profile.profileLine)}
           </h3>
-          <p className="compare-profile-line">{wallet.profile.profileLine}</p>
         </div>
       </div>
 
@@ -1319,7 +1323,7 @@ export default function ComparePage() {
                   {collectorSecondaryA ? (
                     <p className="cc-identity-address">{collectorSecondaryA}</p>
                   ) : null}
-                  <p className="cc-identity-sub">{data.walletA.profile.archetype}</p>
+                  <p className="cc-identity-sub">{getProfileLine(data.walletA.profile.profileLine)}</p>
                 </div>
 
                 <div className="cc-score-center">
@@ -1333,7 +1337,7 @@ export default function ComparePage() {
                   {collectorSecondaryB ? (
                     <p className="cc-identity-address">{collectorSecondaryB}</p>
                   ) : null}
-                  <p className="cc-identity-sub">{data.walletB.profile.archetype}</p>
+                  <p className="cc-identity-sub">{getProfileLine(data.walletB.profile.profileLine)}</p>
                 </div>
               </div>
 
