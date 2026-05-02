@@ -23,9 +23,10 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-[#0e0e0e] text-stone-100">
-      <div className="mx-auto flex min-h-screen w-full max-w-[560px] items-center px-6 py-16">
-        <section className="relative w-full rounded-[20px] border border-[#222] bg-[#111] p-8 shadow-[0_0_0_0.5px_rgba(255,51,153,0.08)]">
-          <div className="pointer-events-none absolute inset-0 rounded-[20px] bg-[radial-gradient(circle_at_50%_20%,rgba(255,51,153,0.08),transparent_60%)]" aria-hidden="true" />
+      <div className="mx-auto flex min-h-screen w-full max-w-[700px] items-center px-6 py-16">
+        <section className="relative w-full overflow-hidden rounded-[20px] border border-[#222] bg-[#111] p-8 shadow-[0_0_0_0.5px_rgba(255,51,153,0.08)]">
+          <div className="pointer-events-none absolute inset-0 rounded-[20px] bg-[radial-gradient(circle_at_14%_16%,rgba(255,51,153,0.12),transparent_46%),radial-gradient(circle_at_86%_84%,rgba(149,117,255,0.09),transparent_42%)]" aria-hidden="true" />
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#ff3399]/50 to-transparent" aria-hidden="true" />
           <div className="relative grid gap-6">
             <p className="text-[10px] uppercase tracking-[0.2em] text-[#555]">COLLECTOR CHEMISTRY</p>
             <h1 className="text-4xl font-light tracking-[-0.03em] text-[#f0ede6]">What your wallet says about you.</h1>
