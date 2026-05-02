@@ -414,15 +414,8 @@ export async function searchOpenSeaCollections(query: string): Promise<Converter
     })
   );
 
-  title?: string;
-  name?: string;
-  collectionName?: string;
-  slug: string;
-  tokenId: string;
-  contractAddress?: string;
-  hasImage?: boolean;
-  rankReason?: string;
-};
+  return floors;
+}
 
 function normalizeCollectionName(value: unknown): string {
   return normalizeText(String(value || ""));
