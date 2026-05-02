@@ -557,3 +557,19 @@ The page should not show every module at full depth by default. Use:
 The surface should feel like a refined dossier. The depth should be available through interaction.
 
 Profile should be built first. Compare can later reuse the profile components side by side.
+
+## Primary Key Signals row
+
+The primary profile Key Signals row should render, in order:
+
+1. Earliest Known NFT, or First Minted NFT when provenance is proven
+2. Highest Current Offer, or Market Attention when offer confidence is partial
+3. Latest Arrival, or Most Recent NFT entering the wallet
+
+Signal Piece and Anchor Collection remain valid supporting signals for enrichment and downstream modules. They are no longer the primary visible Key Signals row.
+
+Highest Current Offer is based on currently discoverable offer and bid data. It is a market attention cue, not a guaranteed valuation signal.
+
+For multi-wallet profiles, Highest Current Offer should be the highest offer found across all included wallet holdings.
+
+ERC-1155 NFTs should be included when collection slug and token identifier are available for reliable best-offer lookup.
