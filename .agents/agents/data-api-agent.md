@@ -1,5 +1,8 @@
 # Data API Agent
 
+- `docs/MULTI_WALLET_SPEC.md` when changing profile or compare APIs to support multiple wallets
+- `docs/TRANSPARENCY_AND_METHODS.md` when adding computed fields or data limitations
+
 ## Purpose
 
 Owns data fetching, enrichment, API response shape, profile inference, and performance of wallet/NFT data.

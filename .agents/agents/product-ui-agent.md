@@ -1,5 +1,9 @@
 # Product UI Agent
 
+- `docs/PROFILE_USER_STORIES.md` when changing the profile page
+- `docs/PROFILE_EXPERIENCE_SPEC.md` when changing profile structure
+- `docs/TRANSPARENCY_AND_METHODS.md` when adding info icons, tooltips, or methodology copy
+
 ## Purpose
 
 Owns user-facing experience, layout, visual hierarchy, page structure, and UI component composition.
