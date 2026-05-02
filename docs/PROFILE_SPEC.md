@@ -423,6 +423,156 @@ It should function as a single-wallet collector readout with:
 - top collections
 - compare CTA
 
-The current target layout is the “Neon Pulse” direction described in `docs/VISUAL_REFERENCES.md`.
+## Wallet Results Page — Required Modules
+
+The wallet results page should be built as a dynamic collector dossier. The visual design can evolve, but these data modules define the intended product surface.
+
+### Core identity and origin
+
+Required when available:
+
+- Wallet display name / ENS / shortened address
+- Wallet avatar or designed fallback
+- Collector class / archetype
+- Collecting since month/year, based on earliest known NFT activity into the wallet
+- First NFT / earliest known NFT
+- Latest NFT acquired, or NFTs acquired in the last 30 days
+- Total holdings
+- Total collections
+
+The page should label origin data truthfully:
+- “First Minted NFT” only when mint provenance is proven
+- “Earliest Known NFT” when earliest transfer/acquisition is known but mint is not proven
+- “Origin Signal” when partial or inferred
+
+### Collection behavior
+
+Required when available:
+
+- Mint vs transfer vs acquisition vs airdrop/event breakdown
+- Minted vs acquired visual
+- Collecting trends over time by month or quarter
+- Top 5 collections, not just top 3
+- Anchor collection / top collection
+- Signal piece / representative NFT
+
+Event labels should be truthful to the available event data. If an event type cannot be confidently classified, use a softer label or group under “Other activity.”
+
+### Taste map and category exploration
+
+Required:
+
+- Taste map breakdown by category
+- Category percentages
+- Category counts
+- Clickable / expandable category modules that reveal NFTs in that category
+- Ability to explore more without overwhelming the main page
+
+The page should stay minimal at the top level, but every major signal should support deeper exploration.
+
+### Entity display and links
+
+Any time the page mentions a wallet, NFT, collection, artist, or marketplace-linked entity, follow `docs/DISPLAY_CONTRACT.md`.
+
+Expected behavior:
+
+- NFT cards link to the exact OpenSea NFT page when reliable
+- Collection cards link to OpenSea collection pages when reliable
+- Collection/NFT images render when available
+- Designed fallbacks are used when image data is missing
+- No hardcoded wallet, NFT, or collection values
+
+### Top collections
+
+The profile page should show the top 5 collections when available.
+
+Each collection should include:
+
+- collection name
+- holding count
+- percent of wallet
+- category if available
+- image/profile thumbnail if available
+- OpenSea collection link if reliable
+- optional expand action for collection NFTs
+
+### Marketplace exploration module
+
+Planned module:
+
+“If you traded it all…”
+
+Purpose:
+Show what the wallet could potentially become if its value/signals were redirected into another collection.
+
+Requirements:
+
+- User can search/select a collection
+- Prioritize verified OpenSea collections
+- Use OpenSea marketplace data when available
+- Estimate how many NFTs from that collection the wallet could acquire
+- Use cautious language and avoid making financial promises
+- Do not overemphasize portfolio value as the main product purpose
+
+### Recommendation module
+
+Planned module:
+
+“You might like…”
+
+Purpose:
+Recommend 5–10 NFTs or collections based on wallet contents and taste patterns.
+
+Requirements:
+
+- Recommendations should be based on wallet categories, collections, artists, and behavior
+- Support spend tiers
+- Prefer collections with healthy unique-holder distribution
+- Avoid low-quality or highly concentrated-holder collections
+- Prefer verified / reputable OpenSea collections when possible
+- Link recommendations to OpenSea
+- Label recommendations as exploratory, not financial advice
+
+Potential collection quality signals:
+
+- unique holder percentage above a defined threshold
+- sufficient collection size / liquidity
+- verified or canonical OpenSea identity
+- category fit with wallet taste
+- overlap with existing wallet signals
+- not obviously spam/hidden
+
+### Layout principle
+
+Keep the page minimal but explorable.
+
+The page should not show every module at full depth by default. Use:
+
+- compact cards
+- expandable sections
+- “show more”
+- clickable category and collection modules
+- external OpenSea links where appropriate
+
+The surface should feel like a refined dossier. The depth should be available through interaction.
 
 Profile should be built first. Compare can later reuse the profile components side by side.
+
+## Primary Key Signals row
+
+The primary profile Key Signals row should render, in order:
+
+1. Earliest Known NFT, or First Minted NFT when provenance is proven
+2. Highest Current Offer, or Market Attention when offer confidence is partial
+3. Latest Arrival, or Most Recent NFT entering the wallet
+
+Signal Piece and Anchor Collection remain valid supporting signals for enrichment and downstream modules. They are no longer the primary visible Key Signals row.
+
+Highest Current Offer is based on currently discoverable offer and bid data. It is a market attention cue, not a guaranteed valuation signal.
+
+For multi-wallet profiles, Highest Current Offer should be the highest offer found across all included wallet holdings.
+
+ERC-1155 NFTs should be included when collection slug and token identifier are available for reliable best-offer lookup.
+
+
+Primary key signals now include Highest Current Offer (real offer data with truthful capped-scope labels) and Latest Arrival (wallet-entry timestamp priority). Top Artists shows top 3 creators from reliable metadata signals when present. See `docs/OPENSEA_INTEGRATION.md` for OpenSea integration contract.

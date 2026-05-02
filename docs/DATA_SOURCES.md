@@ -5,7 +5,8 @@
 OpenSea is the source of truth for collection identity, contract addresses,
 events, and marketplace context.
 
-Alchemy is used for bulk wallet ownership fetching where speed matters.
+Alchemy is used for bulk wallet ownership fetching and transfer history
+where speed and self-transfer filtering matter.
 
 When OpenSea has the data, use it first. Use Alchemy only as a fallback or
 for bulk operations where OpenSea is too slow or rate-limited.
@@ -45,18 +46,27 @@ Key endpoints in use:
 
 ---
 
-### Alchemy (fallback / bulk)
+### Alchemy (primary for bulk and transfer data)
 
 Used for:
 - Initial bulk NFT ownership fetch (faster than OpenSea for large wallets)
-- Fallback when OpenSea is slow or rate-limited
+- Most recent incoming NFT transfer per wallet (recent signal)
+- First mint detection per wallet
 
-Base URL: varies by network, configured in lib/fetchWalletNFTs.ts
+Base URL: https://eth-mainnet.g.alchemy.com
 
-Auth: ALCHEMY_API_KEY env variable
+Auth: ALCHEMY_API_KEY env variable (passed in URL path for NFT API,
+in request body for JSON-RPC calls)
 
 Key usage:
-- fetchWalletNFTs() in lib/fetchWalletNFTs.ts — returns all NFTs for a wallet
+- `fetchWalletNFTs()` in `lib/fetchWalletNFTs.ts` — returns all NFTs for a wallet
+  via GET /nft/v3/{apiKey}/getNFTsForOwner
+- `fetchFirstMint()` in `app/api/profile/route.ts` — returns earliest mint
+  via POST /v2/{apiKey} with alchemy_getAssetTransfers, order: asc,
+  fromAddress: zero address
+- `fetchLatestArrivalSignal()` in `app/api/profile/route.ts` — returns most
+  recent genuine acquisition via POST /v2/{apiKey} with
+  alchemy_getAssetTransfers, order: desc, filtered to exclude self-transfers
 
 Known limitation: Alchemy sometimes returns different contract addresses than
 OpenSea for the same collection. Always prefer OpenSea contract addresses for
@@ -214,6 +224,12 @@ to the same underlying Transfer event on-chain:
 The date that matters is always when the token first appeared in the
 target wallet, regardless of how it got there.
 
+### Self-transfers between own wallets
+When a user has multiple wallets, transfers between them are not genuine
+acquisitions. Always filter out transfers where `from` matches any address
+in `validWallets` before treating a transfer as a genuine recent arrival.
+This applies specifically to `fetchLatestArrivalSignal`.
+
 ### OpenSea pagination
 Most OpenSea list endpoints paginate using a next cursor, not page numbers.
 Always check for data.next and loop until it is null or empty. Set a safety
@@ -236,6 +252,11 @@ Floor prices from OpenSea reflect the current lowest active listing.
 They are not guaranteed to be accurate for collections with thin order
 books. For the Wallet Converter, treat the total estimate as directional
 only. Surface this caveat lightly in the UI if needed.
+
+### timeLastUpdated is not an acquisition date
+The timeLastUpdated field on Alchemy NFT objects updates on metadata
+refreshes, not just transfers. Never use it as a proxy for when an NFT
+entered a wallet. Use alchemy_getAssetTransfers with order: "desc" instead.
 
 ---
 
@@ -264,3 +285,5 @@ ALCHEMY_API_KEY=
 Both must be present in .env.local for full functionality. The app degrades
 gracefully when either is missing but acquisition dates and profile data
 will not load without OPENSEA_API_KEY.
+
+See `docs/OPENSEA_INTEGRATION.md` for OpenSea marketplace/display integration rules and source-of-truth links.

@@ -130,6 +130,14 @@ export type WalletProfile = {
       }
     | null;
   acquisitionBreakdown?: { mintCount: number; acquiredCount: number; totalSampled: number; mintPercent: number; acquiredPercent: number } | null;
+  topArtists?: Array<{
+    name: string;
+    count: number;
+    imageUrl?: string;
+    sourceLabel?: string;
+    openseaUrl?: string;
+    externalUrl?: string;
+  }>;
   behavioralReads: string[];
   absenceSignal: string;
   repeatRatio: number;

@@ -23,9 +23,19 @@ Current profile object returned from /api/profile.
 Fields:
 - totalNFTs
 - topCollections
+- displayName (optional)
+- avatarUrl (optional)
+- openseaUsername (optional)
+- openseaUrl (optional)
 - categoryDistribution
 - categorySourceBreakdown
 - previewNFTs
+
+Top collection display fields, optional:
+- imageUrl
+- collectionSlug
+- contractAddress
+- openseaUrl
 
 ---
 
@@ -284,3 +294,40 @@ GET /api/recommendations?wallet={address}&priceRange={range}
 {
   recommendations: CollectionRecommendationSet;
 }
+
+
+## ProfileNFTSignal
+
+Shared optional display shape used by key profile NFT signals such as origin, highest current offer, and latest arrival.
+
+Fields:
+- title
+- name
+- tokenId
+- collectionName
+- collectionSlug
+- contractAddress
+- imageUrl
+- openseaUrl
+- timestamp
+- ethAmountLabel
+- sourceLabel
+
+## WalletProfile key signal fields
+
+Optional fields added for primary Key Signals:
+- highestCurrentOffer?: ProfileNFTSignal
+- latestArrival?: ProfileNFTSignal
+- keySignals?: {
+  - origin?: ProfileNFTSignal | firstMint-compatible shape
+  - highestCurrentOffer?: ProfileNFTSignal
+  - latestArrival?: ProfileNFTSignal
+}
+
+
+## Profile signal extensions (2026-05-02)
+- `profile.highestCurrentOffer?`: NFT signal with offer amount label and source label.
+- `profile.latestArrival?`: NFT signal with timestamp and source label (`Entered wallet`, `Mint timestamp`, `Recent signal`).
+- `profile.topArtists?`: up to 3 artist rows `{ name, count, imageUrl?, sourceLabel?, openseaUrl?, externalUrl? }`.
+
+Shared NFT signal shape supports: `title`, `name`, `tokenId`, `collectionName`, `collectionSlug`, `contractAddress`, `imageUrl`, `openseaUrl`, `timestamp`, `ethAmountLabel`, `sourceLabel`.

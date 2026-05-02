@@ -127,13 +127,15 @@ async function fetchOpenSeaJson<T>(path: string, fallback: T): Promise<T> {
 type ProfileIdentity = {
   displayName: string | null;
   username: string | null;
+  openseaUsername: string | null;
   avatarUrl: string | null;
   bannerUrl: string | null;
+  openseaUrl: string | null;
 };
 
 async function fetchOpenSeaProfileIdentity(address: string): Promise<ProfileIdentity> {
   if (!OPENSEA_API_KEY) {
-    return { displayName: null, username: null, avatarUrl: null, bannerUrl: null };
+    return { displayName: null, username: null, openseaUsername: null, avatarUrl: null, bannerUrl: null, openseaUrl: null };
   }
 
   const data = await fetchOpenSeaJson<{
@@ -158,9 +160,123 @@ async function fetchOpenSeaProfileIdentity(address: string): Promise<ProfileIden
   return {
     displayName,
     username,
+    openseaUsername: username,
     avatarUrl: data?.profile_image_url || null,
     bannerUrl: data?.banner_image_url || null,
+    openseaUrl: `https://opensea.io/${address}`,
   };
+}
+
+type DisplayCollection = {
+  name?: string;
+  imageUrl?: string;
+  collectionSlug?: string;
+  contractAddress?: string;
+  openseaUrl?: string;
+  category?: string;
+};
+
+function normalizeEntityKey(value?: string) {
+  return String(value || "").trim().toLowerCase().replace(/[^\w\s:/-]/g, " ").replace(/\s+/g, " ");
+}
+
+function buildCollectionDisplayIndex(nfts: WalletProfileNFT[], categoryGroups: Record<string, { previews?: Array<{ collectionName?: string; imageUrl?: string; collectionSlug?: string; contractAddress?: string }> }>, profile: ReturnType<typeof buildWalletProfile>) {
+  const index = new Map<string, DisplayCollection>();
+  const upsert = (entry: DisplayCollection) => {
+    const keys = [
+      normalizeEntityKey(entry.collectionSlug),
+      normalizeEntityKey(entry.contractAddress),
+      normalizeEntityKey(entry.name),
+    ].filter(Boolean);
+    for (const key of keys) {
+      const current = index.get(key) || {};
+      index.set(key, { ...current, ...Object.fromEntries(Object.entries(entry).filter(([, v]) => Boolean(v))) });
+    }
+  };
+
+  for (const nft of nfts) {
+    upsert({
+      name: resolveCollectionName(nft),
+      imageUrl: extractNFTImageUrl(nft) || undefined,
+      collectionSlug: String(nft.displayCollectionSlug || "").trim() || undefined,
+      contractAddress: normalizeAddress(nft.contract?.address || "") || undefined,
+      category: normalizeOpenSeaCategory(nft.displayCollectionCategory || "") || undefined,
+    });
+  }
+  if (profile.anchorCollection) upsert(profile.anchorCollection);
+  if (profile.signalPiece) {
+    upsert({
+      name: profile.signalPiece.collectionName,
+      imageUrl: profile.signalPiece.imageUrl,
+      collectionSlug: profile.signalPiece.collectionSlug,
+      contractAddress: profile.signalPiece.contractAddress,
+      openseaUrl: profile.signalPiece.openseaUrl,
+    });
+  }
+  for (const group of Object.values(categoryGroups || {})) {
+    for (const preview of group?.previews || []) {
+      upsert({
+        name: preview.collectionName,
+        imageUrl: preview.imageUrl,
+        collectionSlug: preview.collectionSlug,
+        contractAddress: preview.contractAddress,
+      });
+    }
+  }
+  return index;
+}
+
+async function enrichTopCollectionsDisplay(params: {
+  topCollections: Array<{ name: string; count: number; percentage?: number; category?: string; imageUrl?: string; collectionSlug?: string; contractAddress?: string; openseaUrl?: string }>;
+  displayIndex: Map<string, DisplayCollection>;
+  cap?: number;
+}) {
+  const cap = Math.max(1, Math.min(params.cap || 3, 5));
+  const cache = new Map<string, Promise<DisplayCollection>>();
+  const fetchCollection = (seed: DisplayCollection) => {
+    const cacheKey = JSON.stringify([seed.collectionSlug || "", seed.contractAddress || "", normalizeEntityKey(seed.name)]);
+    if (!cache.has(cacheKey)) {
+      cache.set(cacheKey, (async () => {
+        if (!OPENSEA_API_KEY) return {};
+        if (seed.collectionSlug) {
+          const data = await withTimeout(fetchOpenSeaJson<{ collection?: { slug?: string; name?: string; image_url?: string; category?: string; contracts?: Array<{ address?: string }> } }>(
+            `/collections/${encodeURIComponent(seed.collectionSlug)}`,
+            {}
+          ), 1500, {});
+          const collection = data?.collection;
+          if (collection?.slug) {
+            return {
+              name: collection.name || seed.name,
+              imageUrl: normalizeImageUrl(collection.image_url || ""),
+              collectionSlug: collection.slug,
+              openseaUrl: `https://opensea.io/collection/${collection.slug}`,
+              contractAddress: normalizeAddress(collection.contracts?.[0]?.address || ""),
+              category: normalizeOpenSeaCategory(collection.category || "") || undefined,
+            };
+          }
+        }
+        if (seed.contractAddress) {
+          const contractData = await withTimeout(fetchOpenSeaJson<OpenSeaContractResponse>(`/chain/ethereum/contract/${seed.contractAddress}`, {}), 1500, {});
+          const slug = String(contractData?.collection || contractData?.slug || contractData?.collections?.[0]?.slug || "").trim();
+          if (slug) return fetchCollection({ ...seed, collectionSlug: slug });
+        }
+        return {};
+      })());
+    }
+    return cache.get(cacheKey)!;
+  };
+
+  const enriched = await Promise.all(params.topCollections.map(async (collection, index) => {
+    const local = params.displayIndex.get(normalizeEntityKey(collection.collectionSlug || collection.contractAddress || collection.name)) || {};
+    let merged = { ...collection, ...local };
+    if (!merged.openseaUrl && merged.collectionSlug) merged.openseaUrl = `https://opensea.io/collection/${merged.collectionSlug}`;
+    if (index < cap && (!merged.imageUrl || !merged.collectionSlug || !merged.openseaUrl)) {
+      const remote = await fetchCollection(merged);
+      merged = { ...merged, ...remote, openseaUrl: remote.openseaUrl || merged.openseaUrl };
+    }
+    return merged;
+  }));
+  return enriched;
 }
 
 async function resolveWalletToAddress(wallet: string): Promise<string> {
@@ -639,8 +755,33 @@ type MarketAttention = {
   title: string | null;
   imageUrl: string | null;
   contractAddress: string | null;
+  collectionSlug: string | null;
   tokenId: string | null;
   openseaUrl: string | null;
+  sourceLabel: string;
+};
+
+type ProfileNFTSignal = {
+  title?: string;
+  name?: string;
+  tokenId?: string;
+  collectionName?: string;
+  collectionSlug?: string;
+  contractAddress?: string;
+  imageUrl?: string;
+  openseaUrl?: string;
+  timestamp?: string;
+  ethAmountLabel?: string;
+  sourceLabel?: string;
+};
+
+type ProfileTopArtist = {
+  name: string;
+  count: number;
+  imageUrl?: string;
+  sourceLabel?: string;
+  openseaUrl?: string;
+  externalUrl?: string;
 };
 
 function normalizeTokenIdForOpenSea(raw: unknown): string | null {
@@ -667,11 +808,30 @@ async function fetchMarketAttention(nfts: WalletProfileNFT[]): Promise<MarketAtt
 
   try {
     const slugCache = new Map<string, string | null>();
-    const seenSlugs = new Set<string>();
     const candidates: Array<{ slug: string; tokenId: string; nft: WalletProfileNFT }> = [];
+    const collectionCounts = new Map<string, number>();
+    const getCollectionIdentity = (nft: WalletProfileNFT) => {
+      const slug = String(nft.displayCollectionSlug || "").trim();
+      if (slug) return `slug:${slug.toLowerCase()}`;
+      const contractAddress = normalizeAddress(nft.contract?.address || "");
+      if (contractAddress) return `contract:${contractAddress}`;
+      const normalizedName = normalizeText(resolveCollectionName(nft));
+      return normalizedName ? `name:${normalizedName}` : "unknown";
+    };
 
     for (const nft of nfts) {
-      if (candidates.length >= 8) break;
+      const key = getCollectionIdentity(nft);
+      collectionCounts.set(key, (collectionCounts.get(key) || 0) + 1);
+    }
+
+    const sortedNfts = [...nfts].sort((a, b) => {
+      const aCount = collectionCounts.get(getCollectionIdentity(a)) || 0;
+      const bCount = collectionCounts.get(getCollectionIdentity(b)) || 0;
+      return bCount - aCount;
+    });
+
+    for (const nft of sortedNfts) {
+      if (candidates.length >= 30) break;
       let slug = String(nft.displayCollectionSlug || "").trim();
       const tokenId = pickTokenId(nft);
       if (!tokenId) continue;
@@ -696,8 +856,7 @@ async function fetchMarketAttention(nfts: WalletProfileNFT[]): Promise<MarketAtt
           }
         }
       }
-      if (!slug || seenSlugs.has(slug)) continue;
-      seenSlugs.add(slug);
+      if (!slug) continue;
       candidates.push({ slug, tokenId, nft });
     }
 
@@ -746,7 +905,7 @@ async function fetchMarketAttention(nfts: WalletProfileNFT[]): Promise<MarketAtt
       return valid[0];
     };
 
-    const winner = await withTimeout(task(), 8000, null as Awaited<ReturnType<typeof task>>);
+    const winner = await withTimeout(task(), 4000, null as Awaited<ReturnType<typeof task>>);
     if (!winner) return null;
 
     let finalTitle = winner.title;
@@ -767,15 +926,194 @@ async function fetchMarketAttention(nfts: WalletProfileNFT[]): Promise<MarketAtt
       imageUrl: finalImageUrl || null,
       contractAddress: winner.contractAddress,
       tokenId: winner.tokenId,
+      collectionSlug: null,
       openseaUrl: winner.contractAddress && winner.tokenId
         ? `https://opensea.io/item/ethereum/${winner.contractAddress}/${winner.tokenId}`
         : null,
+      sourceLabel: candidates.length >= 30 ? "Highest offer found" : "Highest current offer",
     };
   } catch {
     return null;
   }
 }
 
+
+function toIsoTimestamp(value: string | undefined | null): string | null {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
+async function fetchLatestArrivalSignal(
+  wallets: string[],
+  alchemyApiKey: string
+): Promise<ProfileNFTSignal | null> {
+  if (!alchemyApiKey || !wallets.length) return null;
+
+  try {
+    const normalizedWallets = wallets
+      .map((wallet) => normalizeAddress(wallet))
+      .filter(Boolean);
+    const walletSet = new Set(normalizedWallets);
+    const alchemyUrl = `https://eth-mainnet.g.alchemy.com/v2/${alchemyApiKey}`;
+
+    const latestArrivalTask = async () => {
+      const walletResults = await Promise.all(
+        normalizedWallets.map(async (wallet) => {
+          try {
+            const body = {
+              jsonrpc: "2.0",
+              id: 1,
+              method: "alchemy_getAssetTransfers",
+              params: [
+                {
+                  toAddress: wallet,
+                  category: ["erc721", "erc1155"],
+                  maxCount: "0xa",
+                  order: "desc",
+                  withMetadata: true,
+                  excludeZeroValue: false,
+                },
+              ],
+            };
+
+            const response = await fetch(alchemyUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+              cache: "no-store",
+            });
+
+            if (!response.ok) return null;
+
+            const data = (await response.json()) as {
+              result?: {
+                transfers?: Array<{
+                  from?: string;
+                  to?: string;
+                  contract?: string;
+                  tokenId?: string | number;
+                  metadata?: { blockTimestamp?: string };
+                }>;
+              };
+            };
+
+            const transfers = data?.result?.transfers || [];
+            return transfers.find((transfer) => {
+              const from = normalizeAddress(transfer.from || "");
+              return !from || !walletSet.has(from);
+            }) || null;
+          } catch {
+            return null;
+          }
+        })
+      );
+
+      const bestTransfer = walletResults
+        .filter((transfer): transfer is NonNullable<typeof transfer> => Boolean(transfer?.metadata?.blockTimestamp))
+        .sort((a, b) => {
+          const aTime = new Date(String(a.metadata?.blockTimestamp || "")).getTime();
+          const bTime = new Date(String(b.metadata?.blockTimestamp || "")).getTime();
+          return bTime - aTime;
+        })[0];
+
+      if (!bestTransfer) return null;
+
+      const contractAddress = normalizeAddress(bestTransfer.contract || "") || undefined;
+      const tokenId = normalizeTokenIdForOpenSea(bestTransfer.tokenId) || undefined;
+      const timestamp = toIsoTimestamp(bestTransfer.metadata?.blockTimestamp) || undefined;
+      if (!contractAddress || !tokenId || !timestamp) return null;
+
+      const enriched = await fetchOpenSeaAsset(contractAddress, tokenId);
+
+      return {
+        title: enriched.title || undefined,
+        name: enriched.title || undefined,
+        collectionName: enriched.collectionName || undefined,
+        contractAddress,
+        tokenId,
+        imageUrl: enriched.imageUrl || undefined,
+        openseaUrl: `https://opensea.io/item/ethereum/${contractAddress}/${tokenId}`,
+        timestamp,
+        sourceLabel: "Recent Signal",
+      } as ProfileNFTSignal;
+    };
+
+    return await withTimeout(latestArrivalTask(), 5000, null as ProfileNFTSignal | null);
+  } catch {
+    return null;
+  }
+}
+
+function normalizeArtistValue(value: unknown): string {
+  return String(value || "").trim().replace(/\s+/g, " ");
+}
+
+function getArtistCandidate(nft: WalletProfileNFT): { name: string; sourceLabel: string; externalUrl?: string } | null {
+  const attributeSets = [nft.metadata?.attributes, nft.raw?.metadata?.attributes]
+  .filter((a) => Array.isArray(a));
+  const keys = new Set(["artist", "creator", "created by", "seize artist profile"]);
+
+  for (const attributes of attributeSets) {
+    for (const attribute of attributes || []) {
+      const traitType = normalizeArtistValue((attribute as { trait_type?: string; key?: string }).trait_type || (attribute as { key?: string }).key).toLowerCase();
+      if (!keys.has(traitType)) continue;
+      const name = normalizeArtistValue((attribute as { value?: unknown }).value);
+      if (!name) continue;
+      const externalUrl = traitType === "seize artist profile" ? String((attribute as { value?: string }).value || "").trim() : undefined;
+      return { name, sourceLabel: "Metadata artist", externalUrl };
+    }
+  }
+
+  const creatorName = normalizeArtistValue((nft as WalletProfileNFT & { creator?: { username?: string; address?: string } }).creator?.username);
+  if (creatorName) return { name: creatorName, sourceLabel: "Creator profile" };
+
+  return null;
+}
+
+function buildTopArtists(nfts: WalletProfileNFT[]): ProfileTopArtist[] {
+  const artistMap = new Map<string, ProfileTopArtist>();
+  for (const nft of nfts) {
+    const candidate = getArtistCandidate(nft);
+    if (!candidate?.name) continue;
+    const key = candidate.name.toLowerCase();
+    const existing = artistMap.get(key);
+    if (existing) {
+      existing.count += 1;
+      if (!existing.imageUrl) existing.imageUrl = extractNFTImageUrl(nft) || undefined;
+      continue;
+    }
+    artistMap.set(key, {
+      name: candidate.name,
+      count: 1,
+      imageUrl: extractNFTImageUrl(nft) || undefined,
+      sourceLabel: candidate.sourceLabel,
+      externalUrl: candidate.externalUrl,
+    });
+  }
+
+  return Array.from(artistMap.values())
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    .slice(0, 3);
+}
+
+function toProfileSignalFromMarketAttention(marketAttention: MarketAttention | null): ProfileNFTSignal | null {
+  if (!marketAttention) return null;
+  return {
+    title: marketAttention.title || undefined,
+    name: marketAttention.title || undefined,
+    tokenId: marketAttention.tokenId || undefined,
+    collectionName: marketAttention.collectionName || undefined,
+    collectionSlug: marketAttention.collectionSlug || undefined,
+    contractAddress: marketAttention.contractAddress || undefined,
+    imageUrl: marketAttention.imageUrl || undefined,
+    openseaUrl: marketAttention.openseaUrl || undefined,
+    ethAmountLabel: marketAttention.ethAmountLabel || undefined,
+    sourceLabel: marketAttention.sourceLabel || undefined,
+  };
+}
 export async function GET(req: Request) {
   const totalStartMs = Date.now();
   const { searchParams } = new URL(req.url);
@@ -859,7 +1197,6 @@ export async function GET(req: Request) {
 
     const profileStartMs = Date.now();
     const profile = buildWalletProfile(enrichedNFTs);
-    const categoryGroups = buildCategoryGroups(enrichedNFTs);
     const earliestMintTask = Promise.all(
       validWallets.map(async (entry) => {
         const resolvedAddress = await resolveWalletToAddress(entry);
@@ -897,15 +1234,58 @@ export async function GET(req: Request) {
       return best?.item || null;
     });
 
-    const [firstMint, acquisitionBreakdown, profileIdentity, marketAttention] = await Promise.all([
+    const latestArrivalTask = fetchLatestArrivalSignal(validWallets, ALCHEMY_API_KEY!);
+
+    const [firstMint, acquisitionBreakdown, profileIdentity, marketAttention, latestArrival] = await Promise.all([
       earliestMintTask,
       fetchAcquisitionBreakdown(wallet),
       primaryIdentityTask,
       marketAttentionTask,
+      latestArrivalTask,
     ]);
 
     const firstMintLabel = buildFirstMintLabel(firstMint?.timestamp);
-    const enrichedProfile = { ...profile, firstMint, firstMintLabel, acquisitionBreakdown };
+    const highestCurrentOffer = toProfileSignalFromMarketAttention(marketAttention);
+    const topArtists = buildTopArtists(enrichedNFTs);
+    const profileWithFirstMint = firstMint
+      ? {
+          ...profile,
+          firstMint: {
+            tokenId: firstMint.nft.tokenId,
+            title: firstMint.nft.title,
+            collectionName: firstMint.nft.collectionName,
+            contractAddress: firstMint.nft.contractAddress,
+            imageUrl: firstMint.nft.imageUrl,
+            openseaUrl: `https://opensea.io/assets/ethereum/${firstMint.nft.contractAddress}/${firstMint.nft.tokenId}`,
+            timestamp: firstMint.timestamp,
+          },
+        }
+      : profile;
+    const categoryGroups = buildCategoryGroups(enrichedNFTs);
+    const displayIndex = buildCollectionDisplayIndex(enrichedNFTs, categoryGroups, profileWithFirstMint);
+    const topCollections = await enrichTopCollectionsDisplay({
+      topCollections: profileWithFirstMint.topCollections,
+      displayIndex,
+      cap: 3,
+    });
+    const enrichedProfile = {
+      ...profileWithFirstMint,
+      highestCurrentOffer,
+      latestArrival,
+      topArtists,
+      keySignals: {
+        origin: profileWithFirstMint.firstMint || undefined,
+        highestCurrentOffer: highestCurrentOffer || undefined,
+        latestArrival: latestArrival || undefined,
+      },
+      topCollections,
+      firstMintLabel,
+      acquisitionBreakdown,
+      displayName: profileIdentity.displayName,
+      avatarUrl: profileIdentity.avatarUrl,
+      openseaUsername: profileIdentity.openseaUsername,
+      openseaUrl: profileIdentity.openseaUrl,
+    };
     const profileBuildMs = Date.now() - profileStartMs;
     const totalMs = Date.now() - totalStartMs;
 
@@ -945,6 +1325,7 @@ export async function GET(req: Request) {
       },
     });
   } catch (error) {
+    console.error("[profile] caught error:", error);
     if (error instanceof WalletFetchError) {
       return NextResponse.json(
         {
