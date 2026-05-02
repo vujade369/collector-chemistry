@@ -17,3 +17,8 @@
 ## 2026-05-02
 - Fixed profile hero origin artifact rendering to use the same enriched origin image source used in Key Signals, including nested first-mint image fallback paths.
 - Fixed stat-row source labeling so collection fallbacks are labeled as Anchor Collection or Top Collection instead of Market Attention.
+
+## 2026-05-02
+- Refined profile dossier visuals across hero, key signals, top collections, compare CTA, and overall spacing without changing API or data logic.
+- Restored clickable taste category exploration using existing `categoryGroups` preview data, with an in-page Category Explorer that reveals preview entities and collection links.
+- Restyled the wallet converter module as an intentional experimental card so it no longer appears as raw default HTML.

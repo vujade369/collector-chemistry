@@ -121,6 +121,7 @@ export default function ProfilePage() {
   const [result, setResult] = useState<ProfileResponse | null>(null);
   const [compareWallet, setCompareWallet] = useState("");
   const [loadingStep, setLoadingStep] = useState(0);
+  const [selectedCategory, setSelectedCategory] = useState<string>("");
 
   const loadingPhrases = ["Indexing holdings", "Finding origin signal", "Mapping collection gravity", "Reading taste signals", "Tracing mint vs acquisition patterns", "Preparing your collector dossier"];
 
@@ -186,6 +187,20 @@ export default function ProfilePage() {
     });
     return map;
   }, [result?.categoryGroups]);
+  const categoryGroups = result?.categoryGroups || {};
+  const categoryExplorerItems = useMemo(() => {
+    return tasteSlices.slice(0, 6).map((slice) => {
+      const group = categoryGroups[slice.key] || categoryGroups[slice.key.toLowerCase()] || null;
+      return { key: slice.key, label: slice.label, value: slice.value, group };
+    });
+  }, [tasteSlices, categoryGroups]);
+
+  useEffect(() => {
+    if (!categoryExplorerItems.length) return;
+    const withPreviews = categoryExplorerItems.find((item) => (item.group?.previews || []).length > 0);
+    const defaultKey = withPreviews?.key || categoryExplorerItems[0]?.key || "";
+    setSelectedCategory((prev) => (prev && categoryExplorerItems.some((item) => item.key === prev) ? prev : defaultKey));
+  }, [categoryExplorerItems]);
 
   const mintedStats = result?.acquisitionBreakdown;
   const mintedPercent = Number.isFinite(mintedStats?.mintPercent) ? Math.max(0, Math.min(100, Number(mintedStats?.mintPercent))) : null;
@@ -207,6 +222,8 @@ export default function ProfilePage() {
   function addWallet(wallet: string) { const next = Array.from(new Set([...(result?.wallets || initialWalletsFromQuery), wallet.trim()])).slice(0, 5); updateWalletQuery(next); }
   function removeWallet(wallet: string) { const next = (result?.wallets || initialWalletsFromQuery).filter((w) => w !== wallet); if (next.length === 0) return; updateWalletQuery(next); }
   function handleCompareSubmit(e: FormEvent) { e.preventDefault(); if (!canCompare) return; router.push(`/compare?a=${encodeURIComponent(walletFromQuery)}&b=${encodeURIComponent(compareWallet.trim())}`); }
+  const selectedCategoryGroup = categoryExplorerItems.find((item) => item.key === selectedCategory)?.group || null;
+  const selectedPreviews = (selectedCategoryGroup?.previews || []).slice(0, 6);
 
   return <main className="profile-page"><div className="profile-shell">
     {loading && <section className="profile-loading-panel"><div className="loading-ring" aria-hidden="true" /><h2>Reading your wallet</h2><p>{loadingPhrases[loadingStep]}</p><div className="loading-bars" aria-hidden="true"><span /><span /><span /></div></section>}
@@ -226,8 +243,8 @@ export default function ProfilePage() {
       </section>
 
       <section className="profile-pattern-grid">
-        <article className="profile-panel profile-panel-glow"><p className="profile-section-label">Taste Map</p><TasteSignature slices={tasteSlices} /><div className="taste-map-legend">{tasteSlices.slice(0, 6).map((slice) => <div key={slice.label} className="taste-map-legend-row"><span>{slice.label}</span><span>{Math.round(slice.value)}%</span></div>)}</div></article>
-        <article className="profile-panel"><p className="profile-section-label">Taste DNA</p><div className="taste-bars">{tasteSlices.slice(0, 6).map((slice) => <div className="taste-bar-row" key={slice.label}><span className="taste-bar-name">{slice.label}</span><div className="taste-bar-track"><div className="taste-bar-fill" style={{ width: `${slice.value}%`, backgroundColor: getCategoryAccent(slice.key) }} /></div><span className="taste-bar-pct">{Math.round(slice.value)}%</span></div>)}</div>{mintedPercent !== null && acquiredPercent !== null && <div className="minted-module"><p className="profile-section-label">How This Wallet Collects</p><div className="minted-split"><span>Minted {Math.round(mintedPercent)}%</span><span>Acquired {Math.round(acquiredPercent)}%</span></div><div className="minted-track"><div className="minted-fill" style={{ width: `${mintedPercent}%` }} /><div className="acquired-fill" style={{ width: `${acquiredPercent}%` }} /></div></div>}</article>
+        <article className="profile-panel profile-panel-glow"><p className="profile-section-label">Taste Map</p><TasteSignature slices={tasteSlices} /><div className="taste-map-legend">{categoryExplorerItems.map((slice) => <button key={slice.key} type="button" className={`taste-map-legend-row taste-map-legend-row--interactive ${selectedCategory === slice.key ? "is-active" : ""}`} onClick={() => setSelectedCategory(slice.key)}><span>{slice.label}</span><span>{Math.round(slice.value)}%</span></button>)}</div></article>
+        <article className="profile-panel"><p className="profile-section-label">Taste DNA</p><div className="taste-bars">{tasteSlices.slice(0, 6).map((slice) => <div className="taste-bar-row" key={slice.label}><span className="taste-bar-name">{slice.label}</span><div className="taste-bar-track"><div className="taste-bar-fill" style={{ width: `${slice.value}%`, backgroundColor: getCategoryAccent(slice.key) }} /></div><span className="taste-bar-pct">{Math.round(slice.value)}%</span></div>)}</div>{mintedPercent !== null && acquiredPercent !== null && <div className="minted-module"><p className="profile-section-label">How This Wallet Collects</p><div className="minted-split"><span>Minted {Math.round(mintedPercent)}%</span><span>Acquired {Math.round(acquiredPercent)}%</span></div><div className="minted-track"><div className="minted-fill" style={{ width: `${mintedPercent}%` }} /><div className="acquired-fill" style={{ width: `${acquiredPercent}%` }} /></div></div>}<div className="category-explorer"><p className="profile-section-label">Category Explorer</p>{selectedPreviews.length > 0 ? <div className="category-preview-grid">{selectedPreviews.map((preview, idx) => { const previewImage = normalizeImageUrl(preview.imageUrl); const previewLink = preview.collectionSlug ? `https://opensea.io/collection/${preview.collectionSlug}` : ""; return <article key={`${preview.collectionName || "preview"}-${idx}`} className="category-preview-card"><div className="category-preview-media">{previewImage ? <img src={previewImage} alt={preview.collectionName || "Category preview"} className="category-preview-img" onError={handleImageError} /> : <span aria-hidden="true">✦</span>}</div><p className="category-preview-title">{preview.collectionName || "Untitled collection"}</p>{previewLink ? <a href={previewLink} target="_blank" rel="noopener noreferrer" className="profile-external-link">View Collection ↗</a> : <p className="category-preview-empty">No marketplace link available.</p>}</article>; })}</div> : <p className="category-preview-empty">No preview NFTs available for this category.</p>}</div></article>
         {profile.patternLine && <p className="profile-pattern-quote">{profile.patternLine}</p>}
       </section>
 
