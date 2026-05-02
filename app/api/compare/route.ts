@@ -2153,18 +2153,75 @@ async function buildCollectorCardProfile(
 
   const topCollection = await buildTopCollectionSignal(nfts, cache);
 
+  const tasteEntries = Object.entries(taste).filter(([, value]) => value > 0);
+  const totalTasteCount = tasteEntries.reduce((sum, [, value]) => sum + value, 0);
+  const hasMeaningfulTasteData = nfts.length >= 5 && totalTasteCount > 0;
+
+  if (!hasMeaningfulTasteData) {
+    return {
+      archetype,
+      level,
+      primaryLean,
+      secondaryLean,
+      profileLine,
+      collectorIdentityLabel: "Exploratory collector across emerging and uncategorized work",
+      dominantCategory: "other",
+      secondaryCategory: "other",
+      categoryDistribution: [],
+      otherPercentage: 100,
+      categoryConfidence: "Low",
+      categorySourceBreakdown: {
+        opensea: 0,
+        metadata: 0,
+        keyword: 0,
+        other: 0,
+      },
+      topCollection,
+    };
+  }
+
+  const categoryDistribution = tasteEntries
+    .map(([category, count]) => ({
+      category,
+      count,
+      percentage: Math.round((count / totalTasteCount) * 100),
+    }))
+    .sort((a, b) => b.percentage - a.percentage);
+
+  const dominantCategory = categoryDistribution[0]?.category || "other";
+  const secondaryCategory = categoryDistribution[1]?.category || dominantCategory;
+
+  const otherPercentage = categoryDistribution
+    .filter((entry) => {
+      const normalized = entry.category.toLowerCase();
+      return normalized === "other" || normalized === "unknown" || normalized === "uncategorized";
+    })
+    .reduce((sum, entry) => sum + entry.percentage, 0);
+
+  let categoryConfidence: "High" | "Medium" | "Low" = "Low";
+  if (otherPercentage < 30) {
+    categoryConfidence = "High";
+  } else if (otherPercentage <= 60) {
+    categoryConfidence = "Medium";
+  }
+
+  const collectorIdentityLabel = getOrientationIdentity(
+    categoryDistribution,
+    topCollection ? [{ name: topCollection.name }] : []
+  );
+
   return {
     archetype,
     level,
     primaryLean,
     secondaryLean,
     profileLine,
-    collectorIdentityLabel: "Exploratory collector across emerging and uncategorized work",
-    dominantCategory: "other",
-    secondaryCategory: "other",
-    categoryDistribution: [],
-    otherPercentage: 100,
-    categoryConfidence: "Low",
+    collectorIdentityLabel,
+    dominantCategory,
+    secondaryCategory,
+    categoryDistribution,
+    otherPercentage,
+    categoryConfidence,
     categorySourceBreakdown: {
       opensea: 0,
       metadata: 0,
