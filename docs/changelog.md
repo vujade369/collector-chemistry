@@ -13,3 +13,7 @@
 - Added a focused OpenSea-backed profile display enrichment layer in `app/api/profile/route.ts` with request-scoped caching, per-lookup timeout fallbacks, and capped top-collection enrichment.
 - Enriched profile response display fields for wallet identity and visible entities so top collections and key signals can carry OpenSea-ready image and destination URL fields when reliable.
 - Updated profile key signal cards in `app/profile/page.tsx` and `app/profile/profile.css` to render thumbnails and OpenSea links when available, with designed fallbacks when data is missing.
+
+## 2026-05-02
+- Fixed profile hero origin artifact rendering to use the same enriched origin image source used in Key Signals, including nested first-mint image fallback paths.
+- Fixed stat-row source labeling so collection fallbacks are labeled as Anchor Collection or Top Collection instead of Market Attention.
