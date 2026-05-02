@@ -1,11 +1,39 @@
 "use client";
+
 import { useEffect, useRef, useState } from "react";
 
-type CollectionSearchResult = { slug: string; name: string; imageUrl: string; floorPriceETH: number | null };
-type ConverterResult = { targetCollection: { slug: string; name: string; imageUrl: string; floorPriceETH: number }; count: number; estimateQuality: "high" | "medium" | "low"; error: null | "no_floor" | "zero_result" | "low_quality" };
+type CollectionSearchResult = {
+  slug: string;
+  name: string;
+  imageUrl?: string;
+  floorPriceETH?: number | null;
+  openseaUrl?: string;
+  verified?: boolean;
+  safelistStatus?: string;
+  matchConfidence?: "high" | "medium" | "low";
+};
+
+type ConverterResult = {
+  targetCollection: { slug: string; name: string; imageUrl?: string | null; floorPriceETH: number; openseaUrl?: string } | null;
+  count: number;
+  estimateQuality: "high" | "medium" | "low";
+  detectedOfferValueETH: number;
+  offerCount: number;
+  checkedNftCount: number;
+  candidateCount: number;
+  error: null | "invalid_input" | "missing_opensea" | "no_floor" | "no_wallet_offers" | "zero_result" | "estimate_failed";
+};
+
+function formatError(error: ConverterResult["error"]): string {
+  if (error === "no_floor") return "Couldn’t find a reliable floor for this collection.";
+  if (error === "no_wallet_offers") return "No active wallet offers detected yet.";
+  if (error === "missing_opensea") return "Marketplace data is unavailable right now.";
+  if (error === "zero_result") return "Not quite enough. Try a different collection.";
+  return "Couldn’t build an estimate right now.";
+}
 
 export default function WalletConverter({ wallet }: { wallet: string }) {
-  const [phase, setPhase] = useState<"idle" | "searching" | "selected" | "loading" | "result" | "error">("idle");
+  const [phase, setPhase] = useState<"idle" | "searching" | "loading" | "result" | "error">("idle");
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<CollectionSearchResult[]>([]);
   const [result, setResult] = useState<ConverterResult | null>(null);
@@ -14,20 +42,26 @@ export default function WalletConverter({ wallet }: { wallet: string }) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!query.trim()) { setSearchResults([]); setPhase("idle"); return; }
+    if (!query.trim()) {
+      setSearchResults([]);
+      setPhase("idle");
+      return;
+    }
     setPhase("searching");
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(async () => {
       const res = await fetch(`/api/converter/search?q=${encodeURIComponent(query)}`);
       const json = await res.json();
       setSearchResults(json.results || []);
-    }, 400);
-    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+    }, 300);
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
   }, [query]);
 
   useEffect(() => {
     if (phase === "result") {
-      const t = setTimeout(() => setVisible(true), 50);
+      const t = setTimeout(() => setVisible(true), 40);
       return () => clearTimeout(t);
     }
     setVisible(false);
@@ -35,29 +69,19 @@ export default function WalletConverter({ wallet }: { wallet: string }) {
 
   async function handleSelect(collection: CollectionSearchResult) {
     setPhase("loading");
-    const res = await fetch(
-      `/api/converter/calculate?wallet=${encodeURIComponent(wallet)}&slug=${encodeURIComponent(collection.slug)}`
-    );
-    const json = await res.json();
+    const res = await fetch(`/api/converter/calculate?wallet=${encodeURIComponent(wallet)}&slug=${encodeURIComponent(collection.slug)}`);
+    const json = (await res.json()) as ConverterResult;
 
-    // Hard errors with no result
-    if (json.error === "no_floor" || json.error === "invalid_input" || json.error === "estimate_failed") {
-      setErrorMessage(json.error);
+    if (json.error) {
+      setErrorMessage(formatError(json.error));
+      setResult(json);
       setPhase("error");
       return;
     }
 
-    // Show result if we have any count at all, even 0.1
-    if (json.count > 0) {
-      setResult(json);
-      setErrorMessage(null);
-      setPhase("result");
-      return;
-    }
-
-    // Genuinely zero
-    setErrorMessage("zero_result");
-    setPhase("error");
+    setResult(json);
+    setErrorMessage(null);
+    setPhase("result");
   }
 
   function handleReset() {
@@ -86,19 +110,32 @@ export default function WalletConverter({ wallet }: { wallet: string }) {
             onChange={(e) => setQuery(e.target.value)}
             className="converter-input"
           />
-          {query.trim().length > 0 && (
+          {query.trim().length > 1 && (
             <ul className="converter-dropdown">
-              {searchResults.length > 0
-                ? searchResults.map((item) => (
-                    <li key={item.slug} onClick={() => handleSelect(item)}>
-                      {item.imageUrl ? <img src={item.imageUrl} alt={item.name} /> : null}
-                      <span className="converter-result-name">{item.name}</span>
-                      {item.floorPriceETH ? (
-                        <span className="converter-result-floor">{item.floorPriceETH.toFixed(2)} ETH floor</span>
-                      ) : null}
-                    </li>
-                  ))
-                : <li><span className="converter-result-name">No collections found. Try a different name.</span></li>}
+              {searchResults.length > 0 ? (
+                searchResults.map((item) => (
+                  <li key={item.slug} onClick={() => handleSelect(item)}>
+                    <div className="converter-row-left">
+                      <div className="converter-thumb-wrap">
+                        {item.imageUrl ? <img src={item.imageUrl} alt={item.name} className="converter-thumb" /> : <span className="converter-thumb-fallback">✦</span>}
+                      </div>
+                      <div>
+                        <span className="converter-result-name">{item.name}</span>
+                        <div className="converter-result-meta">
+                          {item.floorPriceETH ? <span className="converter-result-floor">{item.floorPriceETH.toFixed(2)} ETH floor</span> : <span className="converter-result-floor">Floor unavailable</span>}
+                          {(item.verified || item.safelistStatus) && (
+                            <span className="converter-result-badge">{item.verified ? "Verified" : item.safelistStatus}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </li>
+                ))
+              ) : (
+                <li>
+                  <span className="converter-result-name">No collections found. Try a different name.</span>
+                </li>
+              )}
             </ul>
           )}
         </div>
@@ -106,44 +143,26 @@ export default function WalletConverter({ wallet }: { wallet: string }) {
 
       {phase === "loading" && (
         <div className="converter-loading">
-          <span>Counting...</span>
+          <span>Building estimate...</span>
         </div>
       )}
 
-      {phase === "result" && result && (
+      {(phase === "result" || phase === "error") && result && (
         <div className="converter-result">
-          <div className={`converter-count${visible ? " visible" : ""}`}>{result.count}</div>
-          <div className={`converter-collection-name${visible ? " visible" : ""}`}>
-            {result.targetCollection.name}
-          </div>
-          {result.estimateQuality === "low" && (
-            <p className={`converter-caveat${visible ? " visible" : ""}`}>
-              Limited floor data for your collections. This is a very rough estimate
-            </p>
+          {phase === "result" ? (
+            <>
+              <div className={`converter-count${visible ? " visible" : ""}`}>{result.count}</div>
+              <div className={`converter-collection-name${visible ? " visible" : ""}`}>{result.targetCollection?.name}</div>
+              <p className={`converter-caveat${visible ? " visible" : ""}`}>Based on active offers detected across this wallet.</p>
+              <p className={`converter-caveat${visible ? " visible" : ""}`}>Estimate only. Offers, floors, fees, royalties, and liquidity change.</p>
+            </>
+          ) : (
+            <>
+              <p className="converter-zero">{errorMessage}</p>
+            </>
           )}
-          <p className={`converter-caveat${visible ? " visible" : ""}`}>
-            Based on floor prices of your most-held collections. Actual value may differ
-          </p>
-          <button className={`converter-reset${visible ? " visible" : ""}`} onClick={handleReset}>
-            Try another collection →
-          </button>
-        </div>
-      )}
 
-      {phase === "error" && errorMessage === "zero_result" && (
-        <div className="converter-result">
-          <p className="converter-zero">Not quite enough.</p>
-          <p className="converter-zero-sub">Try a different collection.</p>
-          <button className="converter-reset visible" onClick={handleReset}>
-            Try another collection →
-          </button>
-        </div>
-      )}
-
-      {phase === "error" && errorMessage === "no_floor" && (
-        <div className="converter-result">
-          <p className="converter-zero">No active listings found for this collection.</p>
-          <button className="converter-reset visible" onClick={handleReset}>
+          <button className={`converter-reset visible`} onClick={handleReset}>
             Try another collection →
           </button>
         </div>
