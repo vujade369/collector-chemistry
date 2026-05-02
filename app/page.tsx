@@ -40,6 +40,15 @@ export default function HomePage() {
 
   return (
     <main
+      className="min-h-screen"
+      style={{ background: "#fafaf9", color: "#1c1917" }}
+    >
+      <div className="mx-auto flex min-h-screen w-full max-w-3xl items-center px-6 py-16 sm:px-10 sm:py-24">
+        <section className="w-full" style={{ color: "inherit" }}>
+          <div className="mb-12 sm:mb-16">
+            <p className="mb-4 text-xs uppercase tracking-[0.24em] text-stone-500">Read-only cultural overlap</p>
+            <h1 className="max-w-2xl text-4xl font-semibold tracking-tight text-stone-950 sm:text-5xl">Collector Chemistry</h1>
+            <p className="mt-5 max-w-xl text-base leading-7 text-stone-600 sm:text-lg">Compare 2 collectors and see where their taste overlaps.</p>
       className="cc-page"
       style={{
         minHeight: "100vh",

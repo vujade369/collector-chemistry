@@ -312,6 +312,7 @@ function safeOutput() {
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as InterpretRequest;
+    console.log("PROMPT_CHECK", INTERPRETATION_SYSTEM_PROMPT.slice(0, 100));
     const userMessage = buildUserMessage(body || {});
 
     if (!OPENAI_API_KEY || !userMessage.trim()) {
