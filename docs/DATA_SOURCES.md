@@ -264,3 +264,5 @@ ALCHEMY_API_KEY=
 Both must be present in .env.local for full functionality. The app degrades
 gracefully when either is missing but acquisition dates and profile data
 will not load without OPENSEA_API_KEY.
+
+See `docs/OPENSEA_INTEGRATION.md` for OpenSea marketplace/display integration rules and source-of-truth links.

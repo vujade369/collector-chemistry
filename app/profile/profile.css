@@ -80,7 +80,6 @@
 .signal-card--latest-arrival { border-top-color: #29b6f6; }
 .signal-card--latest-arrival .signal-label { color: #29b6f6; }
 
-.profile-collected-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; color: #a8a49d; font-size: 12px; }
 .profile-collection-list { display: grid; gap: 12px; }
 .profile-top-collection-card { border: 0.5px solid #262626; background: linear-gradient(180deg, #121212, #0f0f0f); border-radius: 14px; padding: 14px; display: grid; gap: 12px; }
 .profile-top-head { display: grid; grid-template-columns: auto 72px 1fr; gap: 12px; align-items: center; }

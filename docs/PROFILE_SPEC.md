@@ -573,3 +573,6 @@ Highest Current Offer is based on currently discoverable offer and bid data. It 
 For multi-wallet profiles, Highest Current Offer should be the highest offer found across all included wallet holdings.
 
 ERC-1155 NFTs should be included when collection slug and token identifier are available for reliable best-offer lookup.
+
+
+Primary key signals now include Highest Current Offer (real offer data with truthful capped-scope labels) and Latest Arrival (wallet-entry timestamp priority). Top Artists shows top 3 creators from reliable metadata signals when present. See `docs/OPENSEA_INTEGRATION.md` for OpenSea integration contract.

@@ -323,3 +323,11 @@ Optional fields added for primary Key Signals:
   - highestCurrentOffer?: ProfileNFTSignal
   - latestArrival?: ProfileNFTSignal
 }
+
+
+## Profile signal extensions (2026-05-02)
+- `profile.highestCurrentOffer?`: NFT signal with offer amount label and source label.
+- `profile.latestArrival?`: NFT signal with timestamp and source label (`Entered wallet`, `Mint timestamp`, `Recent signal`).
+- `profile.topArtists?`: up to 3 artist rows `{ name, count, imageUrl?, sourceLabel?, openseaUrl?, externalUrl? }`.
+
+Shared NFT signal shape supports: `title`, `name`, `tokenId`, `collectionName`, `collectionSlug`, `contractAddress`, `imageUrl`, `openseaUrl`, `timestamp`, `ethAmountLabel`, `sourceLabel`.
