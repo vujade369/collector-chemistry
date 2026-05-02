@@ -775,6 +775,15 @@ type ProfileNFTSignal = {
   sourceLabel?: string;
 };
 
+type ProfileTopArtist = {
+  name: string;
+  count: number;
+  imageUrl?: string;
+  sourceLabel?: string;
+  openseaUrl?: string;
+  externalUrl?: string;
+};
+
 function normalizeTokenIdForOpenSea(raw: unknown): string | null {
   const value = String(raw || "").trim();
   if (!value) return null;
@@ -903,7 +912,7 @@ async function fetchMarketAttention(nfts: WalletProfileNFT[]): Promise<MarketAtt
       openseaUrl: winner.contractAddress && winner.tokenId
         ? `https://opensea.io/item/ethereum/${winner.contractAddress}/${winner.tokenId}`
         : null,
-      sourceLabel: "Best active offer",
+      sourceLabel: candidates.length >= 12 ? "Highest offer found" : "Highest current offer",
     };
   } catch {
     return null;
@@ -960,6 +969,57 @@ function buildLatestArrivalSignal(nfts: WalletProfileNFT[]): ProfileNFTSignal | 
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
   return ranked[0]?.signal || null;
+}
+
+function normalizeArtistValue(value: unknown): string {
+  return String(value || "").trim().replace(/\s+/g, " ");
+}
+
+function getArtistCandidate(nft: WalletProfileNFT): { name: string; sourceLabel: string; externalUrl?: string } | null {
+  const attributeSets = [nft.metadata?.attributes, nft.raw?.metadata?.attributes].filter(Boolean);
+  const keys = new Set(["artist", "creator", "created by", "seize artist profile"]);
+
+  for (const attributes of attributeSets) {
+    for (const attribute of attributes || []) {
+      const traitType = normalizeArtistValue((attribute as { trait_type?: string; key?: string }).trait_type || (attribute as { key?: string }).key).toLowerCase();
+      if (!keys.has(traitType)) continue;
+      const name = normalizeArtistValue((attribute as { value?: unknown }).value);
+      if (!name) continue;
+      const externalUrl = traitType === "seize artist profile" ? String((attribute as { value?: string }).value || "").trim() : undefined;
+      return { name, sourceLabel: "Metadata artist", externalUrl };
+    }
+  }
+
+  const creatorName = normalizeArtistValue((nft as WalletProfileNFT & { creator?: { username?: string; address?: string } }).creator?.username);
+  if (creatorName) return { name: creatorName, sourceLabel: "Creator profile" };
+
+  return null;
+}
+
+function buildTopArtists(nfts: WalletProfileNFT[]): ProfileTopArtist[] {
+  const artistMap = new Map<string, ProfileTopArtist>();
+  for (const nft of nfts) {
+    const candidate = getArtistCandidate(nft);
+    if (!candidate?.name) continue;
+    const key = candidate.name.toLowerCase();
+    const existing = artistMap.get(key);
+    if (existing) {
+      existing.count += 1;
+      if (!existing.imageUrl) existing.imageUrl = extractNFTImageUrl(nft) || undefined;
+      continue;
+    }
+    artistMap.set(key, {
+      name: candidate.name,
+      count: 1,
+      imageUrl: extractNFTImageUrl(nft) || undefined,
+      sourceLabel: candidate.sourceLabel,
+      externalUrl: candidate.externalUrl,
+    });
+  }
+
+  return Array.from(artistMap.values())
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    .slice(0, 3);
 }
 
 function toProfileSignalFromMarketAttention(marketAttention: MarketAttention | null): ProfileNFTSignal | null {
@@ -1107,6 +1167,7 @@ export async function GET(req: Request) {
     const firstMintLabel = buildFirstMintLabel(firstMint?.timestamp);
     const latestArrival = buildLatestArrivalSignal(enrichedNFTs);
     const highestCurrentOffer = toProfileSignalFromMarketAttention(marketAttention);
+    const topArtists = buildTopArtists(enrichedNFTs);
     const profileWithFirstMint = firstMint
       ? {
           ...profile,
@@ -1132,6 +1193,7 @@ export async function GET(req: Request) {
       ...profileWithFirstMint,
       highestCurrentOffer,
       latestArrival,
+      topArtists,
       keySignals: {
         origin: profileWithFirstMint.firstMint || undefined,
         highestCurrentOffer: highestCurrentOffer || undefined,
