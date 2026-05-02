@@ -20,8 +20,8 @@ type InterpretRequest = {
   exactCount?: unknown;
 };
 
-const OPENAI_API_KEY = process.env.GROQ_API_KEY;
-const OPENAI_MODEL = process.env.OPENAI_INTERPRETATION_MODEL || "llama-3.3-70b-versatile";
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const GROQ_MODEL = process.env.GROQ_INTERPRETATION_MODEL || "llama-3.3-70b-versatile";
 
 const INTERPRETATION_SYSTEM_PROMPT = `You are writing a "why this match" interpretation for Collector Chemistry, a cultural compatibility tool that compares two public NFT collector profiles.
 
@@ -271,13 +271,12 @@ function safeOutput() {
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as InterpretRequest;
-    console.log("PROMPT_CHECK", INTERPRETATION_SYSTEM_PROMPT.slice(0, 100));
 
     const userMessage = buildUserMessage(body || {});
     console.log("INTERPRET_INPUT", userMessage.slice(0, 300));
     console.log("INTERPRET_USER_MESSAGE", userMessage);
 
-    if (!OPENAI_API_KEY) {
+    if (!GROQ_API_KEY) {
       console.log("INTERPRET_ERROR: missing GROQ_API_KEY");
       return safeOutput();
     }
@@ -295,10 +294,10 @@ export async function POST(req: Request) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${OPENAI_API_KEY}`,
+          Authorization: `Bearer ${GROQ_API_KEY}`,
         },
         body: JSON.stringify({
-          model: OPENAI_MODEL,
+          model: GROQ_MODEL,
           max_tokens: 600,
           messages: [
             { role: "system", content: INTERPRETATION_SYSTEM_PROMPT },
@@ -308,11 +307,11 @@ export async function POST(req: Request) {
         signal: controller.signal,
       });
 
-      console.log("INTERPRET_OPENAI_STATUS", response.status);
+      console.log("INTERPRET_STATUS", response.status);
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.log("INTERPRET_OPENAI_ERROR", errorText);
+        console.log("INTERPRET_ERROR", errorText);
         return safeOutput();
       }
 
