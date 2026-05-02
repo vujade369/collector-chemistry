@@ -46,20 +46,6 @@ type FirstMint = {
   };
 } | null;
 
-type ProfileNFTSignal = {
-  title?: string;
-  name?: string;
-  tokenId?: string;
-  collectionName?: string;
-  collectionSlug?: string;
-  contractAddress?: string;
-  imageUrl?: string;
-  openseaUrl?: string;
-  timestamp?: string;
-  ethAmountLabel?: string;
-  sourceLabel?: string;
-} | null;
-
 type WalletProfile = {
   patternLine?: string;
   identityParagraph?: string;
