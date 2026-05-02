@@ -37,6 +37,20 @@ type FirstMint = {
   };
 } | null;
 
+type ProfileNFTSignal = {
+  title?: string;
+  name?: string;
+  tokenId?: string;
+  collectionName?: string;
+  collectionSlug?: string;
+  contractAddress?: string;
+  imageUrl?: string;
+  openseaUrl?: string;
+  timestamp?: string;
+  ethAmountLabel?: string;
+  sourceLabel?: string;
+} | null;
+
 type WalletProfile = {
   patternLine?: string;
   identityParagraph?: string;
@@ -45,17 +59,46 @@ type WalletProfile = {
   totalNFTs?: number;
   categoryDistribution?: CategoryDistributionEntry[];
   firstMint?: FirstMint;
-  signalPiece?: { tokenId?: string; title?: string; collectionName?: string; imageUrl?: string; collectionSlug?: string; contractAddress?: string; openseaUrl?: string } | null;
-  anchorCollection?: { name: string; count: number; imageUrl?: string; collectionSlug?: string; contractAddress?: string; openseaUrl?: string } | null;
+
+  signalPiece?: {
+    tokenId?: string;
+    title?: string;
+    collectionName?: string;
+    imageUrl?: string;
+    collectionSlug?: string;
+    contractAddress?: string;
+    openseaUrl?: string;
+  } | null;
+
+  anchorCollection?: {
+    name: string;
+    count: number;
+    imageUrl?: string;
+    collectionSlug?: string;
+    contractAddress?: string;
+    openseaUrl?: string;
+  } | null;
+
   highestCurrentOffer?: ProfileNFTSignal;
   latestArrival?: ProfileNFTSignal;
-  topArtists?: Array<{ name: string; count: number; imageUrl?: string; sourceLabel?: string; openseaUrl?: string; externalUrl?: string }>;
+  keySignals?: {
+    origin?: ProfileNFTSignal;
+    highestCurrentOffer?: ProfileNFTSignal;
+    latestArrival?: ProfileNFTSignal;
+  } | null;
+
   openseaUsername?: string;
   avatarUrl?: string;
   openseaUrl?: string;
 };
-type ProfileIdentity = { displayName: string | null; username: string | null; avatarUrl: string | null; bannerUrl: string | null };
-type ProfileNFTSignal = { title?: string; name?: string; tokenId?: string; collectionName?: string; collectionSlug?: string; contractAddress?: string; imageUrl?: string; openseaUrl?: string; timestamp?: string; ethAmountLabel?: string; sourceLabel?: string } | null;
+
+type ProfileIdentity = {
+  displayName: string | null;
+  username: string | null;
+  avatarUrl: string | null;
+  bannerUrl: string | null;
+};
+
 type MarketAttention = { ethAmountLabel: string; collectionName: string | null } | null;
 
 type CategoryPreview = {
@@ -317,6 +360,27 @@ export default function ProfilePage() {
     setSelectedCategory((prev) => (prev && categoryExplorerItems.some((item) => item.key === prev) ? prev : defaultKey));
   }, [categoryExplorerItems]);
 
+  const topCollectionsWithImages = useMemo(() => {
+    return topCollections.map((collection) => {
+      const collectionSlugKey = String(collection.collectionSlug || "").toLowerCase();
+      const contractKey = String(collection.contractAddress || "").toLowerCase();
+      const nameKey = normalizeCollectionKey(collection.name);
+
+      const mapImage =
+        collectionImageMap.get(collectionSlugKey) ||
+        collectionImageMap.get(contractKey) ||
+        collectionImageMap.get(nameKey) ||
+        "";
+
+      const resolvedImageUrl = normalizeImageUrl(collection.imageUrl || mapImage || "");
+
+      return {
+        ...collection,
+        resolvedImageUrl,
+      };
+    });
+  }, [topCollections, collectionImageMap]);
+
   const mintedStats = result?.acquisitionBreakdown;
   const mintedPercent = Number.isFinite(mintedStats?.mintPercent)
     ? Math.max(0, Math.min(100, Number(mintedStats?.mintPercent)))
@@ -350,8 +414,8 @@ export default function ProfilePage() {
 
   function originLabel() {
     if (!firstMint) return "Origin Signal";
-    if (firstMint.timestamp) return "First Minted NFT";
-    return "Earliest Known NFT";
+    if (firstMint.timestamp) return "Earliest Known NFT";
+    return "Origin Signal";
   }
 
   const highestOffer = profile?.highestCurrentOffer || null;
@@ -359,10 +423,27 @@ export default function ProfilePage() {
   const highestOfferImage = normalizeImageUrl(highestOffer?.imageUrl || "");
   const latestArrivalImage = normalizeImageUrl(latestArrival?.imageUrl || "");
 
-  function updateWalletQuery(wallets: string[]) { router.push(`/profile?wallet=${encodeURIComponent(wallets.join(","))}`); }
-  function addWallet(wallet: string) { const next = Array.from(new Set([...(result?.wallets || initialWalletsFromQuery), wallet.trim()])).slice(0, 5); updateWalletQuery(next); }
-  function removeWallet(wallet: string) { const next = (result?.wallets || initialWalletsFromQuery).filter((w) => w !== wallet); if (next.length === 0) return; updateWalletQuery(next); }
-  function handleCompareSubmit(e: FormEvent) { e.preventDefault(); if (!canCompare) return; router.push(`/compare?a=${encodeURIComponent(walletFromQuery)}&b=${encodeURIComponent(compareWallet.trim())}`); }
+  function updateWalletQuery(wallets: string[]) {
+    router.push(`/profile?wallet=${encodeURIComponent(wallets.join(","))}`);
+  }
+
+  function addWallet(wallet: string) {
+    const next = Array.from(new Set([...(result?.wallets || initialWalletsFromQuery), wallet.trim()])).slice(0, 5);
+    updateWalletQuery(next);
+  }
+
+  function removeWallet(wallet: string) {
+    const next = (result?.wallets || initialWalletsFromQuery).filter((w) => w !== wallet);
+    if (next.length === 0) return;
+    updateWalletQuery(next);
+  }
+
+  function handleCompareSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!canCompare) return;
+    router.push(`/compare?a=${encodeURIComponent(walletFromQuery)}&b=${encodeURIComponent(compareWallet.trim())}`);
+  }
+
   const selectedCategoryGroup = categoryExplorerItems.find((item) => item.key === selectedCategory)?.group || null;
   const selectedPreviews = (selectedCategoryGroup?.previews || []).slice(0, 6);
 
@@ -403,7 +484,12 @@ export default function ProfilePage() {
                 <p className="profile-eyebrow">Class</p>
                 <p className="profile-class-label">{profile.focusLabel || "Collector"}</p>
 
-      <section className="profile-panel"><p className="profile-section-label">Key Signals</p><div className="profile-key-signals">{firstMint && <article className="signal-card signal-card--first-mint"><div className="signal-media">{originImageUrl ? <img src={originImageUrl} alt={originTitle} className="signal-thumb" onError={handleImageError} /> : <span aria-hidden="true">✦</span>}</div><p className="signal-label">{originLabel()}</p><p className="signal-value">{originTitle}</p><p className="signal-support">{originCollectionName || "Creator signal unavailable"}</p>{firstMint.openseaUrl && <a href={firstMint.openseaUrl} target="_blank" rel="noopener noreferrer" className="profile-external-link">View NFT ↗</a>}</article>}<article className="signal-card signal-card--market-attention"><div className="signal-media">{highestOfferImage ? <img src={highestOfferImage} alt={highestOffer?.title || "Highest current offer"} className="signal-thumb" onError={handleImageError} /> : <span aria-hidden="true">✦</span>}</div><p className="signal-label">{highestOffer?.ethAmountLabel ? "Highest Current Offer" : "Market Attention"}</p><p className="signal-value">{highestOffer?.title || highestOffer?.tokenId || "No active offer detected"}</p><p className="signal-support">{highestOffer?.ethAmountLabel || "No active offer detected"}</p>{highestOffer?.collectionName && <p className="signal-support">{highestOffer.collectionName}</p>}{highestOffer?.openseaUrl && <a href={highestOffer.openseaUrl} target="_blank" rel="noopener noreferrer" className="profile-external-link">View NFT ↗</a>}</article><article className="signal-card signal-card--latest-arrival"><div className="signal-media">{latestArrivalImage ? <img src={latestArrivalImage} alt={latestArrival?.title || "Latest arrival"} className="signal-thumb" onError={handleImageError} /> : <span aria-hidden="true">✦</span>}</div><p className="signal-label">{latestArrival?.sourceLabel === "Recent signal" ? "Recent Signal" : "Latest Arrival"}</p><p className="signal-value">{latestArrival?.title || latestArrival?.tokenId || "No recent arrival detected"}</p><p className="signal-support">{latestArrival?.collectionName || "Collection signal unavailable"}</p>{latestArrival?.timestamp && <p className="signal-support">{formatMintDate(latestArrival.timestamp)}</p>}{latestArrival?.openseaUrl && <a href={latestArrival.openseaUrl} target="_blank" rel="noopener noreferrer" className="profile-external-link">View NFT ↗</a>}</article></div></section>
+                {profile.patternLine && (
+                  <>
+                    <p className="profile-eyebrow">Statement</p>
+                    <p className="profile-pattern-copy">{profile.patternLine}</p>
+                  </>
+                )}
 
                 {heroIdentity && <p className="profile-muted-copy">{heroIdentity}</p>}
               </article>
@@ -560,6 +646,7 @@ export default function ProfilePage() {
                     <p className="signal-label">{originLabel()}</p>
                     <p className="signal-value">{originTitle}</p>
                     <p className="signal-support">{originCollectionName || "Creator signal unavailable"}</p>
+                    {firstMint.timestamp && <p className="signal-support">{formatMintDate(firstMint.timestamp)}</p>}
                     {firstMint.openseaUrl && (
                       <a href={firstMint.openseaUrl} target="_blank" rel="noopener noreferrer" className="profile-external-link">
                         View NFT ↗
@@ -568,6 +655,63 @@ export default function ProfilePage() {
                   </article>
                 )}
 
+                <article className="signal-card signal-card--market-attention">
+                  <div className="signal-media">
+                    {highestOfferImage ? (
+                      <img
+                        src={highestOfferImage}
+                        alt={highestOffer?.title || highestOffer?.name || "Highest current offer"}
+                        className="signal-thumb"
+                        onError={handleImageError}
+                      />
+                    ) : (
+                      <span aria-hidden="true">✦</span>
+                    )}
+                  </div>
+                  <p className="signal-label">{highestOffer?.ethAmountLabel ? "Highest Current Offer" : "Market Attention"}</p>
+                  <p className="signal-value">{highestOffer?.title || highestOffer?.name || highestOffer?.tokenId || "No active offer detected"}</p>
+                  {highestOffer?.collectionName && <p className="signal-support">{highestOffer.collectionName}</p>}
+                  <p className="signal-support">{highestOffer?.ethAmountLabel || highestOffer?.sourceLabel || "No active offer detected"}</p>
+                  {highestOffer?.openseaUrl && (
+                    <a href={highestOffer.openseaUrl} target="_blank" rel="noopener noreferrer" className="profile-external-link">
+                      View NFT ↗
+                    </a>
+                  )}
+                </article>
+
+                <article className="signal-card signal-card--latest-arrival">
+                  <div className="signal-media">
+                    {latestArrivalImage ? (
+                      <img
+                        src={latestArrivalImage}
+                        alt={latestArrival?.title || latestArrival?.name || "Latest arrival"}
+                        className="signal-thumb"
+                        onError={handleImageError}
+                      />
+                    ) : (
+                      <span aria-hidden="true">✦</span>
+                    )}
+                  </div>
+                  <p className="signal-label">{latestArrival?.sourceLabel === "Recent signal" ? "Recent Signal" : "Latest Arrival"}</p>
+                  <p className="signal-value">{latestArrival?.title || latestArrival?.name || latestArrival?.tokenId || "No recent arrival detected"}</p>
+                  <p className="signal-support">{latestArrival?.collectionName || "Collection signal unavailable"}</p>
+                  {latestArrival?.timestamp && <p className="signal-support">{formatMintDate(latestArrival.timestamp)}</p>}
+                  {latestArrival?.openseaUrl && (
+                    <a href={latestArrival.openseaUrl} target="_blank" rel="noopener noreferrer" className="profile-external-link">
+                      View NFT ↗
+                    </a>
+                  )}
+                </article>
+              </div>
+            </section>
+
+            <section className="profile-panel profile-collected-works">
+              <p className="profile-section-label">Collected Works</p>
+              <div className="profile-collected-grid">
+                <span>Total Holdings {profile.totalNFTs || 0}</span>
+                <span>Collections {collectionCount}</span>
+                <span>Anchor Items {topCollections[0]?.count || 0}</span>
+                <span>Market Attention {result?.marketAttention?.ethAmountLabel || "No active attention detected"}</span>
               </div>
             </section>
             {profile.topArtists && profile.topArtists.length > 0 && (

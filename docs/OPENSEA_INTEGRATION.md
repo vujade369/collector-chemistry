@@ -64,5 +64,3 @@ Use Collector Chemistry for:
 - NFT destination links.
 - Canonical collection search for future "If you sold it all" estimates.
 - Future recommendation modules.
-
-- Converter uses canonical collection search, target collection floor discovery, and wallet active-offer estimation through the same server-side OpenSea REST helper pattern.
