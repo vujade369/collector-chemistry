@@ -808,11 +808,30 @@ async function fetchMarketAttention(nfts: WalletProfileNFT[]): Promise<MarketAtt
 
   try {
     const slugCache = new Map<string, string | null>();
-    const seenSlugs = new Set<string>();
     const candidates: Array<{ slug: string; tokenId: string; nft: WalletProfileNFT }> = [];
+    const collectionCounts = new Map<string, number>();
+    const getCollectionIdentity = (nft: WalletProfileNFT) => {
+      const slug = String(nft.displayCollectionSlug || "").trim();
+      if (slug) return `slug:${slug.toLowerCase()}`;
+      const contractAddress = normalizeAddress(nft.contract?.address || "");
+      if (contractAddress) return `contract:${contractAddress}`;
+      const normalizedName = normalizeText(resolveCollectionName(nft));
+      return normalizedName ? `name:${normalizedName}` : "unknown";
+    };
 
     for (const nft of nfts) {
-      if (candidates.length >= 12) break;
+      const key = getCollectionIdentity(nft);
+      collectionCounts.set(key, (collectionCounts.get(key) || 0) + 1);
+    }
+
+    const sortedNfts = [...nfts].sort((a, b) => {
+      const aCount = collectionCounts.get(getCollectionIdentity(a)) || 0;
+      const bCount = collectionCounts.get(getCollectionIdentity(b)) || 0;
+      return bCount - aCount;
+    });
+
+    for (const nft of sortedNfts) {
+      if (candidates.length >= 30) break;
       let slug = String(nft.displayCollectionSlug || "").trim();
       const tokenId = pickTokenId(nft);
       if (!tokenId) continue;
@@ -837,8 +856,7 @@ async function fetchMarketAttention(nfts: WalletProfileNFT[]): Promise<MarketAtt
           }
         }
       }
-      if (!slug || seenSlugs.has(slug)) continue;
-      seenSlugs.add(slug);
+      if (!slug) continue;
       candidates.push({ slug, tokenId, nft });
     }
 
@@ -887,7 +905,7 @@ async function fetchMarketAttention(nfts: WalletProfileNFT[]): Promise<MarketAtt
       return valid[0];
     };
 
-    const winner = await withTimeout(task(), 1800, null as Awaited<ReturnType<typeof task>>);
+    const winner = await withTimeout(task(), 4000, null as Awaited<ReturnType<typeof task>>);
     if (!winner) return null;
 
     let finalTitle = winner.title;
@@ -912,7 +930,7 @@ async function fetchMarketAttention(nfts: WalletProfileNFT[]): Promise<MarketAtt
       openseaUrl: winner.contractAddress && winner.tokenId
         ? `https://opensea.io/item/ethereum/${winner.contractAddress}/${winner.tokenId}`
         : null,
-      sourceLabel: candidates.length >= 12 ? "Highest offer found" : "Highest current offer",
+      sourceLabel: candidates.length >= 30 ? "Highest offer found" : "Highest current offer",
     };
   } catch {
     return null;
@@ -928,47 +946,105 @@ function toIsoTimestamp(value: string | undefined | null): string | null {
   return date.toISOString();
 }
 
-function buildLatestArrivalSignal(nfts: WalletProfileNFT[]): ProfileNFTSignal | null {
-  const ranked = nfts
-    .map((nft) => {
-      const acquiredTs = toIsoTimestamp(nft.acquiredAt?.blockTimestamp || nft.blockTimestamp);
-      const mintedTs = toIsoTimestamp(nft.mint?.timestamp || nft.mintedAt);
-      const updatedTs = toIsoTimestamp(nft.timeLastUpdated);
-      const timestamp = acquiredTs || mintedTs || updatedTs;
-      if (!timestamp) return null;
+async function fetchLatestArrivalSignal(
+  wallets: string[],
+  alchemyApiKey: string
+): Promise<ProfileNFTSignal | null> {
+  if (!alchemyApiKey || !wallets.length) return null;
 
-      const tokenId = pickTokenId(nft);
-      const contractAddress = normalizeAddress(nft.contract?.address || "") || undefined;
-      const collectionSlug = String(nft.displayCollectionSlug || "").trim() || undefined;
-      const openseaUrl = contractAddress && tokenId
-        ? `https://opensea.io/item/ethereum/${contractAddress}/${tokenId}`
-        : undefined;
-      const sourceLabel = acquiredTs
-        ? "Entered wallet"
-        : mintedTs
-          ? "Mint timestamp"
-          : "Recent signal";
+  try {
+    const normalizedWallets = wallets
+      .map((wallet) => normalizeAddress(wallet))
+      .filter(Boolean);
+    const walletSet = new Set(normalizedWallets);
+    const alchemyUrl = `https://eth-mainnet.g.alchemy.com/v2/${alchemyApiKey}`;
+
+    const latestArrivalTask = async () => {
+      const walletResults = await Promise.all(
+        normalizedWallets.map(async (wallet) => {
+          try {
+            const body = {
+              jsonrpc: "2.0",
+              id: 1,
+              method: "alchemy_getAssetTransfers",
+              params: [
+                {
+                  toAddress: wallet,
+                  category: ["erc721", "erc1155"],
+                  maxCount: "0xa",
+                  order: "desc",
+                  withMetadata: true,
+                  excludeZeroValue: false,
+                },
+              ],
+            };
+
+            const response = await fetch(alchemyUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+              cache: "no-store",
+            });
+
+            if (!response.ok) return null;
+
+            const data = (await response.json()) as {
+              result?: {
+                transfers?: Array<{
+                  from?: string;
+                  to?: string;
+                  contract?: string;
+                  tokenId?: string | number;
+                  metadata?: { blockTimestamp?: string };
+                }>;
+              };
+            };
+
+            const transfers = data?.result?.transfers || [];
+            return transfers.find((transfer) => {
+              const from = normalizeAddress(transfer.from || "");
+              return !from || !walletSet.has(from);
+            }) || null;
+          } catch {
+            return null;
+          }
+        })
+      );
+
+      const bestTransfer = walletResults
+        .filter((transfer): transfer is NonNullable<typeof transfer> => Boolean(transfer?.metadata?.blockTimestamp))
+        .sort((a, b) => {
+          const aTime = new Date(String(a.metadata?.blockTimestamp || "")).getTime();
+          const bTime = new Date(String(b.metadata?.blockTimestamp || "")).getTime();
+          return bTime - aTime;
+        })[0];
+
+      if (!bestTransfer) return null;
+
+      const contractAddress = normalizeAddress(bestTransfer.contract || "") || undefined;
+      const tokenId = normalizeTokenIdForOpenSea(bestTransfer.tokenId) || undefined;
+      const timestamp = toIsoTimestamp(bestTransfer.metadata?.blockTimestamp) || undefined;
+      if (!contractAddress || !tokenId || !timestamp) return null;
+
+      const enriched = await fetchOpenSeaAsset(contractAddress, tokenId);
 
       return {
+        title: enriched.title || undefined,
+        name: enriched.title || undefined,
+        collectionName: enriched.collectionName || undefined,
+        contractAddress,
+        tokenId,
+        imageUrl: enriched.imageUrl || undefined,
+        openseaUrl: `https://opensea.io/item/ethereum/${contractAddress}/${tokenId}`,
         timestamp,
-        signal: {
-          title: String(nft.name || nft.title || "").trim() || undefined,
-          name: String(nft.name || nft.title || "").trim() || undefined,
-          tokenId: tokenId || undefined,
-          collectionName: resolveCollectionName(nft),
-          collectionSlug,
-          contractAddress,
-          imageUrl: extractNFTImageUrl(nft) || undefined,
-          openseaUrl,
-          timestamp,
-          sourceLabel,
-        } as ProfileNFTSignal,
-      };
-    })
-    .filter((entry): entry is { timestamp: string; signal: ProfileNFTSignal } => Boolean(entry))
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        sourceLabel: "Recent Signal",
+      } as ProfileNFTSignal;
+    };
 
-  return ranked[0]?.signal || null;
+    return await withTimeout(latestArrivalTask(), 5000, null as ProfileNFTSignal | null);
+  } catch {
+    return null;
+  }
 }
 
 function normalizeArtistValue(value: unknown): string {
@@ -1157,15 +1233,17 @@ export async function GET(req: Request) {
       return best?.item || null;
     });
 
-    const [firstMint, acquisitionBreakdown, profileIdentity, marketAttention] = await Promise.all([
+    const latestArrivalTask = fetchLatestArrivalSignal(validWallets, ALCHEMY_API_KEY!);
+
+    const [firstMint, acquisitionBreakdown, profileIdentity, marketAttention, latestArrival] = await Promise.all([
       earliestMintTask,
       fetchAcquisitionBreakdown(wallet),
       primaryIdentityTask,
       marketAttentionTask,
+      latestArrivalTask,
     ]);
 
     const firstMintLabel = buildFirstMintLabel(firstMint?.timestamp);
-    const latestArrival = buildLatestArrivalSignal(enrichedNFTs);
     const highestCurrentOffer = toProfileSignalFromMarketAttention(marketAttention);
     const topArtists = buildTopArtists(enrichedNFTs);
     const profileWithFirstMint = firstMint

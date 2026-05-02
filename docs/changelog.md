@@ -7,6 +7,14 @@
 - Removed Collected Works section from profile UI.
 - Added Top Artists section and profile payload field for top 3 creators from reliable metadata signals.
 - Updated DATA_SOURCES, API_PATTERNS, PROFILE_SPEC, and DATA_MODEL references.
+
+- Added `docs/OPENSEA_INTEGRATION.md` with OpenSea `llms.txt`, OpenAPI, local skill/script workflow boundaries, runtime rules, performance constraints, and marketplace/display integration guidance.
+- Updated the wallet converter to use detected active wallet offers divided by target collection floor.
+- Limited converter offer math to wallet-owned NFTs and ETH/WETH-denominated offers.
+- Updated converter search to prioritize usable canonical OpenSea collection results with floor data over null-floor lookalikes.
+- Updated converter UI copy to show detected offer value, target floor, estimated reach, offer coverage, and clearer error states.
+- Added converter debug output for checked candidates, found offers, and skip counts when using `debug=1`.
+
 ## 2026-05-01
 
 ## 2026-05-01
@@ -21,5 +29,6 @@
 
 - Converter refined to strict wallet-owned active-offer math (ETH/WETH only), with canonical search ranking that prefers usable floor-backed results.
 - Styled the “If you sold it all…” module so it no longer appears as raw/default HTML.
+- Styled the “If you sold it all...” module so it no longer appears as raw/default HTML.
 - Updated primary Key Signals to show origin, highest current offer, and latest arrival while preserving signalPiece and anchorCollection as supporting profile data.
 

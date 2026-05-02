@@ -11,6 +11,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const wallet = String(searchParams.get("wallet") || "").trim();
   const slug = String(searchParams.get("slug") || "").trim().toLowerCase();
+  const includeDebug = searchParams.get("debug") === "1";
 
   if (!wallet || (!isEthAddress(wallet) && !isEns(wallet)) || !slug) {
     return NextResponse.json({
@@ -26,6 +27,7 @@ export async function GET(req: Request) {
   }
 
   const estimate = await buildWalletOfferEstimate(wallet);
+  const estimate = await buildWalletOfferEstimate(wallet, includeDebug);
   if (estimate.error === "missing_opensea") {
     return NextResponse.json({
       targetCollection: null,
@@ -99,6 +101,7 @@ export async function GET(req: Request) {
       checkedNftCount: estimate.checkedNftCount,
       candidateCount: estimate.candidateCount,
       error: "no_wallet_offers",
+      debug: includeDebug ? estimate.debug : undefined,
     });
   }
 
@@ -121,5 +124,6 @@ export async function GET(req: Request) {
     checkedNftCount: estimate.checkedNftCount,
     candidateCount: estimate.candidateCount,
     error,
+    debug: includeDebug ? estimate.debug : undefined,
   });
 }
