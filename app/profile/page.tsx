@@ -45,47 +45,17 @@ type WalletProfile = {
   totalNFTs?: number;
   categoryDistribution?: CategoryDistributionEntry[];
   firstMint?: FirstMint;
-<<<<<<< HEAD
-  signalPiece?: {
-    tokenId?: string;
-    title?: string;
-    collectionName?: string;
-    imageUrl?: string;
-    collectionSlug?: string;
-    contractAddress?: string;
-    openseaUrl?: string;
-  } | null;
-  anchorCollection?: {
-    name: string;
-    count: number;
-    imageUrl?: string;
-    collectionSlug?: string;
-    contractAddress?: string;
-    openseaUrl?: string;
-  } | null;
-=======
   signalPiece?: { tokenId?: string; title?: string; collectionName?: string; imageUrl?: string; collectionSlug?: string; contractAddress?: string; openseaUrl?: string } | null;
   anchorCollection?: { name: string; count: number; imageUrl?: string; collectionSlug?: string; contractAddress?: string; openseaUrl?: string } | null;
   highestCurrentOffer?: ProfileNFTSignal;
   latestArrival?: ProfileNFTSignal;
->>>>>>> 26b43b3e85d97a6b7dcee1ad9165e086f21c43a9
+  topArtists?: Array<{ name: string; count: number; imageUrl?: string; sourceLabel?: string; openseaUrl?: string; externalUrl?: string }>;
   openseaUsername?: string;
   avatarUrl?: string;
   openseaUrl?: string;
 };
-<<<<<<< HEAD
-
-type ProfileIdentity = {
-  displayName: string | null;
-  username: string | null;
-  avatarUrl: string | null;
-  bannerUrl: string | null;
-};
-
-=======
 type ProfileIdentity = { displayName: string | null; username: string | null; avatarUrl: string | null; bannerUrl: string | null };
 type ProfileNFTSignal = { title?: string; name?: string; tokenId?: string; collectionName?: string; collectionSlug?: string; contractAddress?: string; imageUrl?: string; openseaUrl?: string; timestamp?: string; ethAmountLabel?: string; sourceLabel?: string } | null;
->>>>>>> 26b43b3e85d97a6b7dcee1ad9165e086f21c43a9
 type MarketAttention = { ethAmountLabel: string; collectionName: string | null } | null;
 
 type CategoryPreview = {
@@ -347,30 +317,6 @@ export default function ProfilePage() {
     setSelectedCategory((prev) => (prev && categoryExplorerItems.some((item) => item.key === prev) ? prev : defaultKey));
   }, [categoryExplorerItems]);
 
-<<<<<<< HEAD
-  const topCollectionsWithImages = useMemo(() => {
-    return topCollections.map((collection) => {
-      const collectionSlugKey = String(collection.collectionSlug || "").toLowerCase();
-      const contractKey = String(collection.contractAddress || "").toLowerCase();
-      const nameKey = normalizeCollectionKey(collection.name);
-
-      const mapImage =
-        collectionImageMap.get(collectionSlugKey) ||
-        collectionImageMap.get(contractKey) ||
-        collectionImageMap.get(nameKey) ||
-        "";
-
-      const resolvedImageUrl = normalizeImageUrl(collection.imageUrl || mapImage || "");
-
-      return {
-        ...collection,
-        resolvedImageUrl,
-      };
-    });
-  }, [topCollections, collectionImageMap]);
-
-=======
->>>>>>> 26b43b3e85d97a6b7dcee1ad9165e086f21c43a9
   const mintedStats = result?.acquisitionBreakdown;
   const mintedPercent = Number.isFinite(mintedStats?.mintPercent)
     ? Math.max(0, Math.min(100, Number(mintedStats?.mintPercent)))
@@ -383,10 +329,24 @@ export default function ProfilePage() {
 
   const marketStat = useMemo(() => {
     if (result?.marketAttention?.ethAmountLabel) return { value: result.marketAttention.ethAmountLabel, label: "Market Attention" };
-    if (profile?.anchorCollection?.name) return { value: profile.anchorCollection.name, label: "Anchor Collection" };
     if (topCollections[0]?.name) return { value: topCollections[0].name, label: "Top Collection" };
     return { value: "Unavailable", label: "Market Signal" };
-  }, [result?.marketAttention?.ethAmountLabel, profile?.anchorCollection?.name, topCollections]);
+  }, [result?.marketAttention?.ethAmountLabel, topCollections]);
+  const topCollectionsWithImages = useMemo(
+    () =>
+      topCollections.map((collection) => {
+        const slugKey = String(collection.collectionSlug || "").toLowerCase();
+        const contractKey = String(collection.contractAddress || "").toLowerCase();
+        const nameKey = normalizeCollectionKey(collection.name);
+        return {
+          ...collection,
+          resolvedImageUrl: normalizeImageUrl(
+            collection.imageUrl || collectionImageMap.get(slugKey) || collectionImageMap.get(contractKey) || collectionImageMap.get(nameKey) || ""
+          ),
+        };
+      }),
+    [topCollections, collectionImageMap]
+  );
 
   function originLabel() {
     if (!firstMint) return "Origin Signal";
@@ -394,29 +354,6 @@ export default function ProfilePage() {
     return "Earliest Known NFT";
   }
 
-<<<<<<< HEAD
-  function updateWalletQuery(wallets: string[]) {
-    router.push(`/profile?wallet=${encodeURIComponent(wallets.join(","))}`);
-  }
-
-  function addWallet(wallet: string) {
-    const next = Array.from(new Set([...(result?.wallets || initialWalletsFromQuery), wallet.trim()])).slice(0, 5);
-    updateWalletQuery(next);
-  }
-
-  function removeWallet(wallet: string) {
-    const next = (result?.wallets || initialWalletsFromQuery).filter((w) => w !== wallet);
-    if (next.length === 0) return;
-    updateWalletQuery(next);
-  }
-
-  function handleCompareSubmit(e: FormEvent) {
-    e.preventDefault();
-    if (!canCompare) return;
-    router.push(`/compare?a=${encodeURIComponent(walletFromQuery)}&b=${encodeURIComponent(compareWallet.trim())}`);
-  }
-
-=======
   const highestOffer = profile?.highestCurrentOffer || null;
   const latestArrival = profile?.latestArrival || null;
   const highestOfferImage = normalizeImageUrl(highestOffer?.imageUrl || "");
@@ -426,7 +363,6 @@ export default function ProfilePage() {
   function addWallet(wallet: string) { const next = Array.from(new Set([...(result?.wallets || initialWalletsFromQuery), wallet.trim()])).slice(0, 5); updateWalletQuery(next); }
   function removeWallet(wallet: string) { const next = (result?.wallets || initialWalletsFromQuery).filter((w) => w !== wallet); if (next.length === 0) return; updateWalletQuery(next); }
   function handleCompareSubmit(e: FormEvent) { e.preventDefault(); if (!canCompare) return; router.push(`/compare?a=${encodeURIComponent(walletFromQuery)}&b=${encodeURIComponent(compareWallet.trim())}`); }
->>>>>>> 26b43b3e85d97a6b7dcee1ad9165e086f21c43a9
   const selectedCategoryGroup = categoryExplorerItems.find((item) => item.key === selectedCategory)?.group || null;
   const selectedPreviews = (selectedCategoryGroup?.previews || []).slice(0, 6);
 
@@ -467,16 +403,7 @@ export default function ProfilePage() {
                 <p className="profile-eyebrow">Class</p>
                 <p className="profile-class-label">{profile.focusLabel || "Collector"}</p>
 
-<<<<<<< HEAD
-                {profile.patternLine && (
-                  <>
-                    <p className="profile-eyebrow">Statement</p>
-                    <p className="profile-pattern-copy">{profile.patternLine}</p>
-                  </>
-                )}
-=======
       <section className="profile-panel"><p className="profile-section-label">Key Signals</p><div className="profile-key-signals">{firstMint && <article className="signal-card signal-card--first-mint"><div className="signal-media">{originImageUrl ? <img src={originImageUrl} alt={originTitle} className="signal-thumb" onError={handleImageError} /> : <span aria-hidden="true">✦</span>}</div><p className="signal-label">{originLabel()}</p><p className="signal-value">{originTitle}</p><p className="signal-support">{originCollectionName || "Creator signal unavailable"}</p>{firstMint.openseaUrl && <a href={firstMint.openseaUrl} target="_blank" rel="noopener noreferrer" className="profile-external-link">View NFT ↗</a>}</article>}<article className="signal-card signal-card--market-attention"><div className="signal-media">{highestOfferImage ? <img src={highestOfferImage} alt={highestOffer?.title || "Highest current offer"} className="signal-thumb" onError={handleImageError} /> : <span aria-hidden="true">✦</span>}</div><p className="signal-label">{highestOffer?.ethAmountLabel ? "Highest Current Offer" : "Market Attention"}</p><p className="signal-value">{highestOffer?.title || highestOffer?.tokenId || "No active offer detected"}</p><p className="signal-support">{highestOffer?.ethAmountLabel || "No active offer detected"}</p>{highestOffer?.collectionName && <p className="signal-support">{highestOffer.collectionName}</p>}{highestOffer?.openseaUrl && <a href={highestOffer.openseaUrl} target="_blank" rel="noopener noreferrer" className="profile-external-link">View NFT ↗</a>}</article><article className="signal-card signal-card--latest-arrival"><div className="signal-media">{latestArrivalImage ? <img src={latestArrivalImage} alt={latestArrival?.title || "Latest arrival"} className="signal-thumb" onError={handleImageError} /> : <span aria-hidden="true">✦</span>}</div><p className="signal-label">{latestArrival?.sourceLabel === "Recent signal" ? "Recent Signal" : "Latest Arrival"}</p><p className="signal-value">{latestArrival?.title || latestArrival?.tokenId || "No recent arrival detected"}</p><p className="signal-support">{latestArrival?.collectionName || "Collection signal unavailable"}</p>{latestArrival?.timestamp && <p className="signal-support">{formatMintDate(latestArrival.timestamp)}</p>}{latestArrival?.openseaUrl && <a href={latestArrival.openseaUrl} target="_blank" rel="noopener noreferrer" className="profile-external-link">View NFT ↗</a>}</article></div></section>
->>>>>>> 26b43b3e85d97a6b7dcee1ad9165e086f21c43a9
 
                 {heroIdentity && <p className="profile-muted-copy">{heroIdentity}</p>}
               </article>
@@ -641,67 +568,35 @@ export default function ProfilePage() {
                   </article>
                 )}
 
-                {profile.signalPiece && (
-                  <article className="signal-card signal-card--signal-piece">
-                    <div className="signal-media">
-                      {profile.signalPiece.imageUrl ? (
-                        <img
-                          src={normalizeImageUrl(profile.signalPiece.imageUrl)}
-                          alt={profile.signalPiece.title || "Signal piece"}
-                          className="signal-thumb"
-                          onError={handleImageError}
-                        />
-                      ) : (
-                        <span aria-hidden="true">✦</span>
-                      )}
-                    </div>
-                    <p className="signal-label">Signal Piece</p>
-                    <p className="signal-value">{profile.signalPiece.title || profile.signalPiece.tokenId || profile.signalPiece.collectionName}</p>
-                    <p className="signal-support">Your wallet keeps returning here.</p>
-                    {profile.signalPiece.openseaUrl && (
-                      <a href={profile.signalPiece.openseaUrl} target="_blank" rel="noopener noreferrer" className="profile-external-link">
-                        View NFT ↗
-                      </a>
-                    )}
-                  </article>
-                )}
-
-                {profile.anchorCollection?.name && (
-                  <article className="signal-card signal-card--anchor">
-                    <div className="signal-media">
-                      {profile.anchorCollection.imageUrl ? (
-                        <img
-                          src={normalizeImageUrl(profile.anchorCollection.imageUrl)}
-                          alt={profile.anchorCollection.name}
-                          className="signal-thumb"
-                          onError={handleImageError}
-                        />
-                      ) : (
-                        <span aria-hidden="true">✦</span>
-                      )}
-                    </div>
-                    <p className="signal-label">Anchor Collection</p>
-                    <p className="signal-value">{profile.anchorCollection.name}</p>
-                    <p className="signal-support">Collection behavior anchor.</p>
-                    {profile.anchorCollection.openseaUrl && (
-                      <a href={profile.anchorCollection.openseaUrl} target="_blank" rel="noopener noreferrer" className="profile-external-link">
-                        View Collection ↗
-                      </a>
-                    )}
-                  </article>
-                )}
               </div>
             </section>
-
-            <section className="profile-panel profile-collected-works">
-              <p className="profile-section-label">Collected Works</p>
-              <div className="profile-collected-grid">
-                <span>Total Holdings {profile.totalNFTs || 0}</span>
-                <span>Collections {collectionCount}</span>
-                <span>Anchor Items {topCollections[0]?.count || 0}</span>
-                <span>Market Attention {result?.marketAttention?.ethAmountLabel || "No active attention detected"}</span>
-              </div>
-            </section>
+            {profile.topArtists && profile.topArtists.length > 0 && (
+              <section className="profile-panel">
+                <p className="profile-section-label">Top Artists</p>
+                <div className="profile-collection-list">
+                  {profile.topArtists.slice(0, 3).map((artist, index) => {
+                    const artistImage = normalizeImageUrl(artist.imageUrl || "");
+                    const linkUrl = artist.openseaUrl || artist.externalUrl || "";
+                    return (
+                      <article key={`${artist.name}-${index}`} className="profile-top-collection-card">
+                        <div className="profile-top-head">
+                          <span className="profile-rank">{index + 1}</span>
+                          <div className="profile-thumb">
+                            {artistImage ? <img src={artistImage} alt={artist.name} className="profile-thumb-img" onError={handleImageError} /> : <span aria-hidden="true">✦</span>}
+                          </div>
+                          <div>
+                            <p className="profile-collection-title">{artist.name}</p>
+                            <p className="profile-muted-copy">Collected {artist.count}</p>
+                            {artist.sourceLabel && <p className="profile-muted-copy">{artist.sourceLabel}</p>}
+                            {linkUrl && <a href={linkUrl} target="_blank" rel="noopener noreferrer" className="profile-external-link">View Profile ↗</a>}
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
 
             <section className="profile-panel">
               <p className="profile-section-label">Top Collections</p>
