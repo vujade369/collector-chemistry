@@ -324,7 +324,7 @@ export function resolveCollectionName(nft: WalletProfileNFT) {
 
 type CategorySource = "opensea" | "metadata" | "keyword" | "other";
 
-function classifyCategoryWithSource(nft: WalletProfileNFT): {
+export function classifyCategoryWithSource(nft: WalletProfileNFT): {
   category: string;
   source: CategorySource;
 } {
