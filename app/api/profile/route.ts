@@ -976,7 +976,8 @@ function normalizeArtistValue(value: unknown): string {
 }
 
 function getArtistCandidate(nft: WalletProfileNFT): { name: string; sourceLabel: string; externalUrl?: string } | null {
-  const attributeSets = [nft.metadata?.attributes, nft.raw?.metadata?.attributes].filter(Boolean);
+  const attributeSets = [nft.metadata?.attributes, nft.raw?.metadata?.attributes]
+  .filter((a) => Array.isArray(a));
   const keys = new Set(["artist", "creator", "created by", "seize artist profile"]);
 
   for (const attributes of attributeSets) {
@@ -1246,6 +1247,7 @@ export async function GET(req: Request) {
       },
     });
   } catch (error) {
+    console.error("[profile] caught error:", error);
     if (error instanceof WalletFetchError) {
       return NextResponse.json(
         {
