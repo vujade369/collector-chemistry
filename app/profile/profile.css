@@ -66,15 +66,9 @@
 .minted-fill { background: #ff3399; }
 .acquired-fill { background: #29b6f6; }
 
-<<<<<<< ours
-.profile-key-signals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.signal-card { background: #0f0f0f; border: 0.5px solid #1e1e1e; border-radius: 12px; padding: 14px; display: grid; gap: 8px; border-top: 2px solid #222; }
-.signal-media { width: 64px; height: 64px; border-radius: 8px; border: 0.5px solid #1e1e1e; background: #141414; overflow: hidden; display: grid; place-items: center; color: #666; }
-=======
 .profile-key-signals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .signal-card { background: linear-gradient(180deg, #121212, #0f0f0f); border: 0.5px solid #242424; border-radius: 14px; padding: 15px; display: grid; gap: 10px; border-top: 2px solid #222; }
 .signal-media { width: 100%; aspect-ratio: 1; border-radius: 10px; border: 0.5px solid #262626; background: #141414; overflow: hidden; display: grid; place-items: center; color: #666; }
->>>>>>> theirs
 .signal-thumb { width: 100%; height: 100%; object-fit: cover; }
 .signal-label { margin: 0; font-size: 9px; text-transform: uppercase; letter-spacing: 0.15em; }
 .signal-value { margin: 0; font-size: 14px; color: #f0ede6; }
