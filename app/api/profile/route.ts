@@ -755,8 +755,24 @@ type MarketAttention = {
   title: string | null;
   imageUrl: string | null;
   contractAddress: string | null;
+  collectionSlug: string | null;
   tokenId: string | null;
   openseaUrl: string | null;
+  sourceLabel: string;
+};
+
+type ProfileNFTSignal = {
+  title?: string;
+  name?: string;
+  tokenId?: string;
+  collectionName?: string;
+  collectionSlug?: string;
+  contractAddress?: string;
+  imageUrl?: string;
+  openseaUrl?: string;
+  timestamp?: string;
+  ethAmountLabel?: string;
+  sourceLabel?: string;
 };
 
 function normalizeTokenIdForOpenSea(raw: unknown): string | null {
@@ -787,7 +803,7 @@ async function fetchMarketAttention(nfts: WalletProfileNFT[]): Promise<MarketAtt
     const candidates: Array<{ slug: string; tokenId: string; nft: WalletProfileNFT }> = [];
 
     for (const nft of nfts) {
-      if (candidates.length >= 8) break;
+      if (candidates.length >= 12) break;
       let slug = String(nft.displayCollectionSlug || "").trim();
       const tokenId = pickTokenId(nft);
       if (!tokenId) continue;
@@ -862,7 +878,7 @@ async function fetchMarketAttention(nfts: WalletProfileNFT[]): Promise<MarketAtt
       return valid[0];
     };
 
-    const winner = await withTimeout(task(), 8000, null as Awaited<ReturnType<typeof task>>);
+    const winner = await withTimeout(task(), 1800, null as Awaited<ReturnType<typeof task>>);
     if (!winner) return null;
 
     let finalTitle = winner.title;
@@ -883,15 +899,84 @@ async function fetchMarketAttention(nfts: WalletProfileNFT[]): Promise<MarketAtt
       imageUrl: finalImageUrl || null,
       contractAddress: winner.contractAddress,
       tokenId: winner.tokenId,
+      collectionSlug: null,
       openseaUrl: winner.contractAddress && winner.tokenId
         ? `https://opensea.io/item/ethereum/${winner.contractAddress}/${winner.tokenId}`
         : null,
+      sourceLabel: "Best active offer",
     };
   } catch {
     return null;
   }
 }
 
+
+function toIsoTimestamp(value: string | undefined | null): string | null {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
+function buildLatestArrivalSignal(nfts: WalletProfileNFT[]): ProfileNFTSignal | null {
+  const ranked = nfts
+    .map((nft) => {
+      const acquiredTs = toIsoTimestamp(nft.acquiredAt?.blockTimestamp || nft.blockTimestamp);
+      const mintedTs = toIsoTimestamp(nft.mint?.timestamp || nft.mintedAt);
+      const updatedTs = toIsoTimestamp(nft.timeLastUpdated);
+      const timestamp = acquiredTs || mintedTs || updatedTs;
+      if (!timestamp) return null;
+
+      const tokenId = pickTokenId(nft);
+      const contractAddress = normalizeAddress(nft.contract?.address || "") || undefined;
+      const collectionSlug = String(nft.displayCollectionSlug || "").trim() || undefined;
+      const openseaUrl = contractAddress && tokenId
+        ? `https://opensea.io/item/ethereum/${contractAddress}/${tokenId}`
+        : undefined;
+      const sourceLabel = acquiredTs
+        ? "Entered wallet"
+        : mintedTs
+          ? "Mint timestamp"
+          : "Recent signal";
+
+      return {
+        timestamp,
+        signal: {
+          title: String(nft.name || nft.title || "").trim() || undefined,
+          name: String(nft.name || nft.title || "").trim() || undefined,
+          tokenId: tokenId || undefined,
+          collectionName: resolveCollectionName(nft),
+          collectionSlug,
+          contractAddress,
+          imageUrl: extractNFTImageUrl(nft) || undefined,
+          openseaUrl,
+          timestamp,
+          sourceLabel,
+        } as ProfileNFTSignal,
+      };
+    })
+    .filter((entry): entry is { timestamp: string; signal: ProfileNFTSignal } => Boolean(entry))
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+  return ranked[0]?.signal || null;
+}
+
+function toProfileSignalFromMarketAttention(marketAttention: MarketAttention | null): ProfileNFTSignal | null {
+  if (!marketAttention) return null;
+  return {
+    title: marketAttention.title || undefined,
+    name: marketAttention.title || undefined,
+    tokenId: marketAttention.tokenId || undefined,
+    collectionName: marketAttention.collectionName || undefined,
+    collectionSlug: marketAttention.collectionSlug || undefined,
+    contractAddress: marketAttention.contractAddress || undefined,
+    imageUrl: marketAttention.imageUrl || undefined,
+    openseaUrl: marketAttention.openseaUrl || undefined,
+    ethAmountLabel: marketAttention.ethAmountLabel || undefined,
+    sourceLabel: marketAttention.sourceLabel || undefined,
+  };
+}
 export async function GET(req: Request) {
   const totalStartMs = Date.now();
   const { searchParams } = new URL(req.url);
@@ -1020,6 +1105,8 @@ export async function GET(req: Request) {
     ]);
 
     const firstMintLabel = buildFirstMintLabel(firstMint?.timestamp);
+    const latestArrival = buildLatestArrivalSignal(enrichedNFTs);
+    const highestCurrentOffer = toProfileSignalFromMarketAttention(marketAttention);
     const profileWithFirstMint = firstMint
       ? {
           ...profile,
@@ -1043,6 +1130,13 @@ export async function GET(req: Request) {
     });
     const enrichedProfile = {
       ...profileWithFirstMint,
+      highestCurrentOffer,
+      latestArrival,
+      keySignals: {
+        origin: profileWithFirstMint.firstMint || undefined,
+        highestCurrentOffer: highestCurrentOffer || undefined,
+        latestArrival: latestArrival || undefined,
+      },
       topCollections,
       firstMintLabel,
       acquisitionBreakdown,

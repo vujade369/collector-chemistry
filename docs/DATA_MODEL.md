@@ -294,3 +294,32 @@ GET /api/recommendations?wallet={address}&priceRange={range}
 {
   recommendations: CollectionRecommendationSet;
 }
+
+
+## ProfileNFTSignal
+
+Shared optional display shape used by key profile NFT signals such as origin, highest current offer, and latest arrival.
+
+Fields:
+- title
+- name
+- tokenId
+- collectionName
+- collectionSlug
+- contractAddress
+- imageUrl
+- openseaUrl
+- timestamp
+- ethAmountLabel
+- sourceLabel
+
+## WalletProfile key signal fields
+
+Optional fields added for primary Key Signals:
+- highestCurrentOffer?: ProfileNFTSignal
+- latestArrival?: ProfileNFTSignal
+- keySignals?: {
+  - origin?: ProfileNFTSignal | firstMint-compatible shape
+  - highestCurrentOffer?: ProfileNFTSignal
+  - latestArrival?: ProfileNFTSignal
+}
