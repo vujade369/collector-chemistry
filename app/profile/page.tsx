@@ -12,21 +12,13 @@ type TopCollection = {
   name: string;
   count: number;
   percentage?: number;
+  category?: string;
   imageUrl?: string;
-  previewImages?: string[];
-  source?: "collection" | "artist";
-  slug?: string;
+  collectionSlug?: string;
+  contractAddress?: string;
+  openseaUrl?: string;
 };
-type FirstMint = {
-  nft?: {
-    contractAddress?: string;
-    tokenId?: string;
-    collectionName?: string;
-    imageUrl?: string;
-    title?: string;
-  };
-  timestamp?: string;
-} | null;
+type FirstMint = { tokenId?: string; title?: string; collectionName?: string; imageUrl?: string; collectionSlug?: string; contractAddress?: string; openseaUrl?: string; timestamp?: string } | null;
 type WalletProfile = {
   patternLine?: string;
   identityParagraph?: string;
@@ -35,7 +27,11 @@ type WalletProfile = {
   totalNFTs?: number;
   categoryDistribution?: CategoryDistributionEntry[];
   firstMint?: FirstMint;
-  anchorCollection?: { name: string; count: number; imageUrl?: string } | null;
+  signalPiece?: { tokenId?: string; title?: string; collectionName?: string; imageUrl?: string; collectionSlug?: string; contractAddress?: string; openseaUrl?: string } | null;
+  anchorCollection?: { name: string; count: number; imageUrl?: string; collectionSlug?: string; contractAddress?: string; openseaUrl?: string } | null;
+  openseaUsername?: string;
+  avatarUrl?: string;
+  openseaUrl?: string;
 };
 type ProfileIdentity = { displayName: string | null; username: string | null; avatarUrl: string | null; bannerUrl: string | null };
 type MarketAttention = { ethAmountLabel: string; collectionName: string | null } | null;
@@ -74,6 +70,10 @@ function normalizeImageUrl(url?: string | null) {
   if (url.startsWith("ipfs://")) return url.replace("ipfs://", "https://ipfs.io/ipfs/");
   if (url.startsWith("ar://")) return url.replace("ar://", "https://arweave.net/");
   return url;
+}
+function handleImageError(event: React.SyntheticEvent<HTMLImageElement>) {
+  const target = event.currentTarget;
+  target.style.display = "none";
 }
 function formatMintDate(timestamp?: string) {
   if (!timestamp) return "";
@@ -151,7 +151,7 @@ export default function ProfilePage() {
   const resolvedWallet = result?.wallet || walletFromQuery;
   const fallbackDisplayName = useMemo(() => toDisplayName(resolvedWallet), [resolvedWallet]);
   const headerDisplayName = useMemo(() => String(result?.profileIdentity?.displayName || "").trim() || String(result?.profileIdentity?.username || "").trim() || fallbackDisplayName, [result?.profileIdentity?.displayName, result?.profileIdentity?.username, fallbackDisplayName]);
-  const headerAvatarUrl = useMemo(() => normalizeImageUrl(result?.profileIdentity?.avatarUrl), [result?.profileIdentity?.avatarUrl]);
+  const headerAvatarUrl = useMemo(() => normalizeImageUrl(profile?.avatarUrl || result?.profileIdentity?.avatarUrl), [profile?.avatarUrl, result?.profileIdentity?.avatarUrl]);
   const firstMint = profile?.firstMint || null;
   const firstMintNft = firstMint?.nft || null;
   const firstMintImage = normalizeImageUrl(firstMintNft?.imageUrl);
@@ -222,8 +222,8 @@ export default function ProfilePage() {
     {!loading && !error && profile && <>
       <section className="profile-hero-composed">
         <article className="profile-panel profile-hero-left"><p className="profile-eyebrow">Collector</p><h1 className="profile-display-name">{headerDisplayName}</h1><p className="profile-address">{shortenAddress(resolvedWallet)}</p><p className="profile-eyebrow">Class</p><p className="profile-class-label">{profile.focusLabel || "Collector"}</p>{profile.patternLine && <><p className="profile-eyebrow">Statement</p><p className="profile-pattern-copy">{profile.patternLine}</p></>}{heroIdentity && <p className="profile-muted-copy">{heroIdentity}</p>}</article>
-        <article className="profile-panel profile-hero-center">{headerAvatarUrl ? <img src={headerAvatarUrl} alt={`${headerDisplayName} wallet profile`} className="profile-hero-image" /> : <div className="profile-hero-image profile-hero-placeholder" aria-label="Wallet image fallback">{headerDisplayName.slice(0, 1).toUpperCase()}</div>}</article>
-        <article className="profile-panel profile-hero-right"><p className="profile-eyebrow">{firstMint ? originLabel() : "Origin signal not found"}</p><div className="profile-first-mint-frame">{firstMintImage ? <img src={firstMintImage} alt={firstMintNft?.title || "Origin artifact"} className="profile-hero-image profile-first-mint-image" /> : <div className="profile-hero-image profile-first-mint-empty" aria-hidden="true">✦</div>}</div><p className="profile-collection-title">{firstMintNft?.title || "Artifact image unavailable"}</p>{firstMintNft?.collectionName && <p className="profile-muted-copy">{firstMintNft.collectionName}</p>}{firstMint?.timestamp && <p className="profile-muted-copy">{formatMintDate(firstMint.timestamp)}</p>}<p className="profile-muted-copy">Where it started.</p></article>
+        <article className="profile-panel profile-hero-center">{headerAvatarUrl ? <img src={headerAvatarUrl} alt={`${headerDisplayName} wallet profile`} className="profile-hero-image" onError={handleImageError} /> : <div className="profile-hero-image profile-hero-placeholder" aria-label="Wallet image fallback">{headerDisplayName.slice(0, 1).toUpperCase()}</div>}</article>
+        <article className="profile-panel profile-hero-right"><p className="profile-eyebrow">{firstMint ? originLabel() : "Origin signal not found"}</p><div className="profile-first-mint-frame">{firstMintImage ? <img src={firstMintImage} alt={firstMint?.title || firstMint?.tokenId || "Origin artifact"} className="profile-hero-image profile-first-mint-image" onError={handleImageError} /> : <div className="profile-hero-image profile-first-mint-empty" aria-hidden="true">✦</div>}</div><p className="profile-collection-title">{firstMint?.title || firstMint?.tokenId || "Artifact image unavailable"}</p>{firstMint?.collectionName && <p className="profile-muted-copy">{firstMint.collectionName}</p>}{firstMint?.timestamp && <p className="profile-muted-copy">{formatMintDate(firstMint.timestamp)}</p>}<p className="profile-muted-copy">Where it started.</p></article>
       </section>
 
       <section className="profile-stats-grid">
@@ -239,15 +239,16 @@ export default function ProfilePage() {
         {profile.patternLine && <p className="profile-pattern-quote">{profile.patternLine}</p>}
       </section>
 
-      <section className="profile-panel"><p className="profile-section-label">Key Signals</p><div className="profile-key-signals">{firstMint && <article className="signal-card signal-card--first-mint"><p className="signal-label">{originLabel()}</p><p className="signal-value">{firstMintNft?.title || "Origin signal not found"}</p><p className="signal-support">{firstMintNft?.collectionName || "Creator signal unavailable"}</p></article>}{topCollections[0] && <article className="signal-card signal-card--signal-piece"><p className="signal-label">Signal Piece</p><p className="signal-value">{topCollections[0].name}</p><p className="signal-support">Your wallet keeps returning here.</p></article>}{profile.anchorCollection?.name && <article className="signal-card signal-card--anchor"><p className="signal-label">Anchor Collection</p><p className="signal-value">{profile.anchorCollection.name}</p><p className="signal-support">Collection behavior anchor.</p></article>}</div></section>
+      <section className="profile-panel"><p className="profile-section-label">Key Signals</p><div className="profile-key-signals">{firstMint && <article className="signal-card signal-card--first-mint"><div className="signal-media">{firstMint.imageUrl ? <img src={normalizeImageUrl(firstMint.imageUrl)} alt={firstMint.title || "Origin artifact"} className="signal-thumb" onError={handleImageError} /> : <span aria-hidden="true">✦</span>}</div><p className="signal-label">{originLabel()}</p><p className="signal-value">{firstMint.title || firstMint.tokenId || "Origin signal not found"}</p><p className="signal-support">{firstMint.collectionName || "Creator signal unavailable"}</p>{firstMint.openseaUrl && <a href={firstMint.openseaUrl} target="_blank" rel="noopener noreferrer" className="profile-external-link">View NFT ↗</a>}</article>}{profile.signalPiece && <article className="signal-card signal-card--signal-piece"><div className="signal-media">{profile.signalPiece.imageUrl ? <img src={normalizeImageUrl(profile.signalPiece.imageUrl)} alt={profile.signalPiece.title || "Signal piece"} className="signal-thumb" onError={handleImageError} /> : <span aria-hidden="true">✦</span>}</div><p className="signal-label">Signal Piece</p><p className="signal-value">{profile.signalPiece.title || profile.signalPiece.tokenId || profile.signalPiece.collectionName}</p><p className="signal-support">Your wallet keeps returning here.</p>{profile.signalPiece.openseaUrl && <a href={profile.signalPiece.openseaUrl} target="_blank" rel="noopener noreferrer" className="profile-external-link">View NFT ↗</a>}</article>}{profile.anchorCollection?.name && <article className="signal-card signal-card--anchor"><div className="signal-media">{profile.anchorCollection.imageUrl ? <img src={normalizeImageUrl(profile.anchorCollection.imageUrl)} alt={profile.anchorCollection.name} className="signal-thumb" onError={handleImageError} /> : <span aria-hidden="true">✦</span>}</div><p className="signal-label">Anchor Collection</p><p className="signal-value">{profile.anchorCollection.name}</p><p className="signal-support">Collection behavior anchor.</p>{profile.anchorCollection.openseaUrl && <a href={profile.anchorCollection.openseaUrl} target="_blank" rel="noopener noreferrer" className="profile-external-link">View Collection ↗</a>}</article>}</div></section>
 
       <section className="profile-panel profile-collected-works"><p className="profile-section-label">Collected Works</p><div className="profile-collected-grid"><span>Total Holdings {profile.totalNFTs || 0}</span><span>Collections {collectionCount}</span><span>Anchor Items {topCollections[0]?.count || 0}</span><span>Market Attention {result?.marketAttention?.ethAmountLabel || "No active attention detected"}</span></div></section>
 
-      <section className="profile-panel"><p className="profile-section-label">Top Collections</p><div className="profile-collection-list">{topCollectionsWithImages.map((collection, index) => {
-        const thumbUrl = collection.resolvedImageUrl;
+      <section className="profile-panel"><p className="profile-section-label">Top Collections</p><div className="profile-collection-list">{topCollections.map((collection, index) => {
+        const mapImage = collectionImageMap.get(collection.name.toLowerCase()) || "";
+        const thumbUrl = normalizeImageUrl(collection.imageUrl || mapImage || "");
         const walletPct = profile.totalNFTs ? Math.round((collection.count / (profile.totalNFTs || 1)) * 100) : 0;
-        const openseaUrl = collection.slug ? `https://opensea.io/collection/${collection.slug}` : "";
-        return <article key={`${collection.name}-${index}`} className="profile-top-collection-card"><div className="profile-top-head"><span className="profile-rank">{index + 1}</span><div className="profile-thumb">{thumbUrl ? <img src={thumbUrl} alt={`${collection.name} collection`} className="profile-thumb-img" /> : <span aria-hidden="true">✦</span>}</div><div><p className="profile-collection-title">{collection.name}</p><p className="profile-muted-copy">Holdings {collection.count} · {walletPct}% of wallet</p>{openseaUrl && <a href={openseaUrl} target="_blank" rel="noopener noreferrer" className="profile-external-link">View Collection ↗</a>}</div></div><div className="taste-bar-track"><div className={`taste-bar-fill collection-rank-fill collection-rank-fill--${Math.min(index + 1, 4)}`} style={{ width: `${walletPct}%` }} /></div></article>;
+        const openseaUrl = collection.openseaUrl || (collection.collectionSlug ? `https://opensea.io/collection/${collection.collectionSlug}` : "");
+        return <article key={`${collection.name}-${index}`} className="profile-top-collection-card"><div className="profile-top-head"><span className="profile-rank">{index + 1}</span><div className="profile-thumb">{thumbUrl ? <img src={thumbUrl} alt={`${collection.name} collection`} className="profile-thumb-img" onError={handleImageError} /> : <span aria-hidden="true">✦</span>}</div><div><p className="profile-collection-title">{collection.name}</p><p className="profile-muted-copy">Holdings {collection.count} · {walletPct}% of wallet</p>{openseaUrl && <a href={openseaUrl} target="_blank" rel="noopener noreferrer" className="profile-external-link">View Collection ↗</a>}</div></div><div className="taste-bar-track"><div className={`taste-bar-fill collection-rank-fill collection-rank-fill--${Math.min(index + 1, 4)}`} style={{ width: `${walletPct}%` }} /></div></article>;
       })}</div></section>
 
       <WalletBanner wallets={result?.wallets || initialWalletsFromQuery} onAdd={addWallet} onRemove={removeWallet} />
