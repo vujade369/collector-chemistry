@@ -1,7 +1,7 @@
 // app/api/compare/route.ts
 import { NextResponse } from "next/server";
 import { fetchWalletNFTs } from "@/lib/fetchWalletNFTs";
-import { buildWalletProfile as buildCoreWalletProfile, type WalletProfileNFT } from "@/lib/walletProfile";
+import { buildWalletProfile as buildCoreWalletProfile, classifyCategoryWithSource, type WalletProfileNFT } from "@/lib/walletProfile";
 
 const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY;
 const OPENSEA_API_KEY = process.env.OPENSEA_API_KEY;
@@ -34,6 +34,10 @@ type NFT = {
       name?: string;
       description?: string;
       attributes?: NFTAttribute[];
+      category?: string;
+      collection_category?: string;
+      collection?: string;
+      collection_name?: string;
     };
   };
   contractMetadata?: {
@@ -41,6 +45,10 @@ type NFT = {
   };
   metadata?: {
     attributes?: NFTAttribute[];
+    category?: string;
+    collection_category?: string;
+    name?: string;
+    description?: string;
   };
   spamInfo?: {
     isSpam?: string;
@@ -48,6 +56,7 @@ type NFT = {
 
   displayTitle?: string;
   displayCollectionName?: string;
+  displayCollectionCategory?: string;
   displayCollectionSlug?: string;
   displayArtist?: string;
   displayImage?: string;
@@ -79,6 +88,7 @@ type WalletMastery = {
 };
 
 type CollectorProfile = {
+  username?: string | null;
   archetype: string;
   level: number;
   primaryLean: string;
@@ -114,6 +124,23 @@ type WalletSummary = {
   profile: CollectorProfile;
   pfpUrl?: string | null;
   bannerUrl?: string | null;
+  firstMint: {
+    nft: {
+      contractAddress: string;
+      tokenId: string;
+      collectionName: string;
+      imageUrl: string;
+      title: string;
+    };
+    timestamp: string;
+  } | null;
+  acquisitionBreakdown: {
+    mintCount: number;
+    acquiredCount: number;
+    totalSampled: number;
+    mintPercent: number;
+    acquiredPercent: number;
+  };
 };
 
 type OpenSeaTrait = {
@@ -219,6 +246,30 @@ type OpenSeaNftEvent = {
 type OpenSeaNftEventsResponse = {
   asset_events?: OpenSeaNftEvent[];
   events?: OpenSeaNftEvent[];
+  next?: string | null;
+};
+
+type OpenSeaAccountEventNft = {
+  contract?: string;
+  identifier?: string | number;
+  collection?: string;
+  image_url?: string;
+  display_image_url?: string;
+  name?: string;
+};
+
+type OpenSeaAccountEvent = {
+  event_timestamp?: string | number;
+  sent_at?: string;
+  from_address?: string;
+  to_address?: string;
+  winner_account?: { address?: string };
+  nft?: OpenSeaAccountEventNft;
+};
+
+type OpenSeaAccountEventsResponse = {
+  asset_events?: OpenSeaAccountEvent[];
+  events?: OpenSeaAccountEvent[];
   next?: string | null;
 };
 
@@ -405,19 +456,40 @@ async function fetchOpenSeaAccountInventory(address: string): Promise<OpenSeaAcc
 }
 
 async function fetchOpenSeaProfile(address: string): Promise<{
+  username: string | null;
   pfpUrl: string | null;
   bannerUrl: string | null;
 }> {
-  if (!OPENSEA_API_KEY) return { pfpUrl: null, bannerUrl: null };
+  if (!OPENSEA_API_KEY) return { username: null, pfpUrl: null, bannerUrl: null };
 
   const data = await fetchOpenSeaJson<{
+    username?: string | null;
+    name?: string | null;
     profile_image_url?: string | null;
     banner_image_url?: string | null;
+    account?: {
+      username?: string | null;
+      name?: string | null;
+    } | null;
+    user?: {
+      username?: string | null;
+    } | null;
   }>(`/accounts/${address}`, {});
 
-  console.log("OPENSEA_PROFILE", { address, data });
+  const usernameCandidates = [
+    data?.username,
+    data?.name,
+    data?.account?.username,
+    data?.account?.name,
+    data?.user?.username,
+  ];
+  const username =
+    usernameCandidates
+      .map((value) => String(value || "").trim())
+      .find(Boolean) || null;
 
   return {
+    username,
     pfpUrl: data?.profile_image_url || null,
     bannerUrl: data?.banner_image_url || null,
   };
@@ -539,6 +611,190 @@ async function fetchCollectionInboundTimestamp(
   }
 
   return oldest;
+}
+
+
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+async function fetchFirstMint(address: string): Promise<{
+  nft: {
+    contractAddress: string;
+    tokenId: string;
+    collectionName: string;
+    imageUrl: string;
+    title: string;
+  };
+  timestamp: string;
+} | null> {
+  if (!ALCHEMY_API_KEY) return null;
+
+  try {
+    const alchemyUrl = `https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`;
+
+    const body = {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "alchemy_getAssetTransfers",
+      params: [
+        {
+          fromBlock: "0x0",
+          toBlock: "latest",
+          toAddress: normalizeAddress(address),
+          fromAddress: ZERO_ADDRESS,
+          category: ["erc721", "erc1155"],
+          withMetadata: true,
+          excludeZeroValue: false,
+          maxCount: "0xa",
+          order: "asc",
+        },
+      ],
+    };
+
+    const res = await withTimeout(
+      fetch(alchemyUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        cache: "no-store",
+      }),
+      8000,
+      null as unknown as Response
+    );
+
+    if (!res || !res.ok) return null;
+
+    const json = (await res.json()) as {
+      result?: {
+        transfers?: Array<{
+          from: string;
+          to: string;
+          contractAddress: string;
+          tokenId: string | null;
+          erc1155Metadata?: Array<{ tokenId: string }> | null;
+          asset: string | null;
+          metadata?: {
+            blockTimestamp?: string;
+          };
+          rawContract?: {
+            address?: string;
+          };
+        }>;
+      };
+    };
+
+    const transfers = json?.result?.transfers || [];
+    if (!transfers.length) return null;
+
+    const first = transfers[0];
+    const contractAddress = normalizeAddress(
+      first.contractAddress || first.rawContract?.address || ""
+    );
+    const rawTokenId = first.tokenId || first.erc1155Metadata?.[0]?.tokenId || "";
+const tokenId = rawTokenId.startsWith("0x")
+  ? String(BigInt(rawTokenId))
+  : String(rawTokenId);
+    const timestamp = first.metadata?.blockTimestamp || "";
+
+    if (!contractAddress || !tokenId) return null;
+
+    const displayMeta = await fetchOpenSeaAsset(contractAddress, String(tokenId));
+
+    return {
+      nft: {
+        contractAddress,
+        tokenId: String(tokenId),
+        collectionName: displayMeta.collectionName || first.asset || "Unknown collection",
+        imageUrl: displayMeta.imageUrl || "",
+        title: displayMeta.title || (first.asset ? `${first.asset} #${tokenId}` : `#${tokenId}`),
+      },
+      timestamp,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchAcquisitionBreakdown(address: string): Promise<{
+  mintCount: number;
+  acquiredCount: number;
+  totalSampled: number;
+  mintPercent: number;
+  acquiredPercent: number;
+}> {
+  if (!OPENSEA_API_KEY) {
+    return {
+      mintCount: 0,
+      acquiredCount: 0,
+      totalSampled: 0,
+      mintPercent: 0,
+      acquiredPercent: 0,
+    };
+  }
+
+  try {
+    const target = normalizeAddress(address);
+    let next = "";
+    let mintCount = 0;
+    let acquiredCount = 0;
+
+    for (let page = 0; page < OPENSEA_MAX_EVENT_PAGES; page += 1) {
+      const params = new URLSearchParams({
+        limit: String(OPENSEA_EVENT_PAGE_LIMIT),
+        event_type: "transfer",
+      });
+      if (next) params.set("next", next);
+
+      const data = await fetchOpenSeaJson<OpenSeaAccountEventsResponse>(
+        `/events/accounts/${target}?${params.toString()}`,
+        { events: [], asset_events: [], next: null }
+      );
+
+      const events = data.events || data.asset_events || [];
+
+      for (const event of events) {
+        if (normalizeAddress(event.to_address || event.winner_account?.address) !== target) continue;
+
+        if (normalizeAddress(event.from_address) === ZERO_ADDRESS) {
+          mintCount += 1;
+        } else {
+          acquiredCount += 1;
+        }
+      }
+
+      next = String(data.next || "");
+      if (!next || !events.length) break;
+    }
+
+    const totalSampled = mintCount + acquiredCount;
+    if (totalSampled === 0) {
+      return {
+        mintCount,
+        acquiredCount,
+        totalSampled,
+        mintPercent: 0,
+        acquiredPercent: 0,
+      };
+    }
+
+    const mintPercent = Math.round((mintCount / totalSampled) * 100);
+    const acquiredPercent = Math.max(0, 100 - mintPercent);
+
+    return {
+      mintCount,
+      acquiredCount,
+      totalSampled,
+      mintPercent,
+      acquiredPercent,
+    };
+  } catch {
+    return {
+      mintCount: 0,
+      acquiredCount: 0,
+      totalSampled: 0,
+      mintPercent: 0,
+      acquiredPercent: 0,
+    };
+  }
 }
 
 
@@ -677,19 +933,6 @@ async function buildWalletAcquiredMap(
 ): Promise<Map<string, { timestamp: number; fromAddress: string }>> {
   if (!OPENSEA_API_KEY) return new Map();
 
-  type EventNft = { contract?: string; identifier?: string | number };
-  type AccountEvent = {
-    event_timestamp?: string | number;
-    from_address?: string;
-    to_address?: string;
-    nft?: EventNft;
-  };
-  type AccountEventsResponse = {
-    asset_events?: AccountEvent[];
-    events?: AccountEvent[];
-    next?: string | null;
-  };
-
   const acquiredMap = new Map<string, { timestamp: number; fromAddress: string }>();
   const target = normalizeAddress(walletAddress);
   let next = "";
@@ -701,7 +944,7 @@ async function buildWalletAcquiredMap(
     });
     if (next) params.set("next", next);
 
-    const data = await fetchOpenSeaJson<AccountEventsResponse>(
+    const data = await fetchOpenSeaJson<OpenSeaAccountEventsResponse>(
       `/events/accounts/${target}?${params.toString()}`,
       { events: [], asset_events: [], next: null }
     );
@@ -1235,114 +1478,29 @@ function groupByArtist(nfts: NFT[]) {
   return map;
 }
 
-function classify(nft: NFT) {
-  const haystack = normalizeText(
-    `${nft.contractMetadata?.name || ""} ${nft.contract?.name || ""} ${
-      nft.title || ""
-    } ${nft.description || ""}`
-  );
+const CATEGORY_DISPLAY_LABELS: Record<string, string> = {
+  generative: "Generative Art",
+  fine_art: "Fine Art",
+  animation: "3D / Animation",
+  pfp: "PFP",
+  utility: "Utility",
+  music: "Music",
+  photography: "Photography",
+  meme: "Meme",
+  gaming: "Gaming",
+  collectibles: "Collectibles",
+  other: "Other",
+};
 
-  if (
-    haystack.includes("utility") ||
-    haystack.includes("membership") ||
-    haystack.includes("pass") ||
-    haystack.includes("access")
-  ) {
-    return "Utility";
-  }
-
-  if (
-    haystack.includes("music") ||
-    haystack.includes("song") ||
-    haystack.includes("audio") ||
-    haystack.includes("sound")
-  ) {
-    return "Music";
-  }
-
-  if (
-    haystack.includes("photo") ||
-    haystack.includes("photography") ||
-    haystack.includes("photograph")
-  ) {
-    return "Photography";
-  }
-
-  if (
-    haystack.includes("generative") ||
-    haystack.includes("algorithmic") ||
-    haystack.includes("art blocks")
-  ) {
-    return "Generative Art";
-  }
-
-  if (
-    haystack.includes("fine art") ||
-    haystack.includes("edition") ||
-    haystack.includes("gallery") ||
-    haystack.includes("painting") ||
-    haystack.includes("portrait")
-  ) {
-    return "Fine Art";
-  }
-
-  if (
-    haystack.includes("punk") ||
-    haystack.includes("ape") ||
-    haystack.includes("pfp") ||
-    haystack.includes("avatar") ||
-    haystack.includes("penguin") ||
-    haystack.includes("cat") ||
-    haystack.includes("bear")
-  ) {
-    return "PFP";
-  }
-
-  if (
-    haystack.includes("meme") ||
-    haystack.includes("pepe") ||
-    haystack.includes("wojak") ||
-    haystack.includes("furie")
-  ) {
-    return "Meme";
-  }
-
-  if (
-    haystack.includes("game") ||
-    haystack.includes("gaming") ||
-    haystack.includes("player") ||
-    haystack.includes("quest") ||
-    haystack.includes("character")
-  ) {
-    return "Gaming";
-  }
-
-  if (
-    haystack.includes("3d") ||
-    haystack.includes("animation") ||
-    haystack.includes("animated") ||
-    haystack.includes("motion") ||
-    haystack.includes("vr")
-  ) {
-    return "3D / Animation";
-  }
-
-  if (
-    haystack.includes("collectible") ||
-    haystack.includes("trading") ||
-    haystack.includes("series")
-  ) {
-    return "Collectibles";
-  }
-
-  return "Other";
+function getCategoryDisplayLabel(category: string): string {
+  return CATEGORY_DISPLAY_LABELS[category] ?? "Other";
 }
 
 function buildTasteDNA(nfts: NFT[]) {
   const counts: Record<string, number> = {};
 
   nfts.forEach((nft) => {
-    const type = classify(nft);
+    const type = getCategoryDisplayLabel(classifyCategoryWithSource(nft).category);
     counts[type] = (counts[type] || 0) + 1;
   });
 
@@ -1598,11 +1756,15 @@ export async function GET(req: Request) {
   }
 
   try {
-    const [nftsA, nftsB, profileA_os, profileB_os] = await Promise.all([
+    const [nftsA, nftsB, profileA_os, profileB_os, firstMintA, firstMintB, acquisitionA, acquisitionB] = await Promise.all([
       fetchNFTs(walletA),
       fetchNFTs(walletB),
       fetchOpenSeaProfile(walletA),
       fetchOpenSeaProfile(walletB),
+      fetchFirstMint(walletA),
+      fetchFirstMint(walletB),
+      fetchAcquisitionBreakdown(walletA),
+      fetchAcquisitionBreakdown(walletB),
     ]);
 
     const tasteA = buildTasteDNA(nftsA);
@@ -1695,6 +1857,7 @@ export async function GET(req: Request) {
 
     const profileA: CollectorProfile = {
       ...profileCardA,
+      username: profileA_os.username,
       collectorIdentityLabel: coreProfileA.collectorIdentityLabel,
       dominantCategory: coreProfileA.dominantCategory,
       secondaryCategory: coreProfileA.secondaryCategory,
@@ -1706,6 +1869,7 @@ export async function GET(req: Request) {
 
     const profileB: CollectorProfile = {
       ...profileCardB,
+      username: profileB_os.username,
       collectorIdentityLabel: coreProfileB.collectorIdentityLabel,
       dominantCategory: coreProfileB.dominantCategory,
       secondaryCategory: coreProfileB.secondaryCategory,
@@ -1732,6 +1896,8 @@ export async function GET(req: Request) {
       profile: profileA,
       pfpUrl: profileA_os.pfpUrl,
       bannerUrl: profileA_os.bannerUrl,
+      firstMint: firstMintA,
+      acquisitionBreakdown: acquisitionA,
     };
 
     const walletBResponse: WalletSummary = {
@@ -1740,6 +1906,8 @@ export async function GET(req: Request) {
       profile: profileB,
       pfpUrl: profileB_os.pfpUrl,
       bannerUrl: profileB_os.bannerUrl,
+      firstMint: firstMintB,
+      acquisitionBreakdown: acquisitionB,
     };
 
     return NextResponse.json({
@@ -1793,20 +1961,23 @@ function computeArchetype(
   const top = getTopTasteEntries(taste, 2);
   const primary = top[0]?.[0] || "Other";
   const primaryPct = top[0]?.[1] || 0;
-  const secondaryPct = top[1]?.[1] || 0;
 
-  if (diversity >= 6 && totalNFTs >= 80) return "Broad Explorer";
-  if (primary === "Meme" && primaryPct >= 18) return "Meme Native";
-  if (primary === "Fine Art") return "Art-Led Collector";
-  if (primary === "Generative Art") return "Generative Lean";
-  if (primary === "PFP") return "Identity Builder";
-  if (primary === "Utility") return "Utility Strategist";
-  if (primary === "Photography") return "Image Archivist";
-  if (primary === "Music") return "Sound Collector";
-  if (primaryPct >= 38) return "Focused Curator";
-  if (Math.abs(primaryPct - secondaryPct) <= 6) return "Cross-Current Collector";
+  const worldFormats = ["Gaming", "Music", "3D / Animation", "Photography"];
+  const worldFormatCount = worldFormats.filter((f) => (taste[f] || 0) > 0).length;
+  if (diversity >= 5 && worldFormatCount >= 2) return "World Citizen";
 
-  return "Taste Builder";
+  if (
+    (primary === "Fine Art" || primary === "Generative Art") &&
+    primaryPct >= 30
+  ) return "Artist Follower";
+
+  if (primary === "Fine Art" || primary === "Generative Art") return "Curator";
+
+  if (primary === "PFP" || primary === "Meme") return "Scene Player";
+
+  if (diversity >= 4 && totalNFTs >= 20) return "Explorer";
+
+  return "Explorer";
 }
 
 function computeLevel(totalNFTs: number, diversity: number) {
@@ -1909,18 +2080,75 @@ async function buildCollectorCardProfile(
 
   const topCollection = await buildTopCollectionSignal(nfts, cache);
 
+  const tasteEntries = Object.entries(taste).filter(([, value]) => value > 0);
+  const totalTasteCount = tasteEntries.reduce((sum, [, value]) => sum + value, 0);
+  const hasMeaningfulTasteData = nfts.length >= 5 && totalTasteCount > 0;
+
+  if (!hasMeaningfulTasteData) {
+    return {
+      archetype,
+      level,
+      primaryLean,
+      secondaryLean,
+      profileLine,
+      collectorIdentityLabel: "Exploratory collector across emerging and uncategorized work",
+      dominantCategory: "other",
+      secondaryCategory: "other",
+      categoryDistribution: [],
+      otherPercentage: 100,
+      categoryConfidence: "Low",
+      categorySourceBreakdown: {
+        opensea: 0,
+        metadata: 0,
+        keyword: 0,
+        other: 0,
+      },
+      topCollection,
+    };
+  }
+
+  const categoryDistribution = tasteEntries
+    .map(([category, count]) => ({
+      category,
+      count,
+      percentage: Math.round((count / totalTasteCount) * 100),
+    }))
+    .sort((a, b) => b.percentage - a.percentage);
+
+  const dominantCategory = categoryDistribution[0]?.category || "other";
+  const secondaryCategory = categoryDistribution[1]?.category || dominantCategory;
+
+  const otherPercentage = categoryDistribution
+    .filter((entry) => {
+      const normalized = entry.category.toLowerCase();
+      return normalized === "other" || normalized === "unknown" || normalized === "uncategorized";
+    })
+    .reduce((sum, entry) => sum + entry.percentage, 0);
+
+  let categoryConfidence: "High" | "Medium" | "Low" = "Low";
+  if (otherPercentage < 30) {
+    categoryConfidence = "High";
+  } else if (otherPercentage <= 60) {
+    categoryConfidence = "Medium";
+  }
+
+  const collectorIdentityLabel = getOrientationIdentity(
+    categoryDistribution,
+    topCollection ? [{ name: topCollection.name }] : []
+  );
+
   return {
     archetype,
     level,
     primaryLean,
     secondaryLean,
     profileLine,
-    collectorIdentityLabel: "Exploratory collector across emerging and uncategorized work",
-    dominantCategory: "other",
-    secondaryCategory: "other",
-    categoryDistribution: [],
-    otherPercentage: 100,
-    categoryConfidence: "Low",
+    collectorIdentityLabel,
+    dominantCategory,
+    secondaryCategory,
+    categoryDistribution,
+    otherPercentage,
+    categoryConfidence,
     categorySourceBreakdown: {
       opensea: 0,
       metadata: 0,
