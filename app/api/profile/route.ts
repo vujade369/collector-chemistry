@@ -1052,8 +1052,7 @@ function normalizeArtistValue(value: unknown): string {
 }
 
 function getArtistCandidate(nft: WalletProfileNFT): { name: string; sourceLabel: string; externalUrl?: string } | null {
-  const attributeSets = [nft.metadata?.attributes, nft.raw?.metadata?.attributes]
-  .filter((a) => Array.isArray(a));
+  const attributeSets = [nft.metadata?.attributes, nft.raw?.metadata?.attributes].filter(Boolean);
   const keys = new Set(["artist", "creator", "created by", "seize artist profile"]);
 
   for (const attributes of attributeSets) {
