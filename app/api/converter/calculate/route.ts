@@ -18,16 +18,21 @@ export async function GET(req: Request) {
       count: 0,
       estimateQuality: "low",
       error: "invalid_input",
+      estimatedValueETH: 0,
+      collectionsUsed: [],
     });
   }
 
   const estimate = await buildWalletEstimate(wallet);
+
   if (estimate.error) {
     return NextResponse.json({
       targetCollection: null,
       count: 0,
       estimateQuality: "low",
       error: "estimate_failed",
+      estimatedValueETH: estimate.estimatedValueETH ?? 0,
+      collectionsUsed: estimate.collections ?? [],
     });
   }
 
@@ -38,25 +43,28 @@ export async function GET(req: Request) {
   }>(`/collections/${encodeURIComponent(slug)}`, {});
 
   const floorPriceETH = await fetchCollectionFloorPriceETH(slug);
+
   if (!floorPriceETH || floorPriceETH <= 0) {
     return NextResponse.json({
       targetCollection: null,
       count: 0,
       estimateQuality: estimate.estimateQuality,
       error: "no_floor",
+      estimatedValueETH: estimate.estimatedValueETH,
+      collectionsUsed: estimate.collections,
     });
   }
 
-  // One decimal place — show 0.3 Pudgy Penguins instead of hiding the result
+  // One decimal place — show 0.3 Pudgy Penguins instead of hiding the result.
   const count = Math.round((estimate.estimatedValueETH / floorPriceETH) * 10) / 10;
 
-  // Only treat as zero_result if genuinely nothing — not just less than one
+  // Only treat as zero_result if genuinely nothing — not just less than one.
   const error =
     count === 0
       ? "zero_result"
       : estimate.estimateQuality === "low"
-      ? "low_quality"
-      : null;
+        ? "low_quality"
+        : null;
 
   return NextResponse.json({
     targetCollection: {
@@ -68,5 +76,7 @@ export async function GET(req: Request) {
     count,
     estimateQuality: estimate.estimateQuality,
     error,
+    estimatedValueETH: estimate.estimatedValueETH,
+    collectionsUsed: estimate.collections,
   });
 }

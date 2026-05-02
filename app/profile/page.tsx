@@ -175,6 +175,13 @@ function formatMintDate(timestamp?: string) {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
+function formatCollectorSince(timestamp?: string): string {
+  if (!timestamp) return "Unknown";
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return "Unknown";
+  return date.toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
+}
+
 function formatCategoryLabel(value: string) {
   return value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
@@ -391,13 +398,6 @@ export default function ProfilePage() {
       ? Math.max(0, 100 - mintedPercent)
       : null;
 
-  const marketStat = useMemo(() => {
-    if (result?.marketAttention?.ethAmountLabel) return { value: result.marketAttention.ethAmountLabel, label: "Market Attention" };
-    if (profile?.anchorCollection?.name) return { value: profile.anchorCollection.name, label: "Anchor Collection" };
-    if (topCollections[0]?.name) return { value: topCollections[0].name, label: "Top Collection" };
-    return { value: "Unavailable", label: "Market Signal" };
-  }, [result?.marketAttention?.ethAmountLabel, profile?.anchorCollection?.name, topCollections]);
-
   function originLabel() {
     if (!firstMint) return "Origin Signal";
     if (firstMint.timestamp) return "Earliest Known NFT";
@@ -463,6 +463,16 @@ export default function ProfilePage() {
         {!loading && !error && profile && (
           <>
             <section className="profile-hero-composed">
+              <article className="profile-panel profile-hero-avatar-card">
+                {headerAvatarUrl ? (
+                  <img src={headerAvatarUrl} alt={`${headerDisplayName} wallet profile`} className="profile-hero-image" onError={handleImageError} />
+                ) : (
+                  <div className="profile-hero-image profile-hero-placeholder" aria-label="Wallet image fallback">
+                    {headerDisplayName.slice(0, 1).toUpperCase()}
+                  </div>
+                )}
+              </article>
+
               <article className="profile-panel profile-hero-left">
                 <p className="profile-eyebrow">Collector</p>
                 <h1 className="profile-display-name">{headerDisplayName}</h1>
@@ -480,32 +490,46 @@ export default function ProfilePage() {
                 {heroIdentity && <p className="profile-muted-copy">{heroIdentity}</p>}
               </article>
 
-              <article className="profile-panel profile-hero-center">
-                {headerAvatarUrl ? (
-                  <img src={headerAvatarUrl} alt={`${headerDisplayName} wallet profile`} className="profile-hero-image" onError={handleImageError} />
-                ) : (
-                  <div className="profile-hero-image profile-hero-placeholder" aria-label="Wallet image fallback">
-                    {headerDisplayName.slice(0, 1).toUpperCase()}
+              {firstMint?.openseaUrl ? (
+                <a className="profile-panel profile-first-mint-plaque profile-first-mint-plaque-link" href={firstMint.openseaUrl} target="_blank" rel="noopener noreferrer">
+                  <span className="profile-first-mint-external" aria-hidden="true">
+                    ↗
+                  </span>
+                  <div className="profile-first-mint-plaque-media">
+                    {originImageUrl ? (
+                      <img src={originImageUrl} alt={originTitle} className="profile-first-mint-image" onError={handleImageError} />
+                    ) : (
+                      <div className="profile-first-mint-empty" aria-hidden="true">
+                        ✦
+                      </div>
+                    )}
                   </div>
-                )}
-              </article>
-
-              <article className="profile-panel profile-hero-right">
-                <p className="profile-eyebrow">{firstMint ? originLabel() : "Origin signal not found"}</p>
-                <div className="profile-first-mint-frame">
-                  {originImageUrl ? (
-                    <img src={originImageUrl} alt={originTitle} className="profile-hero-image profile-first-mint-image" onError={handleImageError} />
-                  ) : (
-                    <div className="profile-hero-image profile-first-mint-empty" aria-hidden="true">
-                      ✦
-                    </div>
-                  )}
+                  <div className="profile-first-mint-plaque-content">
+                    <p className="profile-eyebrow">First Mint</p>
+                    <p className="profile-first-mint-date">{formatCollectorSince(firstMint?.timestamp)}</p>
+                    {originCollectionName && <p className="profile-first-mint-meta">{originCollectionName}</p>}
+                    <p className="profile-first-mint-meta">{originTitle}</p>
+                  </div>
+                </a>
+              ) : (
+                <div className="profile-panel profile-first-mint-plaque">
+                  <div className="profile-first-mint-plaque-media">
+                    {originImageUrl ? (
+                      <img src={originImageUrl} alt={originTitle} className="profile-first-mint-image" onError={handleImageError} />
+                    ) : (
+                      <div className="profile-first-mint-empty" aria-hidden="true">
+                        ✦
+                      </div>
+                    )}
+                  </div>
+                  <div className="profile-first-mint-plaque-content">
+                    <p className="profile-eyebrow">First Mint</p>
+                    <p className="profile-first-mint-date">{formatCollectorSince(firstMint?.timestamp)}</p>
+                    {originCollectionName && <p className="profile-first-mint-meta">{originCollectionName}</p>}
+                    <p className="profile-first-mint-meta">{originTitle}</p>
+                  </div>
                 </div>
-                <p className="profile-collection-title">{originTitle}</p>
-                {originCollectionName && <p className="profile-muted-copy">{originCollectionName}</p>}
-                {firstMint?.timestamp && <p className="profile-muted-copy">{formatMintDate(firstMint.timestamp)}</p>}
-                <p className="profile-muted-copy">Where it started.</p>
-              </article>
+              )}
             </section>
 
             <section className="profile-stats-grid">
@@ -517,13 +541,9 @@ export default function ProfilePage() {
                 <p className="profile-stat-value">{collectionCount}</p>
                 <p className="profile-section-label">Collections</p>
               </article>
-              <article className="profile-panel profile-stat-card profile-stat-card--category">
-                <p className="profile-stat-value">{topCategory ? `${topCategory.percentage}%` : "0%"}</p>
-                <p className="profile-section-label">{topCategory ? formatCategoryLabel(topCategory.category) : "Top Category"}</p>
-              </article>
-              <article className="profile-panel profile-stat-card profile-stat-card--market">
-                <p className="profile-stat-value">{marketStat.value}</p>
-                <p className="profile-section-label">{marketStat.label}</p>
+              <article className="profile-panel profile-stat-card profile-stat-card--since">
+                <p className="profile-stat-value">{formatCollectorSince(firstMint?.timestamp)}</p>
+                <p className="profile-section-label">Collector Since</p>
               </article>
             </section>
 
