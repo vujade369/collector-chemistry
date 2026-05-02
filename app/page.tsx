@@ -1,60 +1,149 @@
 "use client";
 
-import { useState } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-function isValidInput(value: string): boolean {
+function isLikelyValidInput(value: string) {
   const trimmed = value.trim();
   const isEthAddress = /^0x[a-fA-F0-9]{40}$/.test(trimmed);
-  const isEns = trimmed.endsWith(".eth");
+  const isEns = /^[a-zA-Z0-9-]+\.eth$/.test(trimmed);
   return isEthAddress || isEns;
 }
 
-export default function Home() {
+export default function HomePage() {
   const router = useRouter();
-  const [wallet, setWallet] = useState("");
-  const isValid = isValidInput(wallet);
+  const [walletInput, setWalletInput] = useState("");
+  const [isVisible, setIsVisible] = useState(false);
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  useEffect(() => {
+    setIsVisible(true);
+  }, []);
+
+  const trimmedInput = useMemo(() => walletInput.trim(), [walletInput]);
+  const isValid = useMemo(() => isLikelyValidInput(trimmedInput), [trimmedInput]);
+
+  const submitWallet = () => {
     if (!isValid) return;
-    router.push(`/profile?wallet=${encodeURIComponent(wallet.trim())}`);
-  }
+    router.push(`/profile?wallet=${encodeURIComponent(trimmedInput)}`);
+  };
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    submitWallet();
+  };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    submitWallet();
+  };
 
   return (
-    <main className="min-h-screen bg-[#0e0e0e] text-stone-100">
-      <div className="mx-auto flex min-h-screen w-full max-w-[700px] items-center px-6 py-16">
-        <section className="relative w-full overflow-hidden rounded-[20px] border border-[#222] bg-[#111] p-8 shadow-[0_0_0_0.5px_rgba(255,51,153,0.08)]">
-          <div className="pointer-events-none absolute inset-0 rounded-[20px] bg-[radial-gradient(circle_at_14%_16%,rgba(255,51,153,0.12),transparent_46%),radial-gradient(circle_at_86%_84%,rgba(149,117,255,0.09),transparent_42%)]" aria-hidden="true" />
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#ff3399]/50 to-transparent" aria-hidden="true" />
-          <div className="relative grid gap-6">
-            <p className="text-[10px] uppercase tracking-[0.2em] text-[#555]">COLLECTOR CHEMISTRY</p>
-            <h1 className="text-4xl font-light tracking-[-0.03em] text-[#f0ede6]">What your wallet says about you.</h1>
-            <p className="text-[15px] leading-7 text-[#a8a49d]">Paste a wallet address or ENS name to see the collecting pattern inside it.</p>
+    <main
+      className="cc-page"
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "48px 24px 40px",
+      }}
+    >
+      <style>{`
+        .fade-item {
+          opacity: 0;
+          transform: translateY(10px);
+          transition: opacity 0.6s ease, transform 0.6s ease;
+        }
 
-            <form className="grid gap-4" onSubmit={handleSubmit}>
-              <input
-                id="wallet"
-                type="text"
-                placeholder="Wallet address or ENS"
-                value={wallet}
-                onChange={(e) => setWallet(e.target.value)}
-                className="w-full rounded-[10px] border border-[#2e2e2e] bg-[#141414] px-4 py-3 text-sm text-[#f0ede6] outline-none placeholder:text-[#3a3a3a] focus:border-[#555]"
-              />
+        .fade-item.visible {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      `}</style>
 
-              <button
-                type="submit"
-                disabled={!isValid}
-                className="inline-flex items-center justify-center rounded-full bg-[#f0ede6] px-6 py-3 text-sm font-medium text-[#0e0e0e] transition hover:opacity-90 disabled:opacity-40"
-              >
-                Read my wallet
-              </button>
-            </form>
+      <section
+        style={{
+          width: "100%",
+          maxWidth: "520px",
+          background: "var(--bg)",
+          display: "flex",
+          flexDirection: "column",
+          minHeight: "320px",
+          borderRadius: "16px",
+          padding: "48px 36px 40px",
+        }}
+      >
+        <div
+          className={`fade-item eyebrow ${isVisible ? "visible" : ""}`}
+          style={{ transitionDelay: "0ms", marginBottom: "24px", color: "var(--text-dimmer)" }}
+        >
+          COLLECTOR CHEMISTRY
+        </div>
 
-            <p className="text-xs text-[#666]">Also works with ENS. Try vitalik.eth</p>
+        <h1
+          className={`fade-item ${isVisible ? "visible" : ""}`}
+          style={{
+            transitionDelay: "100ms",
+            fontSize: "40px",
+            fontWeight: 300,
+            color: "var(--text)",
+            letterSpacing: "-0.03em",
+            lineHeight: 1.1,
+            marginBottom: "28px",
+            maxWidth: "460px",
+          }}
+        >
+          Collecting is
+          <br />
+          <span style={{ color: "var(--accent)" }}>a self-portrait.</span>
+        </h1>
+
+        <form
+          className={`fade-item ${isVisible ? "visible" : ""}`}
+          style={{ transitionDelay: "200ms" }}
+          onSubmit={handleSubmit}
+        >
+          <div style={{ position: "relative", maxWidth: "480px" }}>
+            <input
+              type="text"
+              placeholder="Paste a wallet or ENS name"
+              className="input"
+              value={walletInput}
+              onChange={(event) => setWalletInput(event.target.value)}
+              onKeyDown={handleKeyDown}
+              style={{ paddingRight: "130px" }}
+            />
+            <button
+              type="submit"
+              className="btn-accent"
+              disabled={!isValid}
+              style={{
+                position: "absolute",
+                right: "8px",
+                top: "50%",
+                transform: "translateY(-50%)",
+              }}
+            >
+              Read it →
+            </button>
           </div>
-        </section>
-      </div>
+        </form>
+
+        <p
+          className={`fade-item ${isVisible ? "visible" : ""}`}
+          style={{
+            transitionDelay: "300ms",
+            marginTop: "20px",
+            fontSize: "11px",
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
+            color: "var(--text-dimmer)",
+          }}
+        >
+          Read-only · No wallet connection
+        </p>
+      </section>
     </main>
   );
 }
