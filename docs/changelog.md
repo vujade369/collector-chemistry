@@ -7,6 +7,7 @@
 - Limited converter offer math to wallet-owned NFTs and ETH/WETH-denominated offers.
 - Updated converter search to prioritize usable canonical OpenSea collection results with floor data over null-floor lookalikes.
 - Updated converter UI copy to show detected offer value, target floor, estimated reach, offer coverage, and clearer error states.
+- Added converter debug output for checked candidates, found offers, and skip counts when using `debug=1`.
 
 ## 2026-05-01
 

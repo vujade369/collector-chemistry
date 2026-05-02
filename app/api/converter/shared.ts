@@ -31,6 +31,40 @@ export type WalletOfferEstimateResult = {
     ethAmount: number;
     ethAmountLabel?: string;
   }>;
+  debug?: {
+    candidateStrategy: string;
+    candidateCap: number;
+    candidateCount: number;
+    checkedNftCount: number;
+    candidatesChecked: Array<{
+      title?: string;
+      name?: string;
+      collectionName?: string;
+      collectionSlug?: string;
+      tokenId?: string;
+      contractAddress?: string;
+      hasImage?: boolean;
+      rankReason?: string;
+    }>;
+    offersFound: Array<{
+      title?: string;
+      name?: string;
+      collectionName?: string;
+      collectionSlug?: string;
+      tokenId?: string;
+      contractAddress?: string;
+      ethAmount: number;
+      ethAmountLabel?: string;
+      openseaUrl?: string;
+    }>;
+    skippedCounts?: {
+      missingSlug?: number;
+      missingTokenId?: number;
+      noOffer?: number;
+      unsupportedCurrency?: number;
+      lookupFailed?: number;
+    };
+  };
 };
 
 export type ConverterCollectionSearchResult = {
@@ -169,6 +203,12 @@ function pickTokenId(nft: any): string | null {
 type OfferCandidate = {
   slug: string;
   tokenId: string;
+  title?: string;
+  name?: string;
+  collectionName?: string;
+  contractAddress?: string;
+  hasImage?: boolean;
+  rankReason?: string;
 };
 
 function rankNftCandidate(nft: any): number {
@@ -176,8 +216,19 @@ function rankNftCandidate(nft: any): number {
   const hasToken = Boolean(pickTokenId(nft));
   const hasImage = Boolean(nft?.image?.cachedUrl || nft?.image?.thumbnailUrl || nft?.imageUrl);
   const hasName = Boolean(String(nft?.name || nft?.title || nft?.metadata?.name || "").trim());
+  const collectionName = String(nft?.displayCollectionName || nft?.contractMetadata?.name || nft?.contract?.name || "").trim();
+  const hasCollectionName = Boolean(collectionName && collectionName.toLowerCase() !== "unknown collection");
+  const hasContractAddress = Boolean(String(nft?.contract?.address || nft?.contractAddress || "").trim());
   const balance = Number(nft?.balance || 1);
-  return (hasSlug ? 30 : 0) + (hasToken ? 30 : 0) + (hasImage ? 15 : 0) + (hasName ? 10 : 0) + Math.min(balance, 10);
+  return (
+    (hasSlug ? 36 : 0) +
+    (hasToken ? 30 : 0) +
+    (hasCollectionName ? 12 : 0) +
+    (hasContractAddress ? 7 : 0) +
+    (hasImage ? 9 : 0) +
+    (hasName ? 9 : 0) +
+    Math.min(balance, 8)
+  );
 }
 
 async function buildOfferCandidates(wallet: string): Promise<OfferCandidate[]> {
@@ -203,13 +254,25 @@ async function buildOfferCandidates(wallet: string): Promise<OfferCandidate[]> {
     const key = `${slug}:${tokenId}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    candidates.push({ slug, tokenId });
+    const hasImage = Boolean(nft?.image?.cachedUrl || nft?.image?.thumbnailUrl || nft?.imageUrl);
+    const contractAddress = String(nft?.contract?.address || nft?.contractAddress || "").trim() || undefined;
+    const title = String(nft?.title || nft?.name || nft?.metadata?.name || "").trim() || undefined;
+    candidates.push({
+      slug,
+      tokenId,
+      title,
+      name: String(nft?.name || nft?.title || "").trim() || undefined,
+      collectionName: String(nft?.displayCollectionName || nft?.contractMetadata?.name || nft?.contract?.name || "").trim() || undefined,
+      contractAddress,
+      hasImage,
+      rankReason: `${nft?.displayCollectionSlug ? "slug+" : ""}${hasImage ? "image+" : ""}${title ? "title" : "token"}`,
+    });
   }
 
   return candidates;
 }
 
-async function fetchBestOfferEth(slug: string, tokenId: string): Promise<{ ethAmount: number; symbol: string } | null> {
+async function fetchBestOfferEth(slug: string, tokenId: string): Promise<{ ethAmount: number; symbol: string; skippedReason?: "unsupportedCurrency" | "lookupFailed" | "noOffer" } | null> {
   const cacheKey = `${slug}:${tokenId}`;
   if (offerCache.has(cacheKey)) return offerCache.get(cacheKey) ?? null;
 
@@ -220,14 +283,16 @@ async function fetchBestOfferEth(slug: string, tokenId: string): Promise<{ ethAm
     protocol_data?: { parameters?: { offer?: Array<{ startAmount?: string }> } };
   }>(`/offers/collection/${encodeURIComponent(slug)}/nfts/${encodeURIComponent(tokenId)}/best`, {});
 
+  if (!offer || Object.keys(offer).length === 0) return { ethAmount: 0, symbol: "", skippedReason: "lookupFailed" };
   const symbol = String(offer?.price_type?.symbol || offer?.payment_token?.symbol || "WETH").toUpperCase();
   if (symbol !== "ETH" && symbol !== "WETH") {
     offerCache.set(cacheKey, null);
-    return null;
+    return { ethAmount: 0, symbol, skippedReason: "unsupportedCurrency" };
   }
   const rawWei = String(offer?.price?.value || offer?.protocol_data?.parameters?.offer?.[0]?.startAmount || "").trim();
+  if (!rawWei) return { ethAmount: 0, symbol, skippedReason: "noOffer" };
   const eth = /^\d+$/.test(rawWei) ? weiToEth(rawWei) : 0;
-  const value = Number.isFinite(eth) && eth > 0 ? { ethAmount: eth, symbol } : null;
+  const value = Number.isFinite(eth) && eth > 0 ? { ethAmount: eth, symbol } : { ethAmount: 0, symbol, skippedReason: "noOffer" as const };
   offerCache.set(cacheKey, value);
   return value;
 }
@@ -263,6 +328,16 @@ export async function buildWalletOfferEstimate(wallet: string): Promise<WalletOf
     const offers = await Promise.all(checked.map(async (c) => ({ candidate: c, offer: await fetchBestOfferEth(c.slug, c.tokenId) })));
     const validOffers = offers.filter((v): v is { candidate: OfferCandidate; offer: { ethAmount: number; symbol: string } } => Boolean(v.offer?.ethAmount && v.offer.ethAmount > 0));
     const detectedOfferValueETH = validOffers.reduce((sum, value) => sum + value.offer.ethAmount, 0);
+    const skippedCounts = offers.reduce(
+      (acc, item) => {
+        if (!item.offer?.skippedReason) return acc;
+        if (item.offer.skippedReason === "unsupportedCurrency") acc.unsupportedCurrency += 1;
+        if (item.offer.skippedReason === "lookupFailed") acc.lookupFailed += 1;
+        if (item.offer.skippedReason === "noOffer") acc.noOffer += 1;
+        return acc;
+      },
+      { missingSlug: 0, missingTokenId: 0, noOffer: 0, unsupportedCurrency: 0, lookupFailed: 0 }
+    );
 
     const coverage = checked.length / OFFER_CANDIDATE_CAP;
     const estimateQuality: EstimateQuality = coverage >= 0.8 ? "high" : coverage >= 0.4 ? "medium" : "low";
@@ -276,12 +351,44 @@ export async function buildWalletOfferEstimate(wallet: string): Promise<WalletOf
       estimateQuality,
       error: validOffers.length ? null : "no_wallet_offers",
       offers: validOffers.map(({ candidate, offer }) => ({
+        title: candidate.title,
+        name: candidate.name,
+        collectionName: candidate.collectionName,
         tokenId: candidate.tokenId,
+        contractAddress: candidate.contractAddress,
         collectionSlug: candidate.slug,
-        openseaUrl: `https://opensea.io/collection/${candidate.slug}`,
+        openseaUrl: candidate.contractAddress ? `https://opensea.io/item/ethereum/${candidate.contractAddress}/${candidate.tokenId}` : undefined,
         ethAmount: offer.ethAmount,
         ethAmountLabel: `${offer.ethAmount.toFixed(3)} ${offer.symbol}`,
       })),
+      debug: {
+        candidateStrategy: "Rank wallet NFTs by resolvable slug, token id, and display quality, then cap checks.",
+        candidateCap: OFFER_CANDIDATE_CAP,
+        candidateCount: candidates.length,
+        checkedNftCount: checked.length,
+        candidatesChecked: checked.map((c) => ({
+          title: c.title,
+          name: c.name,
+          collectionName: c.collectionName,
+          collectionSlug: c.slug,
+          tokenId: c.tokenId,
+          contractAddress: c.contractAddress,
+          hasImage: c.hasImage,
+          rankReason: c.rankReason,
+        })),
+        offersFound: validOffers.map(({ candidate, offer }) => ({
+          title: candidate.title,
+          name: candidate.name,
+          collectionName: candidate.collectionName,
+          collectionSlug: candidate.slug,
+          tokenId: candidate.tokenId,
+          contractAddress: candidate.contractAddress,
+          ethAmount: offer.ethAmount,
+          ethAmountLabel: `${offer.ethAmount.toFixed(3)} ${offer.symbol}`,
+          openseaUrl: candidate.contractAddress ? `https://opensea.io/item/ethereum/${candidate.contractAddress}/${candidate.tokenId}` : undefined,
+        })),
+        skippedCounts,
+      },
     };
   } catch {
     return {
@@ -349,6 +456,28 @@ export async function searchOpenSeaCollections(query: string): Promise<Converter
     if (all.length >= 12) break;
   }
 
+  if (all.length < 8) {
+    const fallbackSlugs = Array.from(new Set([q, q.toLowerCase().replace(/\s+/g, "-"), q.toLowerCase().replace(/\s+/g, "")])).slice(0, 3);
+    for (const slug of fallbackSlugs) {
+      const collection = await fetchOpenSeaJson<{ name?: string; image_url?: string; imageUrl?: string; safelist_status?: string; is_verified?: boolean }>(
+        `/collections/${encodeURIComponent(slug)}`,
+        {}
+      );
+      const name = String(collection?.name || "").trim();
+      if (!name || seen.has(slug)) continue;
+      seen.add(slug);
+      all.push({
+        slug,
+        name,
+        imageUrl: collection?.image_url || collection?.imageUrl || undefined,
+        openseaUrl: `https://opensea.io/collection/${slug}`,
+        safelistStatus: collection?.safelist_status,
+        verified: typeof collection?.is_verified === "boolean" ? collection.is_verified : undefined,
+        matchConfidence: computeMatchConfidence(q, name, slug),
+      });
+    }
+  }
+
   const ranked = all
     .map((item) => {
       const safelist = (item.safelistStatus || "").toLowerCase();
@@ -368,11 +497,25 @@ export async function searchOpenSeaCollections(query: string): Promise<Converter
     })
   );
 
+  const queryNorm = normalizeText(q);
+  const betterNamed = floors.some((item) => normalizeText(item.name) !== queryNorm && !/^0x[a-f0-9]{8,}$/i.test(item.name));
+
   return floors
+    .filter((item) => {
+      const isAddressLikeSlug = /^0x[a-f0-9]{8,}$/i.test(item.slug);
+      const isAddressLikeName = /^0x[a-f0-9]{8,}$/i.test(item.name.trim());
+      const hasFloor = Boolean(item.floorPriceETH && item.floorPriceETH > 0);
+      if (isAddressLikeName && betterNamed && !hasFloor) return false;
+      if (!isAddressLikeSlug) return true;
+      return hasFloor || item.matchConfidence === "high";
+    })
     .sort((a, b) => {
       const aFloor = a.floorPriceETH && a.floorPriceETH > 0 ? 1 : 0;
       const bFloor = b.floorPriceETH && b.floorPriceETH > 0 ? 1 : 0;
       if (bFloor !== aFloor) return bFloor - aFloor;
+      const aAddressName = /^0x[a-f0-9]{8,}$/i.test(a.name.trim()) ? 1 : 0;
+      const bAddressName = /^0x[a-f0-9]{8,}$/i.test(b.name.trim()) ? 1 : 0;
+      if (aAddressName !== bAddressName) return aAddressName - bAddressName;
       const aImg = a.imageUrl ? 1 : 0;
       const bImg = b.imageUrl ? 1 : 0;
       if (bImg !== aImg) return bImg - aImg;

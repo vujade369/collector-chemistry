@@ -11,6 +11,16 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const wallet = String(searchParams.get("wallet") || "").trim();
   const slug = String(searchParams.get("slug") || "").trim().toLowerCase();
+  const includeDebug = searchParams.get("debug") === "1";
+
+  const debugPayload = (debug: any) =>
+    includeDebug && debug
+      ? {
+          ...debug,
+          candidatesChecked: Array.isArray(debug.candidatesChecked) ? debug.candidatesChecked.slice(0, 20) : [],
+          offersFound: Array.isArray(debug.offersFound) ? debug.offersFound.slice(0, 20) : [],
+        }
+      : undefined;
 
   if (!wallet || (!isEthAddress(wallet) && !isEns(wallet)) || !slug) {
     return NextResponse.json({
@@ -36,6 +46,7 @@ export async function GET(req: Request) {
       checkedNftCount: 0,
       candidateCount: 0,
       error: "missing_opensea",
+      debug: debugPayload(estimate.debug),
     });
   }
 
@@ -50,6 +61,7 @@ export async function GET(req: Request) {
         checkedNftCount: estimate.checkedNftCount,
         candidateCount: estimate.candidateCount,
         error: "no_wallet_offers",
+        debug: debugPayload(estimate.debug),
       });
     }
     return NextResponse.json({
@@ -61,6 +73,7 @@ export async function GET(req: Request) {
       checkedNftCount: 0,
       candidateCount: 0,
       error: "estimate_failed",
+      debug: debugPayload(estimate.debug),
     });
   }
 
@@ -80,6 +93,7 @@ export async function GET(req: Request) {
       checkedNftCount: estimate.checkedNftCount,
       candidateCount: estimate.candidateCount,
       error: "no_floor",
+      debug: debugPayload(estimate.debug),
     });
   }
 
@@ -99,6 +113,7 @@ export async function GET(req: Request) {
       checkedNftCount: estimate.checkedNftCount,
       candidateCount: estimate.candidateCount,
       error: "no_wallet_offers",
+      debug: debugPayload(estimate.debug),
     });
   }
 
@@ -121,5 +136,6 @@ export async function GET(req: Request) {
     checkedNftCount: estimate.checkedNftCount,
     candidateCount: estimate.candidateCount,
     error,
+    debug: debugPayload(estimate.debug),
   });
 }
