@@ -99,6 +99,7 @@ This should eventually replace flatter shared-collection list layouts.
 ## Known Issues
 
 - `app/api/compare/route.ts` is too large.
+- Archetype and collector-level logic is still split, but partially resolved: compare-route archetype labels are aligned to the five-archetype spec and ready for interpretation context wiring; full consolidation into `lib/walletProfile.ts` remains pending.
 - `app/compare/page.tsx` is too large.
 - `app/profile/page.tsx` is at risk of becoming too large if new UI is added directly.
 - Repeated logic exists across API routes and page files.

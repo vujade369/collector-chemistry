@@ -1961,20 +1961,23 @@ function computeArchetype(
   const top = getTopTasteEntries(taste, 2);
   const primary = top[0]?.[0] || "Other";
   const primaryPct = top[0]?.[1] || 0;
-  const secondaryPct = top[1]?.[1] || 0;
 
-  if (diversity >= 6 && totalNFTs >= 80) return "Broad Explorer";
-  if (primary === "Meme" && primaryPct >= 18) return "Meme Native";
-  if (primary === "Fine Art") return "Art-Led Collector";
-  if (primary === "Generative Art") return "Generative Lean";
-  if (primary === "PFP") return "Identity Builder";
-  if (primary === "Utility") return "Utility Strategist";
-  if (primary === "Photography") return "Image Archivist";
-  if (primary === "Music") return "Sound Collector";
-  if (primaryPct >= 38) return "Focused Curator";
-  if (Math.abs(primaryPct - secondaryPct) <= 6) return "Cross-Current Collector";
+  const worldFormats = ["Gaming", "Music", "3D / Animation", "Photography"];
+  const worldFormatCount = worldFormats.filter((f) => (taste[f] || 0) > 0).length;
+  if (diversity >= 5 && worldFormatCount >= 2) return "World Citizen";
 
-  return "Taste Builder";
+  if (
+    (primary === "Fine Art" || primary === "Generative Art") &&
+    primaryPct >= 30
+  ) return "Artist Follower";
+
+  if (primary === "Fine Art" || primary === "Generative Art") return "Curator";
+
+  if (primary === "PFP" || primary === "Meme") return "Scene Player";
+
+  if (diversity >= 4 && totalNFTs >= 20) return "Explorer";
+
+  return "Explorer";
 }
 
 function computeLevel(totalNFTs: number, diversity: number) {

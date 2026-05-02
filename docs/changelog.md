@@ -1,6 +1,8 @@
 # Changelog
 
 ## 2026-05-02
+- Aligned `computeArchetype()` in compare route to the five-archetype product spec (Artist Follower, Explorer, Scene Player, Curator, World Citizen) using display-label taste keys.
+- Confirmed compare route currently has no `/api/interpret` fetch call, documenting the remaining archetype-pass-through wiring gap for a follow-up.
 - Added `docs/OPENSEA_INTEGRATION.md` with OpenSea llms.txt, OpenAPI, local skill/script workflow boundaries, runtime rules, and endpoint guidance.
 - Updated profile API and UI flow so Highest Current Offer is selected from real OpenSea best-offer checks across capped wallet-owned NFT candidates.
 - Updated Latest Arrival signal to prioritize reliable wallet-entry timestamps, then mint timestamps, then recent metadata signal fallback.
@@ -31,4 +33,3 @@
 - Styled the “If you sold it all…” module so it no longer appears as raw/default HTML.
 - Styled the “If you sold it all...” module so it no longer appears as raw/default HTML.
 - Updated primary Key Signals to show origin, highest current offer, and latest arrival while preserving signalPiece and anchorCollection as supporting profile data.
-
