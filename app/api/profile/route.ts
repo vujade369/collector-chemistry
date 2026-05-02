@@ -1060,7 +1060,7 @@ function getArtistCandidate(nft: WalletProfileNFT): { name: string; sourceLabel:
         (attribute as { value?: unknown; name?: unknown }).name
     );
 
-    if (name) return name;
+    if (name) return { name, sourceLabel: "Artist attribute" };
   }
 }
 

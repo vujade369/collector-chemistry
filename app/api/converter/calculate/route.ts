@@ -26,7 +26,6 @@ export async function GET(req: Request) {
     });
   }
 
-  const estimate = await buildWalletOfferEstimate(wallet);
   const estimate = await buildWalletOfferEstimate(wallet, includeDebug);
   if (estimate.error === "missing_opensea") {
     return NextResponse.json({

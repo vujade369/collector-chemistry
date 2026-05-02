@@ -60,7 +60,7 @@ type NFT = {
   displayCollectionSlug?: string;
   displayArtist?: string;
   displayImage?: string;
-  acquiredAt?: string | null;
+  acquiredAt?: string | null | { blockTimestamp?: string | null; blockNumber?: string | null };
   acquiredDateA?: string | null;
   acquiredDateB?: string | null;
 };
