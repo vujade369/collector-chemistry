@@ -1055,16 +1055,28 @@ function getArtistCandidate(nft: WalletProfileNFT): { name: string; sourceLabel:
   const attributeSets = [nft.metadata?.attributes, nft.raw?.metadata?.attributes].filter(Boolean);
   const keys = new Set(["artist", "creator", "created by", "seize artist profile"]);
 
-  for (const attributes of attributeSets) {
-    for (const attribute of attributes || []) {
-      const traitType = normalizeArtistValue((attribute as { trait_type?: string; key?: string }).trait_type || (attribute as { key?: string }).key).toLowerCase();
-      if (!keys.has(traitType)) continue;
-      const name = normalizeArtistValue((attribute as { value?: unknown }).value);
-      if (!name) continue;
-      const externalUrl = traitType === "seize artist profile" ? String((attribute as { value?: string }).value || "").trim() : undefined;
-      return { name, sourceLabel: "Metadata artist", externalUrl };
-    }
+ for (const attributes of attributeSets) {
+  if (!Array.isArray(attributes)) continue;
+
+  for (const attribute of attributes) {
+    if (!attribute || typeof attribute !== "object") continue;
+
+    const traitType = normalizeArtistValue(
+      (attribute as { trait_type?: unknown; traitType?: unknown; type?: unknown }).trait_type ??
+        (attribute as { trait_type?: unknown; traitType?: unknown; type?: unknown }).traitType ??
+        (attribute as { trait_type?: unknown; traitType?: unknown; type?: unknown }).type
+    );
+
+    if (!keys.has(traitType)) continue;
+
+    const name = normalizeArtistValue(
+      (attribute as { value?: unknown; name?: unknown }).value ??
+        (attribute as { value?: unknown; name?: unknown }).name
+    );
+
+    if (name) return name;
   }
+}
 
   const creatorName = normalizeArtistValue((nft as WalletProfileNFT & { creator?: { username?: string; address?: string } }).creator?.username);
   if (creatorName) return { name: creatorName, sourceLabel: "Creator profile" };
