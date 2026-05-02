@@ -128,26 +128,104 @@ export async function fetchWalletNFTs<T extends WalletOwnerNFT = WalletOwnerNFT>
     }
 
     const data = await res.json();
-    const pageNfts = ((data.ownedNfts || []) as T[]).filter(
-      (nft) => nft?.spamInfo?.isSpam !== "true"
-    );
+    const pageNfts = (data.ownedNfts || []) as T[];
 
     allNfts.push(...pageNfts);
     pageKey = data.pageKey;
   } while (pageKey);
 
-  const visibleKeys = await fetchOpenSeaVisibleTokenKeys(owner);
+  const resolvedAddress = await resolveEnsToAddress(owner);
+  const visibleKeys = await fetchOpenSeaVisibleTokenKeys(resolvedAddress);
   if (!visibleKeys) return allNfts;
 
   return allNfts.filter((nft) => {
     const key = getNftKey(nft);
-    return key ? visibleKeys.has(key) : true;
+    if (!key) return true;
+    return visibleKeys.has(key);
   });
+}
+
+function normalizeTokenIdForMerge(value: string) {
+  return normalizeTokenId(value);
+}
+
+function getMergeKey(nft: WalletOwnerNFT) {
+  const contract = getContractAddress(nft.contract);
+  const rawTokenId = String(nft.tokenId ?? nft.token_id ?? nft.identifier ?? "");
+  const tokenId = normalizeTokenIdForMerge(rawTokenId);
+  if (!contract || !tokenId) return "";
+  return `${contract}:${tokenId}`;
+}
+
+export async function fetchAndMergeWalletNFTs<T extends WalletOwnerNFT = WalletOwnerNFT>(
+  wallets: string[],
+  alchemyApiKey?: string
+): Promise<{ mergedNFTs: Array<T & { sourceWallet?: string }>; deduplicatedCount: number; failedWallets: string[] }> {
+  const uniqueWallets = Array.from(new Set(wallets.map((w) => w.trim()).filter(Boolean)));
+  const results = await Promise.allSettled(
+    uniqueWallets.map(async (wallet) => ({
+      wallet,
+      nfts: await fetchWalletNFTs<T>(wallet, alchemyApiKey),
+    }))
+  );
+
+  const mergedNFTs: Array<T & { sourceWallet?: string }> = [];
+  const failedWallets: string[] = [];
+  const seen = new Set<string>();
+  let deduplicatedCount = 0;
+
+  for (const result of results) {
+    if (result.status !== "fulfilled") {
+      continue;
+    }
+    const { wallet, nfts } = result.value;
+    for (const nft of nfts) {
+      const key = getMergeKey(nft);
+      if (key && seen.has(key)) {
+        deduplicatedCount += 1;
+        continue;
+      }
+      if (key) seen.add(key);
+      mergedNFTs.push({ ...(nft as T), sourceWallet: wallet });
+    }
+  }
+
+  results.forEach((result, idx) => {
+    if (result.status === "rejected") failedWallets.push(uniqueWallets[idx]);
+  });
+
+  return { mergedNFTs, deduplicatedCount, failedWallets };
 }
 
 const OPENSEA_API_KEY = process.env.OPENSEA_API_KEY;
 const OPENSEA_BASE_URL = "https://api.opensea.io/api/v2";
 const OPENSEA_MAX_PAGES = 40;
+
+const OPENSEA_API_KEY_LOCAL = process.env.OPENSEA_API_KEY;
+const OPENSEA_BASE_URL_LOCAL = "https://api.opensea.io/api/v2";
+
+async function resolveEnsToAddress(ensOrAddress: string): Promise<string> {
+  if (isEthAddress(ensOrAddress)) return ensOrAddress;
+  if (!OPENSEA_API_KEY_LOCAL) return ensOrAddress;
+  try {
+    const res = await fetch(
+      `${OPENSEA_BASE_URL_LOCAL}/accounts/resolve/${encodeURIComponent(ensOrAddress)}`,
+      {
+        cache: "no-store",
+        headers: {
+          accept: "application/json",
+          "x-api-key": OPENSEA_API_KEY_LOCAL,
+        },
+      }
+    );
+    if (!res.ok) return ensOrAddress;
+    const data = await res.json();
+    const resolved = String(data?.address || "").trim();
+    return isEthAddress(resolved) ? resolved : ensOrAddress;
+  } catch {
+    return ensOrAddress;
+  }
+}
 
 type OpenSeaAccountNFT = {
   identifier?: string | number;

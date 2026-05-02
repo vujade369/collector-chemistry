@@ -1,26 +1,42 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
-function isValidInput(value: string): boolean {
-  const trimmed = value.trim()
-  if (/^0x[0-9a-fA-F]{40}$/.test(trimmed)) return true
-  if (trimmed.length > 2 && trimmed.includes('.') && !/\s/.test(trimmed)) return true
-  return false
+function isLikelyValidInput(value: string) {
+  const trimmed = value.trim();
+  const isEthAddress = /^0x[a-fA-F0-9]{40}$/.test(trimmed);
+  const isEns = /^[a-zA-Z0-9-]+\.eth$/.test(trimmed);
+  return isEthAddress || isEns;
 }
 
-export default function Home() {
-  const router = useRouter()
-  const [a, setA] = useState('')
-  const [b, setB] = useState('')
-  const canCompare = isValidInput(a) && isValidInput(b)
+export default function HomePage() {
+  const router = useRouter();
+  const [walletInput, setWalletInput] = useState("");
+  const [isVisible, setIsVisible] = useState(false);
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!canCompare) return
-    router.push(`/compare?a=${encodeURIComponent(a.trim())}&b=${encodeURIComponent(b.trim())}`)
-  }
+  useEffect(() => {
+    setIsVisible(true);
+  }, []);
+
+  const trimmedInput = useMemo(() => walletInput.trim(), [walletInput]);
+  const isValid = useMemo(() => isLikelyValidInput(trimmedInput), [trimmedInput]);
+
+  const submitWallet = () => {
+    if (!isValid) return;
+    router.push(`/profile?wallet=${encodeURIComponent(trimmedInput)}`);
+  };
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    submitWallet();
+  };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    submitWallet();
+  };
 
   return (
     <main
@@ -33,22 +49,110 @@ export default function Home() {
             <p className="mb-4 text-xs uppercase tracking-[0.24em] text-stone-500">Read-only cultural overlap</p>
             <h1 className="max-w-2xl text-4xl font-semibold tracking-tight text-stone-950 sm:text-5xl">Collector Chemistry</h1>
             <p className="mt-5 max-w-xl text-base leading-7 text-stone-600 sm:text-lg">Compare 2 collectors and see where their taste overlaps.</p>
+      className="cc-page"
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "48px 24px 40px",
+      }}
+    >
+      <style>{`
+        .fade-item {
+          opacity: 0;
+          transform: translateY(10px);
+          transition: opacity 0.6s ease, transform 0.6s ease;
+        }
+
+        .fade-item.visible {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      `}</style>
+
+      <section
+        style={{
+          width: "100%",
+          maxWidth: "520px",
+          background: "var(--bg)",
+          display: "flex",
+          flexDirection: "column",
+          minHeight: "320px",
+          borderRadius: "16px",
+          padding: "48px 36px 40px",
+        }}
+      >
+        <div
+          className={`fade-item eyebrow ${isVisible ? "visible" : ""}`}
+          style={{ transitionDelay: "0ms", marginBottom: "24px", color: "var(--text-dimmer)" }}
+        >
+          COLLECTOR CHEMISTRY
+        </div>
+
+        <h1
+          className={`fade-item ${isVisible ? "visible" : ""}`}
+          style={{
+            transitionDelay: "100ms",
+            fontSize: "40px",
+            fontWeight: 300,
+            color: "var(--text)",
+            letterSpacing: "-0.03em",
+            lineHeight: 1.1,
+            marginBottom: "28px",
+            maxWidth: "460px",
+          }}
+        >
+          Collecting is
+          <br />
+          <span style={{ color: "var(--accent)" }}>a self-portrait.</span>
+        </h1>
+
+        <form
+          className={`fade-item ${isVisible ? "visible" : ""}`}
+          style={{ transitionDelay: "200ms" }}
+          onSubmit={handleSubmit}
+        >
+          <div style={{ position: "relative", maxWidth: "480px" }}>
+            <input
+              type="text"
+              placeholder="Paste a wallet or ENS name"
+              className="input"
+              value={walletInput}
+              onChange={(event) => setWalletInput(event.target.value)}
+              onKeyDown={handleKeyDown}
+              style={{ paddingRight: "130px" }}
+            />
+            <button
+              type="submit"
+              className="btn-accent"
+              disabled={!isValid}
+              style={{
+                position: "absolute",
+                right: "8px",
+                top: "50%",
+                transform: "translateY(-50%)",
+              }}
+            >
+              Read it →
+            </button>
           </div>
-          <form className="space-y-5" onSubmit={handleSubmit}>
-            <div className="space-y-2">
-              <label htmlFor="collector-a" className="block text-sm font-medium text-stone-700">Collector 1</label>
-              <input id="collector-a" type="text" placeholder="Wallet address or ENS" value={a} onChange={(e) => setA(e.target.value)} className="block w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-stone-500" />
-            </div>
-            <div className="space-y-2">
-              <label htmlFor="collector-b" className="block text-sm font-medium text-stone-700">Collector 2</label>
-              <input id="collector-b" type="text" placeholder="Wallet address or ENS" value={b} onChange={(e) => setB(e.target.value)} className="block w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-stone-500" />
-            </div>
-            <div className="pt-3">
-              <button type="submit" disabled={!canCompare} className="inline-flex items-center justify-center rounded-full bg-stone-900 px-5 py-3 text-sm font-medium text-stone-50 transition hover:bg-stone-800 disabled:opacity-40">Compare</button>
-            </div>
-          </form>
-        </section>
-      </div>
+        </form>
+
+        <p
+          className={`fade-item ${isVisible ? "visible" : ""}`}
+          style={{
+            transitionDelay: "300ms",
+            marginTop: "20px",
+            fontSize: "11px",
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
+            color: "var(--text-dimmer)",
+          }}
+        >
+          Read-only · No wallet connection
+        </p>
+      </section>
     </main>
-  )
+  );
 }

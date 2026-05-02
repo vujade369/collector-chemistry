@@ -41,11 +41,11 @@ The goal is recognition.
 
 A good output should make someone feel:
 
-“This is true.”
+"This is true."
 
 or
 
-“I didn’t realize that about myself, but yeah.”
+"I didn't realize that about myself, but yeah."
 
 If the output reads like a report, it has failed.
 
@@ -65,9 +65,8 @@ they should not shape:
 - shared overlap
 - interpretation inputs
 
-Hidden NFTs may exist on-chain, but they should not define the public collector profile.
-
-The product should illuminate, not expose.
+Hidden NFTs may exist on-chain, but they should not define the public
+collector profile. The product should illuminate, not expose.
 
 ---
 
@@ -197,12 +196,13 @@ Potential reads:
 
 Important:
 
-If “other” is high, be honest.
+If "other" is high, be honest.
 
 A large unknown category percentage does not mean failure.
 It may mean the collector moves outside obvious classification.
-
-Do not pretend the system understands more than it does.
+As wallets grow and contain thousands of NFTs from all sorts of collections,
+the "other" bucket will expand. Sparse metadata from early NFT projects is
+common and expected. Do not pretend the system understands more than it does.
 
 ---
 
@@ -217,6 +217,8 @@ Measures, when available:
 - acquisition clustering
 - steady vs burst activity
 - earliest entry into a collection or artist
+- monthly acquisition counts (year over year)
+- busiest collecting periods
 
 Reveals:
 
@@ -224,6 +226,8 @@ Reveals:
 - recurring attention
 - bursts of intensity
 - long-term presence
+- seasonal patterns or cyclical behavior
+- whether activity has grown, slowed, or shifted
 
 Potential reads:
 
@@ -232,8 +236,14 @@ Potential reads:
 - builds steadily
 - returned after time away
 - entered this world before it became obvious
+- most active in certain seasons or years
+- showing up again after a quiet stretch
 
 Dates should be treated as moments of recognition, not financial timing.
+
+The Activity Timeline feature (Phase 2.5) expands this signal into a full
+monthly breakdown that a collector can explore directly. The monthly data
+feeds both the interpretive layer and the visual timeline surface.
 
 ---
 
@@ -268,7 +278,8 @@ Do not manufacture insight from noise.
 
 ## Derived insight types
 
-The Insight Engine should produce short interpretive fields that the UI and interpretation layer can use.
+The Insight Engine should produce short interpretive fields that the UI
+and interpretation layer can use.
 
 It should not produce long essays.
 
@@ -325,7 +336,7 @@ Avoid vague phrasing like:
 - distinct category lanes
 - diverse interests
 
-If using “signal,” clarify what kind:
+If using "signal," clarify what kind:
 
 - visual signal
 - cultural signal
@@ -382,6 +393,7 @@ Good examples:
 - Crowd is the largest anchor, but no single collection dominates the wallet.
 - Your wallet spreads widely, yet keeps returning to art, memes, and character-driven worlds.
 - The collection is broad, but the repetition suggests a stronger filter than the surface shows.
+- Your busiest stretch was spring 2022. You have been more deliberate since.
 
 Weak examples:
 
@@ -404,11 +416,15 @@ It should follow this structure:
 
 Example:
 
-“You move broadly across collections and formats. From the outside, that can look scattered. But the wallet keeps forming small repeat pockets, which suggests a stronger filter than the collection count implies. You are not collecting one category as much as following the same kind of cultural signal across different contexts.”
+"You move broadly across collections and formats. From the outside, that
+can look scattered. But the wallet keeps forming small repeat pockets,
+which suggests a stronger filter than the collection count implies. You
+are not collecting one category as much as following the same kind of
+cultural signal across different contexts."
 
 Rules:
 
-- 2–4 sentences
+- 2 to 4 sentences
 - behavior language, not inventory language
 - no dashboard phrasing
 - no internal system language
@@ -443,6 +459,7 @@ Good examples:
 - Keeps the collection open without losing shape
 - Follows cultural energy more than format
 - Builds through bursts, not steady accumulation
+- Most active in certain seasons, quieter in between
 
 Weak examples:
 
@@ -481,64 +498,56 @@ Avoid these patterns in all profile output.
 ### 1. Dashboard language
 
 Bad:
-
-- “This wallet has a diverse allocation.”
-- “Your holdings indicate exposure to…”
-- “The dominant category is…”
+- "This wallet has a diverse allocation."
+- "Your holdings indicate exposure to..."
+- "The dominant category is..."
 
 Better:
-
-- “Your attention moves across…”
-- “You keep returning to…”
-- “The wallet stays open without losing shape.”
+- "Your attention moves across..."
+- "You keep returning to..."
+- "The wallet stays open without losing shape."
 
 ---
 
 ### 2. System leakage
 
 Bad:
-
-- “4 distinct category lanes”
-- “category coexistence count”
-- “dominant category”
-- “signal state”
+- "4 distinct category lanes"
+- "category coexistence count"
+- "dominant category"
+- "signal state"
 
 Better:
-
-- “several different collecting modes”
-- “very different kinds of work”
-- “formats that usually stay separate”
+- "several different collecting modes"
+- "very different kinds of work"
+- "formats that usually stay separate"
 
 ---
 
 ### 3. Vague poetic language
 
 Bad:
-
-- “a recognizable feeling”
-- “a certain kind of signal”
-- “a unique vibe”
-- “interesting energy”
+- "a recognizable feeling"
+- "a certain kind of signal"
+- "a unique vibe"
+- "interesting energy"
 
 Better:
-
-- “a visual and cultural signal”
-- “internet-native humor and art-driven experimentation”
-- “character-based worlds and generative systems”
-- “community-driven work with a strong visual identity”
+- "a visual and cultural signal"
+- "internet-native humor and art-driven experimentation"
+- "character-based worlds and generative systems"
+- "community-driven work with a strong visual identity"
 
 ---
 
 ### 4. Forced contradiction
 
 Bad:
-
 - inventing tension for a wallet that is clearly focused
-- making every wallet “broad but deep”
-- always using “It looks scattered, but…”
+- making every wallet "broad but deep"
+- always using "It looks scattered, but..."
 
 Better:
-
 - use contradiction only when supported
 - use clarity when the wallet is clearly focused
 - use absence when boundaries are more interesting than tension
@@ -548,16 +557,14 @@ Better:
 ### 5. Overclaiming
 
 Bad:
-
-- “You are this kind of person.”
-- “This proves…”
-- “You clearly care about…”
+- "You are this kind of person."
+- "This proves..."
+- "You clearly care about..."
 
 Better:
-
-- “You tend to…”
-- “The pattern suggests…”
-- “Your wallet reads like…”
+- "You tend to..."
+- "The pattern suggests..."
+- "Your wallet reads like..."
 
 ---
 
@@ -584,6 +591,9 @@ If not, it fails.
 - Profile layer expresses individual identity.
 - Compare layer shows where two profiles rhyme.
 - Interpretation layer turns overlap into a relational read.
+- Delight layer (Phase 2.5) surfaces playful exploratory features
+  rooted in the same signal data: Activity Timeline, Wallet Converter,
+  Collection Recommendations.
 
 The Insight Engine should create structured, reusable insight fields.
 It should not become a long-form writing engine.
@@ -602,3 +612,19 @@ Keep it lean.
 - no claims beyond the data
 
 Depth comes from better interpretation, not more features.
+
+---
+
+## Note on sparse metadata
+
+As wallets grow over time and collectors accumulate NFTs from games,
+apps, community drops, and experimental projects, many items will have
+little or no metadata. Early NFT projects in particular often shipped
+without consistent trait or category data.
+
+The Insight Engine should degrade gracefully. When category signals are
+weak or the "other" bucket is large, lean on Breadth, Return, and Time
+Shape instead. Those signals are more resilient to metadata gaps.
+
+Do not invent category reads from thin data. Honest uncertainty is
+better than false precision.
