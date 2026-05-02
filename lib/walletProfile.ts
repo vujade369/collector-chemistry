@@ -43,6 +43,7 @@ export type WalletProfileNFT = {
   };
   title?: string;
   name?: string;
+  tokenId?: string | number;
   image?: {
     cachedUrl?: string;
     thumbnailUrl?: string;
@@ -64,6 +65,11 @@ export type TopCollection = {
   name: string;
   count: number;
   percentage: number;
+  category?: string;
+  imageUrl?: string;
+  collectionSlug?: string;
+  contractAddress?: string;
+  openseaUrl?: string;
 };
 
 export type CategoryDistribution = Array<{
@@ -97,9 +103,32 @@ export type WalletProfile = {
   coreInsight: string;
   tensionInsight: string;
   whatStandsOut: string;
-  anchorCollection: { name: string; count: number; imageUrl?: string } | null;
-  signalPiece?: { tokenId?: string; collectionName: string; imageUrl?: string } | null;
-  firstMint?: { tokenId?: string; collectionName: string; imageUrl?: string; timestamp: string } | null;
+  anchorCollection:
+    | { name: string; count: number; category?: string; imageUrl?: string; collectionSlug?: string; contractAddress?: string; openseaUrl?: string }
+    | null;
+  signalPiece?:
+    | {
+        tokenId?: string;
+        title?: string;
+        collectionName: string;
+        collectionSlug?: string;
+        contractAddress?: string;
+        openseaUrl?: string;
+        imageUrl?: string;
+      }
+    | null;
+  firstMint?:
+    | {
+        tokenId?: string;
+        title?: string;
+        collectionName: string;
+        collectionSlug?: string;
+        contractAddress?: string;
+        openseaUrl?: string;
+        imageUrl?: string;
+        timestamp: string;
+      }
+    | null;
   acquisitionBreakdown?: { mintCount: number; acquiredCount: number; totalSampled: number; mintPercent: number; acquiredPercent: number } | null;
   behavioralReads: string[];
   absenceSignal: string;
@@ -786,6 +815,36 @@ function extractNFTImageUrl(nft: WalletProfileNFT): string {
   );
 }
 
+function normalizeEntityKey(value?: string) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^\w\s:/-]/g, " ")
+    .replace(/\s+/g, " ");
+}
+
+function getCollectionSlug(nft: WalletProfileNFT) {
+  return String(nft.displayCollectionSlug || "").trim().toLowerCase();
+}
+
+function getContractAddress(nft: WalletProfileNFT) {
+  return String(nft.contract?.address || "").trim().toLowerCase();
+}
+
+function getCollectionKeys(nft: WalletProfileNFT) {
+  const keys = [
+    getCollectionSlug(nft),
+    getContractAddress(nft),
+    normalizeEntityKey(resolveCollectionName(nft)),
+  ].filter(Boolean);
+  return [...new Set(keys)];
+}
+
+function buildOpenSeaNftUrl(contractAddress?: string, tokenId?: string) {
+  if (!contractAddress || !tokenId) return undefined;
+  return `https://opensea.io/assets/ethereum/${contractAddress}/${tokenId}`;
+}
+
 function extractNFTTimestamp(nft: WalletProfileNFT): string {
   const candidates = [
     nft.mint?.timestamp,
@@ -871,13 +930,36 @@ export function buildWalletProfile(nfts: WalletProfileNFT[]): WalletProfile {
   const topCollectionsSource =
     namedCollections.length > 0 ? namedCollections : collections;
 
+  const collectionBuckets = new Map<string, WalletProfileNFT[]>();
+  for (const nft of nfts) {
+    const keys = getCollectionKeys(nft);
+    if (!keys.length) continue;
+    for (const key of keys) {
+      const bucket = collectionBuckets.get(key) || [];
+      bucket.push(nft);
+      collectionBuckets.set(key, bucket);
+    }
+  }
+
   const topCollections: TopCollection[] = topCollectionsSource
     .slice(0, 3)
-    .map((item) => ({
-      name: item.name,
-      count: item.count,
-      percentage: totalNFTs ? Math.round((item.count / totalNFTs) * 100) : 0,
-    }));
+    .map((item) => {
+      const key = normalizeEntityKey(item.name);
+      const matches = collectionBuckets.get(key) || [];
+      const representative = matches.find((nft) => extractNFTImageUrl(nft)) || matches[0];
+      const collectionSlug = representative ? getCollectionSlug(representative) || undefined : undefined;
+      const contractAddress = representative ? getContractAddress(representative) || undefined : undefined;
+      return {
+        name: item.name,
+        count: item.count,
+        percentage: totalNFTs ? Math.round((item.count / totalNFTs) * 100) : 0,
+        category: representative?.displayCollectionCategory || undefined,
+        imageUrl: representative ? extractNFTImageUrl(representative) || undefined : undefined,
+        collectionSlug,
+        contractAddress,
+        openseaUrl: collectionSlug ? `https://opensea.io/collection/${collectionSlug}` : undefined,
+      };
+    });
 
   const repeatCollections = collections.filter((collection) => collection.count >= 3);
   const repeatRatio = repeatCollections.length / Math.max(totalCollections, 1);
@@ -957,11 +1039,17 @@ export function buildWalletProfile(nfts: WalletProfileNFT[]): WalletProfile {
   const anchorCollectionImageUrl = anchorCollectionNFT
     ? extractNFTImageUrl(anchorCollectionNFT)
     : "";
+  const anchorCollectionSlug = anchorCollectionNFT ? getCollectionSlug(anchorCollectionNFT) || undefined : undefined;
+  const anchorCollectionContract = anchorCollectionNFT ? getContractAddress(anchorCollectionNFT) || undefined : undefined;
   const anchorCollection = anchorCandidate
     ? {
         name: anchorCandidate.name,
         count: anchorCandidate.count,
+        category: anchorCollectionNFT?.displayCollectionCategory || undefined,
         imageUrl: anchorCollectionImageUrl || undefined,
+        collectionSlug: anchorCollectionSlug,
+        contractAddress: anchorCollectionContract,
+        openseaUrl: anchorCollectionSlug ? `https://opensea.io/collection/${anchorCollectionSlug}` : undefined,
       }
     : null;
 
@@ -969,7 +1057,11 @@ export function buildWalletProfile(nfts: WalletProfileNFT[]): WalletProfile {
     anchorCandidate && anchorCollectionImageUrl
       ? {
           tokenId: anchorCollectionNFT?.name,
+          title: anchorCollectionNFT?.title || anchorCollectionNFT?.metadata?.name || anchorCollectionNFT?.name,
           collectionName: anchorCandidate.name,
+          collectionSlug: anchorCollectionSlug,
+          contractAddress: anchorCollectionContract,
+          openseaUrl: buildOpenSeaNftUrl(anchorCollectionContract, String(anchorCollectionNFT?.tokenId || "")),
           imageUrl: anchorCollectionImageUrl,
         }
       : null;
@@ -984,7 +1076,17 @@ export function buildWalletProfile(nfts: WalletProfileNFT[]): WalletProfile {
   const firstMint = firstMintCandidates[0]
     ? {
         tokenId: firstMintCandidates[0].nft.name,
+        title:
+          firstMintCandidates[0].nft.title ||
+          firstMintCandidates[0].nft.metadata?.name ||
+          firstMintCandidates[0].nft.name,
         collectionName: resolveCollectionName(firstMintCandidates[0].nft),
+        collectionSlug: getCollectionSlug(firstMintCandidates[0].nft) || undefined,
+        contractAddress: getContractAddress(firstMintCandidates[0].nft) || undefined,
+        openseaUrl: buildOpenSeaNftUrl(
+          getContractAddress(firstMintCandidates[0].nft) || undefined,
+          String(firstMintCandidates[0].nft.tokenId || "")
+        ),
         imageUrl: extractNFTImageUrl(firstMintCandidates[0].nft) || undefined,
         timestamp: firstMintCandidates[0].timestamp,
       }

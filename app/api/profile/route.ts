@@ -127,13 +127,15 @@ async function fetchOpenSeaJson<T>(path: string, fallback: T): Promise<T> {
 type ProfileIdentity = {
   displayName: string | null;
   username: string | null;
+  openseaUsername: string | null;
   avatarUrl: string | null;
   bannerUrl: string | null;
+  openseaUrl: string | null;
 };
 
 async function fetchOpenSeaProfileIdentity(address: string): Promise<ProfileIdentity> {
   if (!OPENSEA_API_KEY) {
-    return { displayName: null, username: null, avatarUrl: null, bannerUrl: null };
+    return { displayName: null, username: null, openseaUsername: null, avatarUrl: null, bannerUrl: null, openseaUrl: null };
   }
 
   const data = await fetchOpenSeaJson<{
@@ -158,9 +160,123 @@ async function fetchOpenSeaProfileIdentity(address: string): Promise<ProfileIden
   return {
     displayName,
     username,
+    openseaUsername: username,
     avatarUrl: data?.profile_image_url || null,
     bannerUrl: data?.banner_image_url || null,
+    openseaUrl: `https://opensea.io/${address}`,
   };
+}
+
+type DisplayCollection = {
+  name?: string;
+  imageUrl?: string;
+  collectionSlug?: string;
+  contractAddress?: string;
+  openseaUrl?: string;
+  category?: string;
+};
+
+function normalizeEntityKey(value?: string) {
+  return String(value || "").trim().toLowerCase().replace(/[^\w\s:/-]/g, " ").replace(/\s+/g, " ");
+}
+
+function buildCollectionDisplayIndex(nfts: WalletProfileNFT[], categoryGroups: Record<string, { previews?: Array<{ collectionName?: string; imageUrl?: string; collectionSlug?: string; contractAddress?: string }> }>, profile: ReturnType<typeof buildWalletProfile>) {
+  const index = new Map<string, DisplayCollection>();
+  const upsert = (entry: DisplayCollection) => {
+    const keys = [
+      normalizeEntityKey(entry.collectionSlug),
+      normalizeEntityKey(entry.contractAddress),
+      normalizeEntityKey(entry.name),
+    ].filter(Boolean);
+    for (const key of keys) {
+      const current = index.get(key) || {};
+      index.set(key, { ...current, ...Object.fromEntries(Object.entries(entry).filter(([, v]) => Boolean(v))) });
+    }
+  };
+
+  for (const nft of nfts) {
+    upsert({
+      name: resolveCollectionName(nft),
+      imageUrl: extractNFTImageUrl(nft) || undefined,
+      collectionSlug: String(nft.displayCollectionSlug || "").trim() || undefined,
+      contractAddress: normalizeAddress(nft.contract?.address || "") || undefined,
+      category: normalizeOpenSeaCategory(nft.displayCollectionCategory || "") || undefined,
+    });
+  }
+  if (profile.anchorCollection) upsert(profile.anchorCollection);
+  if (profile.signalPiece) {
+    upsert({
+      name: profile.signalPiece.collectionName,
+      imageUrl: profile.signalPiece.imageUrl,
+      collectionSlug: profile.signalPiece.collectionSlug,
+      contractAddress: profile.signalPiece.contractAddress,
+      openseaUrl: profile.signalPiece.openseaUrl,
+    });
+  }
+  for (const group of Object.values(categoryGroups || {})) {
+    for (const preview of group?.previews || []) {
+      upsert({
+        name: preview.collectionName,
+        imageUrl: preview.imageUrl,
+        collectionSlug: preview.collectionSlug,
+        contractAddress: preview.contractAddress,
+      });
+    }
+  }
+  return index;
+}
+
+async function enrichTopCollectionsDisplay(params: {
+  topCollections: Array<{ name: string; count: number; percentage?: number; category?: string; imageUrl?: string; collectionSlug?: string; contractAddress?: string; openseaUrl?: string }>;
+  displayIndex: Map<string, DisplayCollection>;
+  cap?: number;
+}) {
+  const cap = Math.max(1, Math.min(params.cap || 3, 5));
+  const cache = new Map<string, Promise<DisplayCollection>>();
+  const fetchCollection = (seed: DisplayCollection) => {
+    const cacheKey = JSON.stringify([seed.collectionSlug || "", seed.contractAddress || "", normalizeEntityKey(seed.name)]);
+    if (!cache.has(cacheKey)) {
+      cache.set(cacheKey, (async () => {
+        if (!OPENSEA_API_KEY) return {};
+        if (seed.collectionSlug) {
+          const data = await withTimeout(fetchOpenSeaJson<{ collection?: { slug?: string; name?: string; image_url?: string; category?: string; contracts?: Array<{ address?: string }> } }>(
+            `/collections/${encodeURIComponent(seed.collectionSlug)}`,
+            {}
+          ), 1500, {});
+          const collection = data?.collection;
+          if (collection?.slug) {
+            return {
+              name: collection.name || seed.name,
+              imageUrl: normalizeImageUrl(collection.image_url || ""),
+              collectionSlug: collection.slug,
+              openseaUrl: `https://opensea.io/collection/${collection.slug}`,
+              contractAddress: normalizeAddress(collection.contracts?.[0]?.address || ""),
+              category: normalizeOpenSeaCategory(collection.category || "") || undefined,
+            };
+          }
+        }
+        if (seed.contractAddress) {
+          const contractData = await withTimeout(fetchOpenSeaJson<OpenSeaContractResponse>(`/chain/ethereum/contract/${seed.contractAddress}`, {}), 1500, {});
+          const slug = String(contractData?.collection || contractData?.slug || contractData?.collections?.[0]?.slug || "").trim();
+          if (slug) return fetchCollection({ ...seed, collectionSlug: slug });
+        }
+        return {};
+      })());
+    }
+    return cache.get(cacheKey)!;
+  };
+
+  const enriched = await Promise.all(params.topCollections.map(async (collection, index) => {
+    const local = params.displayIndex.get(normalizeEntityKey(collection.collectionSlug || collection.contractAddress || collection.name)) || {};
+    let merged = { ...collection, ...local };
+    if (!merged.openseaUrl && merged.collectionSlug) merged.openseaUrl = `https://opensea.io/collection/${merged.collectionSlug}`;
+    if (index < cap && (!merged.imageUrl || !merged.collectionSlug || !merged.openseaUrl)) {
+      const remote = await fetchCollection(merged);
+      merged = { ...merged, ...remote, openseaUrl: remote.openseaUrl || merged.openseaUrl };
+    }
+    return merged;
+  }));
+  return enriched;
 }
 
 async function resolveWalletToAddress(wallet: string): Promise<string> {
@@ -859,7 +975,6 @@ export async function GET(req: Request) {
 
     const profileStartMs = Date.now();
     const profile = buildWalletProfile(enrichedNFTs);
-    const categoryGroups = buildCategoryGroups(enrichedNFTs);
     const earliestMintTask = Promise.all(
       validWallets.map(async (entry) => {
         const resolvedAddress = await resolveWalletToAddress(entry);
@@ -905,7 +1020,37 @@ export async function GET(req: Request) {
     ]);
 
     const firstMintLabel = buildFirstMintLabel(firstMint?.timestamp);
-    const enrichedProfile = { ...profile, firstMint, firstMintLabel, acquisitionBreakdown };
+    const profileWithFirstMint = firstMint
+      ? {
+          ...profile,
+          firstMint: {
+            tokenId: firstMint.nft.tokenId,
+            title: firstMint.nft.title,
+            collectionName: firstMint.nft.collectionName,
+            contractAddress: firstMint.nft.contractAddress,
+            imageUrl: firstMint.nft.imageUrl,
+            openseaUrl: `https://opensea.io/assets/ethereum/${firstMint.nft.contractAddress}/${firstMint.nft.tokenId}`,
+            timestamp: firstMint.timestamp,
+          },
+        }
+      : profile;
+    const categoryGroups = buildCategoryGroups(enrichedNFTs);
+    const displayIndex = buildCollectionDisplayIndex(enrichedNFTs, categoryGroups, profileWithFirstMint);
+    const topCollections = await enrichTopCollectionsDisplay({
+      topCollections: profileWithFirstMint.topCollections,
+      displayIndex,
+      cap: 3,
+    });
+    const enrichedProfile = {
+      ...profileWithFirstMint,
+      topCollections,
+      firstMintLabel,
+      acquisitionBreakdown,
+      displayName: profileIdentity.displayName,
+      avatarUrl: profileIdentity.avatarUrl,
+      openseaUsername: profileIdentity.openseaUsername,
+      openseaUrl: profileIdentity.openseaUrl,
+    };
     const profileBuildMs = Date.now() - profileStartMs;
     const totalMs = Date.now() - totalStartMs;
 

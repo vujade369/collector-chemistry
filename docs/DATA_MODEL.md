@@ -23,9 +23,19 @@ Current profile object returned from /api/profile.
 Fields:
 - totalNFTs
 - topCollections
+- displayName (optional)
+- avatarUrl (optional)
+- openseaUsername (optional)
+- openseaUrl (optional)
 - categoryDistribution
 - categorySourceBreakdown
 - previewNFTs
+
+Top collection display fields, optional:
+- imageUrl
+- collectionSlug
+- contractAddress
+- openseaUrl
 
 ---
 
