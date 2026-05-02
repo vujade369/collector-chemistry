@@ -4,3 +4,7 @@
 - Reworked `app/profile/page.tsx` and `app/profile/profile.css` into a stronger dossier layout with a composed hero, origin artifact module, upgraded stats hierarchy, richer pattern section, and improved collection card visuals.
 - Added a branded profile loading module with rotating status text and lightweight CSS-only neon scan animation.
 - Redesigned `app/page.tsx` to match the profile visual system with a restrained dark entry panel, shared input and button styling, and a clearer collector framing.
+
+## 2026-05-02
+- Enriched profile entity display fields in `lib/walletProfile.ts` so top collections, first mint, signal piece, and anchor collection can carry image, slug, contract, category, and OpenSea link metadata from existing wallet NFTs.
+- Updated `app/profile/page.tsx` to consume enriched collection and signal fields, prefer API-provided image/link fields, and apply local image error fallback behavior.
