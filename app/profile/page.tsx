@@ -37,6 +37,20 @@ type FirstMint = {
   };
 } | null;
 
+type ProfileNFTSignal = {
+  title?: string;
+  name?: string;
+  tokenId?: string;
+  collectionName?: string;
+  collectionSlug?: string;
+  contractAddress?: string;
+  imageUrl?: string;
+  openseaUrl?: string;
+  timestamp?: string;
+  ethAmountLabel?: string;
+  sourceLabel?: string;
+} | null;
+
 type WalletProfile = {
   patternLine?: string;
   identityParagraph?: string;
@@ -350,8 +364,8 @@ export default function ProfilePage() {
 
   function originLabel() {
     if (!firstMint) return "Origin Signal";
-    if (firstMint.timestamp) return "First Minted NFT";
-    return "Earliest Known NFT";
+    if (firstMint.timestamp) return "Earliest Known NFT";
+    return "Origin Signal";
   }
 
   const highestOffer = profile?.highestCurrentOffer || null;
@@ -560,6 +574,7 @@ export default function ProfilePage() {
                     <p className="signal-label">{originLabel()}</p>
                     <p className="signal-value">{originTitle}</p>
                     <p className="signal-support">{originCollectionName || "Creator signal unavailable"}</p>
+                    {firstMint.timestamp && <p className="signal-support">{formatMintDate(firstMint.timestamp)}</p>}
                     {firstMint.openseaUrl && (
                       <a href={firstMint.openseaUrl} target="_blank" rel="noopener noreferrer" className="profile-external-link">
                         View NFT ↗

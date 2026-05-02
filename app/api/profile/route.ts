@@ -1246,6 +1246,7 @@ export async function GET(req: Request) {
       },
     });
   } catch (error) {
+    console.error("[profile] caught error:", error);
     if (error instanceof WalletFetchError) {
       return NextResponse.json(
         {

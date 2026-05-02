@@ -7,6 +7,7 @@
 - Removed Collected Works section from profile UI.
 - Added Top Artists section and profile payload field for top 3 creators from reliable metadata signals.
 - Updated DATA_SOURCES, API_PATTERNS, PROFILE_SPEC, and DATA_MODEL references.
+## 2026-05-01
 
 ## 2026-05-01
 - Added OpenSea-backed display enrichment for visible profile entities, including top collection metadata, wallet identity fields, and NFT and collection destination links.
@@ -19,3 +20,6 @@
 - Converter module now uses detected active wallet offers divided by target collection floor, with canonical OpenSea search and graceful no-floor and no-offers states.
 
 - Converter refined to strict wallet-owned active-offer math (ETH/WETH only), with canonical search ranking that prefers usable floor-backed results.
+- Styled the “If you sold it all…” module so it no longer appears as raw/default HTML.
+- Updated primary Key Signals to show origin, highest current offer, and latest arrival while preserving signalPiece and anchorCollection as supporting profile data.
+
