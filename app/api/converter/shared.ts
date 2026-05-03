@@ -76,6 +76,30 @@ export type WalletOfferEstimateResult = {
       lookupFailed?: number;
       rankedOut?: number;
     };
+    mcp?: {
+      pageCount: number;
+      duplicateItemCount: number;
+      uniqueItemCount: number;
+      offerCount: number;
+      totalOfferETH: number;
+      breakReason: string;
+      lastCursor: string | null;
+      perPage: Array<{
+        page: number;
+        rawItemCount: number;
+        pageUniqueCount: number;
+        duplicateCount: number;
+        cursorCandidates: Record<string, string | null>;
+        chosenCursor: string | null;
+      }>;
+      sampleCountedOffers: Array<{
+        nftKey: string;
+        collectionSlug?: string;
+        tokenId?: string;
+        amount: number;
+        symbol: string;
+      }>;
+    };
   };
 };
 
@@ -379,12 +403,37 @@ async function fetchBestOfferEth(slug: string, tokenId: string): Promise<{ ethAm
 
 
 export async function fetchWalletTotalOfferViaMcp(
-  walletAddress: string
+  walletAddress: string,
+  includeDebug = false
 ): Promise<{
   totalOfferETH: number;
   offerCount: number;
   itemCount: number;
   error: null | "missing_opensea" | "mcp_failed" | "no_offers";
+  debug?: {
+    pageCount: number;
+    duplicateItemCount: number;
+    uniqueItemCount: number;
+    offerCount: number;
+    totalOfferETH: number;
+    breakReason: string;
+    lastCursor: string | null;
+    perPage: Array<{
+      page: number;
+      rawItemCount: number;
+      pageUniqueCount: number;
+      duplicateCount: number;
+      cursorCandidates: Record<string, string | null>;
+      chosenCursor: string | null;
+    }>;
+    sampleCountedOffers: Array<{
+      nftKey: string;
+      collectionSlug?: string;
+      tokenId?: string;
+      amount: number;
+      symbol: string;
+    }>;
+  };
 }> {
   if (!OPENSEA_API_KEY) {
     return { totalOfferETH: 0, offerCount: 0, itemCount: 0, error: "missing_opensea" };
@@ -412,17 +461,49 @@ export async function fetchWalletTotalOfferViaMcp(
       let offerCount = 0;
       let itemCount = 0;
       let nextCursor: string | null = null;
+      const seenNftKeys = new Set<string>();
+      const seenCursors = new Set<string>();
+      let duplicateItemCount = 0;
+      let pageCount = 0;
+<<<<<<< ours
+=======
+      let breakReason = "completed";
+      let lastCursor: string | null = null;
+      const perPage: Array<{
+        page: number;
+        rawItemCount: number;
+        pageUniqueCount: number;
+        duplicateCount: number;
+        cursorCandidates: Record<string, string | null>;
+        chosenCursor: string | null;
+      }> = [];
+      const sampleCountedOffers: Array<{
+        nftKey: string;
+        collectionSlug?: string;
+        tokenId?: string;
+        amount: number;
+        symbol: string;
+      }> = [];
+>>>>>>> theirs
       const MAX_PAGES = 40;
+      const PAGE_LIMIT = 50;
 
       for (let page = 0; page < MAX_PAGES; page += 1) {
+        pageCount += 1;
         let parsed: {
           items?: Array<Record<string, unknown>>;
           nfts?: Array<Record<string, unknown>>;
           nextPageCursor?: string | null;
+          nextCursor?: string | null;
+          cursor?: string | null;
+          next?: string | null;
           data?: {
             items?: Array<Record<string, unknown>>;
             nfts?: Array<Record<string, unknown>>;
             nextPageCursor?: string | null;
+            nextCursor?: string | null;
+            cursor?: string | null;
+            next?: string | null;
           };
         } | null = null;
 
@@ -433,7 +514,7 @@ export async function fetchWalletTotalOfferViaMcp(
               address: walletAddress,
               sortBy: "TOP_OFFER",
               sortDirection: "DESC",
-              limit: 50,
+              limit: PAGE_LIMIT,
               ...(nextCursor ? { cursor: nextCursor } : {}),
             },
           });
@@ -461,10 +542,21 @@ export async function fetchWalletTotalOfferViaMcp(
                 ? parsed.data.nfts
                 : [];
 
-        itemCount += items.length;
+        let pageUniqueCount = 0;
 
+        let pageDuplicateCount = 0;
         for (const rawItem of items) {
           const item = rawItem as {
+            contract?: string;
+            contractAddress?: string;
+            contract_address?: string;
+            tokenId?: string;
+            identifier?: string;
+            id?: string;
+            openseaUrl?: string;
+            permalink?: string;
+            collection?: { slug?: string };
+            collectionSlug?: string;
             bestOffer?: {
               pricePerItem?: {
                 native?: { unit?: string | number; symbol?: string };
@@ -472,6 +564,33 @@ export async function fetchWalletTotalOfferViaMcp(
               };
             };
           };
+
+          const contractAddress = normalizeAddress(
+            String(item.contractAddress || item.contract_address || item.contract || "").trim()
+          );
+          const tokenId = String(item.tokenId || item.identifier || item.id || "").trim();
+          const collectionSlug = String(item.collection?.slug || item.collectionSlug || "").trim().toLowerCase();
+          const fallbackId = String(item.openseaUrl || item.permalink || item.id || "").trim().toLowerCase();
+
+          const nftKey = contractAddress && tokenId
+            ? `${contractAddress}:${tokenId}`
+            : collectionSlug && tokenId
+              ? `${collectionSlug}:${tokenId}`
+              : fallbackId;
+
+          if (!nftKey) continue;
+          if (seenNftKeys.has(nftKey)) {
+            duplicateItemCount += 1;
+<<<<<<< ours
+=======
+            pageDuplicateCount += 1;
+>>>>>>> theirs
+            continue;
+          }
+          seenNftKeys.add(nftKey);
+          pageUniqueCount += 1;
+          itemCount += 1;
+
           const bestOffer = item.bestOffer?.pricePerItem;
           if (!bestOffer) continue;
 
@@ -479,24 +598,123 @@ export async function fetchWalletTotalOfferViaMcp(
           if (symbol !== "ETH" && symbol !== "WETH") continue;
 
           const amountRaw = String(bestOffer.native?.unit ?? bestOffer.token?.unit ?? "").trim();
-          const amount = Number(amountRaw.replace(/,/g, ""));
+          const sanitized = amountRaw.replace(/,/g, "");
+          let amount = 0;
+          if (/^\d+\.\d+$/.test(sanitized)) {
+            amount = Number(sanitized);
+          } else if (/^\d+$/.test(sanitized)) {
+            amount = sanitized.length >= 12 ? weiToEth(sanitized) : Number(sanitized);
+          }
           if (!Number.isFinite(amount) || amount <= 0) continue;
 
           totalOfferETH += amount;
           offerCount += 1;
+          if (includeDebug && sampleCountedOffers.length < 10) {
+            sampleCountedOffers.push({
+              nftKey,
+              collectionSlug: collectionSlug || undefined,
+              tokenId: tokenId || undefined,
+              amount,
+              symbol,
+            });
+          }
         }
 
-        if (items.length < 50) break;
-        const cursor = String(parsed?.nextPageCursor || parsed?.data?.nextPageCursor || "").trim();
+<<<<<<< ours
+        if (pageUniqueCount === 0) break;
+        if (items.length < PAGE_LIMIT) break;
+        const cursor = String(
+          parsed?.nextPageCursor ||
+            parsed?.nextCursor ||
+            parsed?.cursor ||
+            parsed?.next ||
+            parsed?.data?.nextPageCursor ||
+            parsed?.data?.nextCursor ||
+            parsed?.data?.cursor ||
+            parsed?.data?.next ||
+            ""
+        ).trim();
         if (!cursor) break;
+        if (seenCursors.has(cursor)) break;
+=======
+        const cursorCandidates = {
+          nextPageCursor: String(parsed?.nextPageCursor || "").trim() || null,
+          nextCursor: String(parsed?.nextCursor || "").trim() || null,
+          cursor: String(parsed?.cursor || "").trim() || null,
+          next: String(parsed?.next || "").trim() || null,
+          dataNextPageCursor: String(parsed?.data?.nextPageCursor || "").trim() || null,
+          dataNextCursor: String(parsed?.data?.nextCursor || "").trim() || null,
+          dataCursor: String(parsed?.data?.cursor || "").trim() || null,
+          dataNext: String(parsed?.data?.next || "").trim() || null,
+          pageInfoNextCursor: String((parsed as { pageInfo?: { nextCursor?: string } } | null)?.pageInfo?.nextCursor || "").trim() || null,
+          metadataNextCursor: String((parsed as { metadata?: { nextCursor?: string } } | null)?.metadata?.nextCursor || "").trim() || null,
+          paginationNextCursor: String((parsed as { pagination?: { nextCursor?: string } } | null)?.pagination?.nextCursor || "").trim() || null,
+        };
+        const cursor =
+          cursorCandidates.nextPageCursor ||
+          cursorCandidates.nextCursor ||
+          cursorCandidates.cursor ||
+          cursorCandidates.next ||
+          cursorCandidates.dataNextPageCursor ||
+          cursorCandidates.dataNextCursor ||
+          cursorCandidates.dataCursor ||
+          cursorCandidates.dataNext ||
+          cursorCandidates.pageInfoNextCursor ||
+          cursorCandidates.metadataNextCursor ||
+          cursorCandidates.paginationNextCursor ||
+          null;
+        lastCursor = cursor;
+
+        perPage.push({
+          page: page + 1,
+          rawItemCount: items.length,
+          pageUniqueCount,
+          duplicateCount: pageDuplicateCount,
+          cursorCandidates,
+          chosenCursor: cursor,
+        });
+
+        if (pageUniqueCount === 0) {
+          breakReason = "no_unique_items";
+          break;
+        }
+        if (items.length < PAGE_LIMIT) {
+          breakReason = "short_page";
+          break;
+        }
+        if (!cursor) {
+          breakReason = "missing_cursor";
+          break;
+        }
+        if (seenCursors.has(cursor)) {
+          breakReason = "repeated_cursor";
+          break;
+        }
+>>>>>>> theirs
+        seenCursors.add(cursor);
         nextCursor = cursor;
       }
+      void duplicateItemCount;
+      void pageCount;
 
       return {
         totalOfferETH,
         offerCount,
         itemCount,
         error: totalOfferETH > 0 ? null : "no_offers",
+        debug: includeDebug
+          ? {
+              pageCount,
+              duplicateItemCount,
+              uniqueItemCount: itemCount,
+              offerCount,
+              totalOfferETH,
+              breakReason,
+              lastCursor,
+              perPage,
+              sampleCountedOffers,
+            }
+          : undefined,
       };
     } finally {
       await client.close().catch(() => undefined);
@@ -530,7 +748,7 @@ export async function buildWalletOfferEstimate(wallet: string, includeDebug = fa
   }
 
   try {
-    const mcpResult = await fetchWalletTotalOfferViaMcp(wallet);
+    const mcpResult = await fetchWalletTotalOfferViaMcp(wallet, includeDebug);
     if (mcpResult.error !== "mcp_failed") {
       return {
         wallet,
@@ -540,6 +758,17 @@ export async function buildWalletOfferEstimate(wallet: string, includeDebug = fa
         candidateCount: mcpResult.itemCount,
         estimateQuality: mcpResult.offerCount >= 5 ? "high" : mcpResult.offerCount >= 2 ? "medium" : "low",
         error: mcpResult.error === "missing_opensea" ? "missing_opensea" : mcpResult.error === "no_offers" ? "no_wallet_offers" : null,
+        debug: includeDebug
+          ? ({
+              candidateStrategy: "mcp-wallet-top-offer",
+              candidateCap: 50,
+              candidateCount: mcpResult.itemCount,
+              checkedNftCount: mcpResult.itemCount,
+              candidatesChecked: [],
+              offersFound: [],
+              mcp: mcpResult.debug,
+            } as WalletOfferEstimateResult["debug"])
+          : undefined,
       };
     }
 

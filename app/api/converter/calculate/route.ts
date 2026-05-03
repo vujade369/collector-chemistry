@@ -116,7 +116,7 @@ export async function GET(req: Request) {
   if (resolvedWallets.length === 1) {
     estimate = await buildWalletOfferEstimate(resolvedWallets[0], includeDebug);
   } else {
-    const walletResults = await Promise.all(resolvedWallets.map((wallet) => fetchWalletTotalOfferViaMcp(wallet)));
+    const walletResults = await Promise.all(resolvedWallets.map((wallet) => fetchWalletTotalOfferViaMcp(wallet, includeDebug)));
     const successes = walletResults.filter((r) => r.error === null || r.error === "no_offers");
     const hasMissingOpenSea = walletResults.some((r) => r.error === "missing_opensea");
 
@@ -158,6 +158,21 @@ export async function GET(req: Request) {
       candidateCount: checkedNftCount,
       estimateQuality: offerCount >= 5 ? "high" : offerCount >= 2 ? "medium" : "low",
       error: detectedOfferValueETH > 0 ? null : "no_wallet_offers",
+      debug: includeDebug
+        ? {
+            walletRows: resolvedWallets.map((wallet, index) => ({
+              wallet,
+              totalOfferETH: walletResults[index]?.totalOfferETH ?? 0,
+              offerCount: walletResults[index]?.offerCount ?? 0,
+              itemCount: walletResults[index]?.itemCount ?? 0,
+              error: walletResults[index]?.error ?? "mcp_failed",
+<<<<<<< ours
+=======
+              debug: walletResults[index]?.debug,
+>>>>>>> theirs
+            })),
+          }
+        : undefined,
     };
   }
 
