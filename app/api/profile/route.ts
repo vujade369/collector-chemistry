@@ -877,10 +877,14 @@ async function fetchMarketAttention(nfts: WalletProfileNFT[]): Promise<MarketAtt
           const eth = Number(weiToEth(weiValue));
           if (!Number.isFinite(eth) || eth <= 0) return null;
 
+          const currency = String(data?.price?.currency || "ETH").trim().toUpperCase();
+          const currencyLabel = currency === "WETH" ? "WETH" : "ETH";
+
           const contractAddress = normalizeAddress(nft.contract?.address || data?.protocol_data?.parameters?.consideration?.[0]?.token || "");
           return {
             eth,
             weiValue,
+            currencyLabel,
             contractAddress: contractAddress || null,
             tokenId,
             title: String(nft.name || nft.title || "").trim() || null,
@@ -898,7 +902,7 @@ async function fetchMarketAttention(nfts: WalletProfileNFT[]): Promise<MarketAtt
       return valid[0];
     };
 
-    const winner = await withTimeout(task(), 4000, null as Awaited<ReturnType<typeof task>>);
+    const winner = await withTimeout(task(), 12000, null as Awaited<ReturnType<typeof task>>);
     if (!winner) return null;
 
     let finalTitle = winner.title;
@@ -913,7 +917,7 @@ async function fetchMarketAttention(nfts: WalletProfileNFT[]): Promise<MarketAtt
     }
 
     return {
-      ethAmountLabel: `${Number(weiToEth(winner.weiValue)).toFixed(3)} ETH`,
+      ethAmountLabel: `${Number(weiToEth(winner.weiValue)).toFixed(3)} ${winner.currencyLabel || "ETH"}`,
       collectionName: finalCollectionName || null,
       title: finalTitle || null,
       imageUrl: finalImageUrl || null,
@@ -1034,7 +1038,7 @@ async function fetchLatestArrivalSignal(
       } as ProfileNFTSignal;
     };
 
-    return await withTimeout(latestArrivalTask(), 5000, null as ProfileNFTSignal | null);
+    return await withTimeout(latestArrivalTask(), 8000, null as ProfileNFTSignal | null);
   } catch {
     return null;
   }
