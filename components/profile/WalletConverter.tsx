@@ -32,7 +32,7 @@ function formatError(error: ConverterResult["error"]): string {
   return "Couldn’t build an estimate right now.";
 }
 
-export default function WalletConverter({ wallet }: { wallet: string }) {
+export default function WalletConverter({ wallet, wallets }: { wallet: string; wallets?: string[] }) {
   const [phase, setPhase] = useState<"idle" | "searching" | "loading" | "result" | "error">("idle");
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<CollectionSearchResult[]>([]);
@@ -40,6 +40,8 @@ export default function WalletConverter({ wallet }: { wallet: string }) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [visible, setVisible] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const walletParam = wallets && wallets.length > 1 ? wallets.join(",") : wallet;
 
   useEffect(() => {
     if (!query.trim()) {
@@ -69,7 +71,7 @@ export default function WalletConverter({ wallet }: { wallet: string }) {
 
   async function handleSelect(collection: CollectionSearchResult) {
     setPhase("loading");
-    const res = await fetch(`/api/converter/calculate?wallet=${encodeURIComponent(wallet)}&slug=${encodeURIComponent(collection.slug)}`);
+    const res = await fetch(`/api/converter/calculate?wallet=${encodeURIComponent(walletParam)}&slug=${encodeURIComponent(collection.slug)}`);
     const json = (await res.json()) as ConverterResult;
 
     if (json.error) {
@@ -92,41 +94,28 @@ export default function WalletConverter({ wallet }: { wallet: string }) {
     setPhase("idle");
   }
 
-  if (!wallet) return null;
+  if (!walletParam) return null;
 
   return (
     <section className="wallet-converter">
       <div className="converter-intro">
-        <h2 className="converter-headline">If you sold it all...</h2>
-        <p className="converter-subline">See what your wallet could become.</p>
+        <h2 className="converter-headline">Trade the constellation.</h2>
+        <p className="converter-subline">See what your collection could become.</p>
       </div>
 
       {(phase === "idle" || phase === "searching") && (
         <div className="converter-search">
-          <input
-            type="text"
-            placeholder="Search any collection..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="converter-input"
-          />
+          <input type="text" placeholder="Search any collection..." value={query} onChange={(e) => setQuery(e.target.value)} className="converter-input" />
           {query.trim().length > 1 && (
             <ul className="converter-dropdown">
               {searchResults.length > 0 ? (
                 searchResults.map((item) => (
                   <li key={item.slug} onClick={() => handleSelect(item)}>
                     <div className="converter-row-left">
-                      <div className="converter-thumb-wrap">
-                        {item.imageUrl ? <img src={item.imageUrl} alt={item.name} className="converter-thumb" /> : <span className="converter-thumb-fallback">✦</span>}
-                      </div>
+                      <div className="converter-thumb-wrap">{item.imageUrl ? <img src={item.imageUrl} alt={item.name} className="converter-thumb" /> : <span className="converter-thumb-fallback">✦</span>}</div>
                       <div>
                         <span className="converter-result-name">{item.name}</span>
-                        <div className="converter-result-meta">
-                          {item.floorPriceETH ? <span className="converter-result-floor">{item.floorPriceETH.toFixed(2)} ETH floor</span> : <span className="converter-result-floor">Floor unavailable</span>}
-                          {(item.verified || item.safelistStatus) && (
-                            <span className="converter-result-badge">{item.verified ? "Verified" : item.safelistStatus}</span>
-                          )}
-                        </div>
+                        <div className="converter-result-meta">{(item.verified || item.safelistStatus) && <span className="converter-result-badge">{item.verified ? "Verified" : item.safelistStatus}</span>}</div>
                       </div>
                     </div>
                   </li>
@@ -151,11 +140,51 @@ export default function WalletConverter({ wallet }: { wallet: string }) {
         <div className="converter-result">
           {phase === "result" ? (
             <>
-              <div className={`converter-count${visible ? " visible" : ""}`}>Estimated reach: {result.count} {result.targetCollection?.name}</div>
-              <div className={`converter-collection-name${visible ? " visible" : ""}`}>Detected offer value: {result.detectedOfferValueETH.toFixed(3)} ETH</div>
-              <div className={`converter-collection-name${visible ? " visible" : ""}`}>Target floor: {result.targetCollection?.floorPriceETH.toFixed(3)} ETH</div>
+              <div className={`converter-count${visible ? " visible" : ""}`} style={{ fontSize: "44px", lineHeight: 1.05, fontWeight: 600 }}>
+                ~{result.count} {result.targetCollection?.name}
+              </div>
+              {result.count > 0 && (
+                <>
+                  {(() => {
+                    const fullImages = Math.min(Math.floor(result.count), 5);
+                    const fractional = result.count % 1;
+                    const showFractional = fractional > 0.05 && fullImages < 5;
+                    const overflowCount = Math.floor(result.count) - 5;
+                    const imageUrl = result.targetCollection?.imageUrl || "";
+                    return (
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "12px", flexWrap: "wrap" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          {Array.from({ length: fullImages }).map((_, index) => (
+                            <img
+                              key={`full-${index}`}
+                              src={imageUrl}
+                              alt={result.targetCollection?.name || "Collection"}
+                              style={{ width: "64px", height: "64px", borderRadius: "10px", objectFit: "cover", background: "#efefef" }}
+                            />
+                          ))}
+                          {showFractional && (
+                            <div style={{ width: `${Math.round(fractional * 64)}px`, height: "64px", overflow: "hidden", borderRadius: "10px", background: "#efefef" }}>
+                              <img
+                                src={imageUrl}
+                                alt={result.targetCollection?.name || "Collection"}
+                                style={{ width: "64px", height: "64px", objectFit: "cover", objectPosition: "left" }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                        {overflowCount > 0 && <span style={{ fontSize: "12px", color: "#555" }}>+{overflowCount} more</span>}
+                      </div>
+                    );
+                  })()}
+                  {result.count < 0.1 ? <p className={`converter-caveat${visible ? " visible" : ""}`}>Not quite there yet</p> : null}
+                  {result.count >= 0.1 && result.count < 1 ? (
+                    <p className={`converter-caveat${visible ? " visible" : ""}`}>~{Math.round(result.count * 100)}% of one</p>
+                  ) : null}
+                  {result.count >= 100 ? <p className={`converter-caveat${visible ? " visible" : ""}`}>You could fill a room.</p> : null}
+                </>
+              )}
               <p className={`converter-caveat${visible ? " visible" : ""}`}>Offers detected: {result.offerCount} across {result.checkedNftCount} checked NFTs.</p>
-              <p className={`converter-caveat${visible ? " visible" : ""}`}>Based on active offers detected across this wallet.</p>
+              <p className={`converter-caveat${visible ? " visible" : ""}`}>Based on current offers across your NFTs and the current entry point for this collection.</p>
               <p className={`converter-caveat${visible ? " visible" : ""}`}>Estimate only. Offers, floors, fees, royalties, and liquidity change.</p>
             </>
           ) : (

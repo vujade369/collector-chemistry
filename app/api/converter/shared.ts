@@ -212,9 +212,19 @@ function pickTokenId(nft: any): string | null {
   return normalizeTokenIdForOpenSea(nft?.tokenId ?? nft?.identifier ?? nft?.id);
 }
 
+function normalizeCollectionName(value: string): string {
+  return normalizeText(String(value || "")).replace(/\s+/g, " ").trim();
+}
+
 type OfferCandidate = {
   slug: string;
   tokenId: string;
+  title?: string;
+  name?: string;
+  collectionName?: string;
+  contractAddress?: string;
+  hasImage?: boolean;
+  rankReason?: string;
 };
 
 function rankNftCandidate(nft: any, resolvedSlug?: string): number {
@@ -366,6 +376,111 @@ async function fetchBestOfferEth(slug: string, tokenId: string): Promise<{ ethAm
   return value;
 }
 
+
+
+export async function fetchWalletTotalOfferViaMcp(
+  walletAddress: string
+): Promise<{
+  totalOfferETH: number;
+  offerCount: number;
+  itemCount: number;
+  error: null | "missing_opensea" | "mcp_failed" | "no_offers";
+}> {
+  if (!OPENSEA_API_KEY) {
+    return { totalOfferETH: 0, offerCount: 0, itemCount: 0, error: "missing_opensea" };
+  }
+  if (!isEthAddress(walletAddress)) {
+    return { totalOfferETH: 0, offerCount: 0, itemCount: 0, error: "mcp_failed" };
+  }
+
+  try {
+    const [{ Client }, { StreamableHTTPClientTransport }] = await Promise.all([
+      import("@modelcontextprotocol/sdk/client/index.js"),
+      import("@modelcontextprotocol/sdk/client/streamableHttp.js"),
+    ]);
+
+    const client = new Client({ name: "collector-chemistry-converter-offers", version: "1.0.0" });
+    const transport = new StreamableHTTPClientTransport(new URL("https://mcp.opensea.io/mcp"), {
+      requestInit: {
+        headers: { "X-API-KEY": OPENSEA_API_KEY },
+      },
+    });
+
+    try {
+      await client.connect(transport);
+      const toolResult = await client.callTool({
+        name: "get_nft_balances",
+        arguments: {
+          address: walletAddress,
+          sortBy: "TOP_OFFER",
+          sortDirection: "DESC",
+          limit: 200,
+        },
+      });
+
+      const textPayload = Array.isArray(toolResult?.content)
+        ? toolResult.content.find((part) => part?.type === "text")?.text
+        : null;
+      if (!textPayload) return { totalOfferETH: 0, offerCount: 0, itemCount: 0, error: "no_offers" };
+
+      const parsed = JSON.parse(textPayload) as {
+        items?: Array<Record<string, unknown>>;
+        nfts?: Array<Record<string, unknown>>;
+        data?: {
+          items?: Array<Record<string, unknown>>;
+          nfts?: Array<Record<string, unknown>>;
+        };
+      };
+
+      const items = Array.isArray(parsed?.items)
+        ? parsed.items
+        : Array.isArray(parsed?.nfts)
+          ? parsed.nfts
+          : Array.isArray(parsed?.data?.items)
+            ? parsed.data.items
+            : Array.isArray(parsed?.data?.nfts)
+              ? parsed.data.nfts
+              : [];
+
+      let totalOfferETH = 0;
+      let offerCount = 0;
+
+      for (const rawItem of items) {
+        const item = rawItem as {
+          bestOffer?: {
+            pricePerItem?: {
+              native?: { unit?: string | number; symbol?: string };
+              token?: { unit?: string | number; symbol?: string };
+            };
+          };
+        };
+        const bestOffer = item.bestOffer?.pricePerItem;
+        if (!bestOffer) continue;
+
+        const symbol = String(bestOffer.token?.symbol || bestOffer.native?.symbol || "").toUpperCase();
+        if (symbol !== "ETH" && symbol !== "WETH") continue;
+
+        const amountRaw = String(bestOffer.native?.unit ?? bestOffer.token?.unit ?? "").trim();
+        const amount = Number(amountRaw.replace(/,/g, ""));
+        if (!Number.isFinite(amount) || amount <= 0) continue;
+
+        totalOfferETH += amount;
+        offerCount += 1;
+      }
+
+      return {
+        totalOfferETH,
+        offerCount,
+        itemCount: items.length,
+        error: totalOfferETH > 0 ? null : "no_offers",
+      };
+    } finally {
+      await client.close().catch(() => undefined);
+    }
+  } catch {
+    return { totalOfferETH: 0, offerCount: 0, itemCount: 0, error: "mcp_failed" };
+  }
+}
 export async function buildWalletOfferEstimate(wallet: string, includeDebug = false): Promise<WalletOfferEstimateResult> {
   if (!OPENSEA_API_KEY) {
     return {
@@ -391,6 +506,19 @@ export async function buildWalletOfferEstimate(wallet: string, includeDebug = fa
   }
 
   try {
+    const mcpResult = await fetchWalletTotalOfferViaMcp(wallet);
+    if (mcpResult.error !== "mcp_failed") {
+      return {
+        wallet,
+        detectedOfferValueETH: mcpResult.totalOfferETH,
+        offerCount: mcpResult.offerCount,
+        checkedNftCount: mcpResult.itemCount,
+        candidateCount: mcpResult.itemCount,
+        estimateQuality: mcpResult.offerCount >= 5 ? "high" : mcpResult.offerCount >= 2 ? "medium" : "low",
+        error: mcpResult.error === "missing_opensea" ? "missing_opensea" : mcpResult.error === "no_offers" ? "no_wallet_offers" : null,
+      };
+    }
+
     const candidateData = await buildOfferCandidates(wallet);
     const candidates = candidateData.candidates;
     const checked = candidates.slice(0, OFFER_CANDIDATE_CAP);
