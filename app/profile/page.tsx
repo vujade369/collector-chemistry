@@ -76,6 +76,7 @@ type WalletProfile = {
   topCollections?: TopCollection[];
   categoryDistribution?: CategoryRow[];
   totalNFTs?: number;
+  totalCollections?: number;
   firstMint?: FirstMint;
   signalPiece?: ProfileNFTSignal;
   highestCurrentOffer?: ProfileNFTSignal;
@@ -348,7 +349,7 @@ export default function ProfilePage() {
   }));
 
   const topCollections = (profile?.topCollections || []).slice(0, 5);
-  const collectionCount = profile?.topCollections?.length || 0;
+  const collectionCount = profile?.totalCollections || profile?.topCollections?.length || 0;
   const canCompare = isValidInput(compareWallet);
 
   const behavioralReads = useMemo(
@@ -773,7 +774,7 @@ export default function ProfilePage() {
                       )}
                       {latestArrival?.timestamp && (
                         <p className="signal-support">
-                          {formatMintDate(latestArrival.timestamp)}
+                          Entered the wallet {formatMintDate(latestArrival.timestamp)}
                         </p>
                       )}
                       {latestArrival?.openseaUrl && (
