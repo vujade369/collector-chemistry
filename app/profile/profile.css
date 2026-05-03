@@ -155,3 +155,6 @@
   .profile-compare-form { grid-template-columns: 1fr; }
   .category-preview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+.profile-behavioral-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.profile-tag { display: inline-block; padding: 4px 11px; border-radius: 20px; border: 0.5px solid #2e2e2e; background: #141414; font-size: 11px; letter-spacing: 0.01em; color: #c8c5be; }
