@@ -213,15 +213,71 @@ function pickTokenId(nft: any): string | null {
 }
 
 type OfferCandidate = {
-  title?: string;
-  name?: string;
-  collectionName?: string;
   slug: string;
   tokenId: string;
-  contractAddress?: string;
-  hasImage?: boolean;
-  rankReason?: string;
 };
+
+function rankNftCandidate(nft: any): number {
+  const hasSlug = Boolean(String(nft?.displayCollectionSlug || "").trim());
+  const hasToken = Boolean(pickTokenId(nft));
+  const hasImage = Boolean(nft?.image?.cachedUrl || nft?.image?.thumbnailUrl || nft?.imageUrl);
+  const hasName = Boolean(String(nft?.name || nft?.title || nft?.metadata?.name || "").trim());
+  const balance = Number(nft?.balance || 1);
+  return (hasSlug ? 30 : 0) + (hasToken ? 30 : 0) + (hasImage ? 15 : 0) + (hasName ? 10 : 0) + Math.min(balance, 10);
+}
+
+async function buildOfferCandidates(wallet: string): Promise<OfferCandidate[]> {
+  if (!ALCHEMY_API_KEY) return [];
+  const nfts = await fetchWalletNFTs<any>(wallet, ALCHEMY_API_KEY);
+
+  const ranked = [...nfts].sort((a, b) => rankNftCandidate(b) - rankNftCandidate(a));
+  const candidates: OfferCandidate[] = [];
+  const seen = new Set<string>();
+
+  for (const nft of ranked) {
+    if (candidates.length >= OFFER_CANDIDATE_CAP) break;
+    const tokenId = pickTokenId(nft);
+    if (!tokenId) continue;
+
+    let slug = String(nft?.displayCollectionSlug || "").trim();
+    if (!slug) {
+      const contractAddress = String(nft?.contract?.address || nft?.contractAddress || "").trim();
+      if (contractAddress) slug = (await resolveSlugFromContract(contractAddress)) || "";
+    }
+    if (!slug) continue;
+
+    const key = `${slug}:${tokenId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    candidates.push({ slug, tokenId });
+  }
+
+  return candidates;
+}
+
+async function fetchBestOfferEth(slug: string, tokenId: string): Promise<{ ethAmount: number; symbol: string } | null> {
+  const cacheKey = `${slug}:${tokenId}`;
+  if (offerCache.has(cacheKey)) return offerCache.get(cacheKey) ?? null;
+
+  const offer = await fetchOpenSeaJson<{
+    price?: { value?: string };
+    price_type?: { symbol?: string };
+    payment_token?: { symbol?: string };
+    protocol_data?: { parameters?: { offer?: Array<{ startAmount?: string }> } };
+  }>(`/offers/collection/${encodeURIComponent(slug)}/nfts/${encodeURIComponent(tokenId)}/best`, {});
+
+  const symbol = String(offer?.price_type?.symbol || offer?.payment_token?.symbol || "WETH").toUpperCase();
+  if (symbol !== "ETH" && symbol !== "WETH") {
+    offerCache.set(cacheKey, null);
+    return null;
+  }
+  const rawWei = String(offer?.price?.value || offer?.protocol_data?.parameters?.offer?.[0]?.startAmount || "").trim();
+  const eth = /^\d+$/.test(rawWei) ? weiToEth(rawWei) : 0;
+  const value = Number.isFinite(eth) && eth > 0 ? { ethAmount: eth, symbol } : null;
+  offerCache.set(cacheKey, value);
+  return value;
+}
+
 
 function normalizeCollectionName(value: unknown): string {
   return normalizeText(String(value || ""));

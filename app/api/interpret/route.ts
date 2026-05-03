@@ -20,6 +20,46 @@ type InterpretRequest = {
   exactCount?: unknown;
 };
 
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const OPENAI_MODEL = process.env.OPENAI_INTERPRETATION_MODEL || "gpt-4o";
+
+const INTERPRETATION_SYSTEM_PROMPT = `You are writing a "why this match" interpretation for Collector Chemistry,
+a cultural compatibility tool that compares two public NFT collector profiles.
+
+The goal is not to summarize overlap.
+The goal is to help each collector understand something true about themselves
+through the lens of someone who made similar choices.
+
+The comparison is the mechanism. Self-recognition is the outcome.
+
+Follow this structure exactly:
+1. Headline — one line, names the dynamic not the data, creates tension or curiosity
+2. Separation — describes how each collector moves, written in identity language
+3. The gap — acknowledges the real difference honestly, earns the turn
+4. The turn — the shared instinct one level beneath the surface
+5. Closing line — short, resonant, leaves space
+
+Voice rules:
+- Identity language, not category language
+- One level deeper than the data
+- Let the difference be real before resolving it
+- Match emotional temperature to the chemistry label:
+  Strong Signal (80+): warm, kinetic, high recognition
+  Kindred (60-79): grounded, considered, quiet recognition
+  Interesting Tension (40-59): cool, unresolved, almost melancholic
+  Distant But Related (below 40): honest, direct, distance acknowledged
+- Say the insight once, clearly, then stop
+- No financial language, no rarity language, ever
+- No bullets, no markdown, no headers
+- Do not invent traits or psychology not supported by the provided inputs
+- Do not use "Wallet A" or "Wallet B" language
+- Do not name-drop collections as the main point — they are evidence, not the story
+
+Output as JSON with two fields:
+- headline: one line, maximum 100 characters
+- summary: the full interpretation as plain prose paragraphs separated by
+  double newlines (\\n\\n), matching the length and depth of the reference
+  interpretations in the spec, typically 250-400 words`;
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const GROQ_MODEL = process.env.GROQ_INTERPRETATION_MODEL || "llama-3.3-70b-versatile";
 
@@ -208,6 +248,7 @@ function pushLine(lines: string[], label: string, value: string | number) {
     lines.push(`- ${label}: ${value}`);
     return;
   }
+
   if (!value.trim()) return;
   lines.push(`- ${label}: ${value}`);
 }
@@ -271,6 +312,10 @@ function safeOutput() {
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as InterpretRequest;
+    console.log("PROMPT_CHECK", INTERPRETATION_SYSTEM_PROMPT.slice(0, 100));
+    const userMessage = buildUserMessage(body || {});
+
+    if (!OPENAI_API_KEY || !userMessage.trim()) {
 
     const userMessage = buildUserMessage(body || {});
     console.log("INTERPRET_INPUT", userMessage.slice(0, 300));
@@ -290,6 +335,31 @@ export async function POST(req: Request) {
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 
     try {
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: OPENAI_MODEL,
+          max_tokens: 600,
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "pair_interpretation",
+              strict: true,
+              schema: {
+                type: "object",
+                additionalProperties: false,
+                required: ["headline", "summary"],
+                properties: {
+                  headline: { type: "string" },
+                  summary: { type: "string" },
+                },
+              },
+            },
+          },
       const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -307,6 +377,7 @@ export async function POST(req: Request) {
         signal: controller.signal,
       });
 
+      if (!response.ok) {
       console.log("INTERPRET_STATUS", response.status);
 
       if (!response.ok) {
@@ -324,6 +395,11 @@ export async function POST(req: Request) {
       };
 
       const content = payload?.choices?.[0]?.message?.content || "";
+      if (!content) return safeOutput();
+
+      const parsed = JSON.parse(content) as { headline?: unknown; summary?: unknown };
+      const headline = sanitizeString(parsed?.headline, 100);
+      const summary = sanitizeString(parsed?.summary, 5000);
       console.log("INTERPRET_RAW_CONTENT", content);
 
       if (!content) return safeOutput();
@@ -358,6 +434,7 @@ export async function POST(req: Request) {
     } finally {
       clearTimeout(timeoutId);
     }
+  } catch {
   } catch (err) {
     console.log("INTERPRET_CAUGHT_ERROR", err);
     return safeOutput();

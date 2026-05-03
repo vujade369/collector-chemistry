@@ -1090,6 +1090,9 @@ export default function ComparePage() {
       .slice(0, 6);
   }, [data, tasteKeys]);
 
+  function buildInterpretRequest(json: CompareResponse): InterpretRequest {
+    const sharedCollectionKeys = Object.keys(json.shared.collections || {});
+    const sharedArtistKeys = Object.keys(json.shared.artists || {});
   const walletATasteSlices = useMemo(
     () => buildTasteSlices(data?.walletA?.taste || {}, 6),
     [data]
@@ -1196,6 +1199,9 @@ export default function ComparePage() {
       setData(json);
       setSubmittedA(a);
       setSubmittedB(b);
+      setShowMoreCollections(false);
+      setShowMoreArtists(false);
+      void fetchInterpretation(buildInterpretRequest(json));
       setIsCollectionsExpanded(false);
       setIsArtistsExpanded(false);
       void fetchInterpretation(buildInterpretRequest(json, a, b));
