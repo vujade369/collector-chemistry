@@ -796,6 +796,126 @@ function pickTokenId(nft: WalletProfileNFT): string | null {
   return normalizeTokenIdForOpenSea(candidate);
 }
 
+async function fetchTopOfferViaOpenSeaMcp(walletAddress: string): Promise<MarketAttention | null> {
+  if (!OPENSEA_API_KEY || !isEthAddress(walletAddress)) return null;
+
+  try {
+    const task = async () => {
+      const [{ Client }, { StreamableHTTPClientTransport }] = await Promise.all([
+        import("@modelcontextprotocol/sdk/client/index.js"),
+        import("@modelcontextprotocol/sdk/client/streamableHttp.js"),
+      ]);
+
+      const client = new Client({ name: "collector-chemistry-market-attention", version: "1.0.0" });
+      const transport = new StreamableHTTPClientTransport(
+        new URL("https://mcp.opensea.io/mcp"),
+        {
+          requestInit: {
+            headers: { "X-API-KEY": OPENSEA_API_KEY },
+          },
+        }
+      );
+
+      try {
+        await client.connect(transport);
+        const toolResult = await client.callTool({
+          name: "get_nft_balances",
+          arguments: {
+            address: walletAddress,
+            sortBy: "TOP_OFFER",
+            sortDirection: "DESC",
+            limit: 5,
+          },
+        });
+
+        const textPayload = Array.isArray(toolResult?.content)
+          ? toolResult.content.find((part) => part?.type === "text")?.text
+          : null;
+        if (!textPayload) return null;
+
+const parsed = JSON.parse(textPayload) as {
+  items?: Array<Record<string, unknown>>;
+  nfts?: Array<Record<string, unknown>>;
+  data?: {
+    items?: Array<Record<string, unknown>>;
+    nfts?: Array<Record<string, unknown>>;
+  };
+};
+
+const items = Array.isArray(parsed?.items)
+  ? parsed.items
+  : Array.isArray(parsed?.nfts)
+    ? parsed.nfts
+    : Array.isArray(parsed?.data?.items)
+      ? parsed.data.items
+      : Array.isArray(parsed?.data?.nfts)
+        ? parsed.data.nfts
+        : [];
+        if (!items.length) return null;
+
+        for (const rawItem of items) {
+          const item = rawItem as {
+            name?: string;
+            imageUrl?: string;
+            contractAddress?: string;
+            tokenId?: string | number;
+            collection?: { name?: string; slug?: string };
+            bestOffer?: {
+              pricePerItem?: {
+                native?: { unit?: string | number; symbol?: string };
+                token?: { unit?: string | number; symbol?: string };
+              };
+            };
+          };
+          const bestOffer = item.bestOffer?.pricePerItem;
+          if (!bestOffer) continue;
+
+          const contractAddress = normalizeAddress(item.contractAddress || "");
+          const tokenId = normalizeTokenIdForOpenSea(item.tokenId);
+          const collectionSlug = String(item.collection?.slug || "").trim();
+          if (!contractAddress || !tokenId || !collectionSlug) continue;
+
+          const nativeUnitRaw = String(bestOffer.native?.unit ?? "").trim();
+          const tokenUnitRaw = String(bestOffer.token?.unit ?? "").trim();
+          const amountRaw = nativeUnitRaw || tokenUnitRaw;
+          if (!amountRaw) continue;
+
+          const amount = Number(String(amountRaw).replace(/,/g, ""));
+          if (!Number.isFinite(amount) || amount <= 0) continue;
+
+          const symbol = String(bestOffer.token?.symbol || bestOffer.native?.symbol || "ETH").trim() || "ETH";
+          const ethAmountLabel = `${amount.toFixed(2)} ${symbol.toUpperCase()}`;
+
+          return {
+            ethAmountLabel,
+            collectionName: String(item.collection?.name || "").trim() || collectionSlug,
+            title: String(item.name || "").trim() || null,
+            imageUrl: String(item.imageUrl || "").trim() || null,
+            contractAddress,
+            tokenId,
+            collectionSlug,
+            openseaUrl: `https://opensea.io/assets/ethereum/${contractAddress}/${tokenId}`,
+            sourceLabel: "Highest current offer",
+          };
+        }
+      } finally {
+        try {
+          await client.close();
+        } catch {}
+      }
+
+      return null;
+    };
+
+    return await withTimeout(task(), 10000, null as MarketAttention | null);
+  } catch (error) {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("MCP market attention lookup failed", error);
+    }
+    return null;
+  }
+}
+
 async function fetchMarketAttention(
   nfts: WalletProfileNFT[],
   resolvedAddress?: string
@@ -1255,9 +1375,73 @@ export async function GET(req: Request) {
 
     const primaryIdentityTask = fetchOpenSeaProfileIdentity(primaryResolvedAddress);
 
-    // Check all NFTs for active offers, pick the highest — capped at 20s total
+        // Check all wallets for active offers, use MCP first then REST fallback
     const marketAttentionTask = withTimeout(
-      fetchMarketAttention(enrichedNFTs, primaryResolvedAddress),
+      Promise.all(
+        resolvedWalletsForSignals.map(async (resolvedAddress) => {
+          const mcpWinner = await fetchTopOfferViaOpenSeaMcp(resolvedAddress);
+          if (mcpWinner) return mcpWinner;
+
+          const normalizedResolvedAddress = normalizeAddress(resolvedAddress);
+
+          const matchingWalletNFTs =
+            validWallets.length === 1
+              ? enrichedNFTs
+              : enrichedNFTs.filter((nft) => {
+                  const sourceWallet = normalizeAddress(
+                    String(
+                      (nft as WalletProfileNFT & { sourceWallet?: string })
+                        .sourceWallet || ""
+                    )
+                  );
+
+                  return sourceWallet === normalizedResolvedAddress;
+                });
+
+          const everyNftMissingSourceWallet = enrichedNFTs.every((nft) => {
+            const sourceWallet = String(
+              (nft as WalletProfileNFT & { sourceWallet?: string }).sourceWallet ||
+                ""
+            ).trim();
+
+            return !sourceWallet;
+          });
+
+          const walletNFTs =
+            validWallets.length > 1 &&
+            matchingWalletNFTs.length === 0 &&
+            everyNftMissingSourceWallet
+              ? enrichedNFTs
+              : matchingWalletNFTs;
+
+          return fetchMarketAttention(walletNFTs, resolvedAddress);
+        })
+      ).then((results) => {
+        const offers = results.filter(
+          (item): item is MarketAttention => Boolean(item)
+        );
+
+        if (!offers.length) return null;
+
+        const parseOfferAmount = (value: string): number => {
+          const numeric = Number(
+            String(value || "")
+              .replace(/,/g, "")
+              .replace(/\s*(ETH|WETH)\s*$/i, "")
+              .trim()
+          );
+
+          return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
+        };
+
+        offers.sort(
+          (a, b) =>
+            parseOfferAmount(b.ethAmountLabel) -
+            parseOfferAmount(a.ethAmountLabel)
+        );
+
+        return offers[0] || null;
+      }),
       30000,
       null as MarketAttention | null
     );
