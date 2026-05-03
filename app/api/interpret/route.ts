@@ -312,11 +312,6 @@ function safeOutput() {
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as InterpretRequest;
-    console.log("PROMPT_CHECK", INTERPRETATION_SYSTEM_PROMPT.slice(0, 100));
-    const userMessage = buildUserMessage(body || {});
-
-    if (!OPENAI_API_KEY || !userMessage.trim()) {
-
     const userMessage = buildUserMessage(body || {});
     console.log("INTERPRET_INPUT", userMessage.slice(0, 300));
     console.log("INTERPRET_USER_MESSAGE", userMessage);
@@ -335,31 +330,6 @@ export async function POST(req: Request) {
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 
     try {
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${OPENAI_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: OPENAI_MODEL,
-          max_tokens: 600,
-          response_format: {
-            type: "json_schema",
-            json_schema: {
-              name: "pair_interpretation",
-              strict: true,
-              schema: {
-                type: "object",
-                additionalProperties: false,
-                required: ["headline", "summary"],
-                properties: {
-                  headline: { type: "string" },
-                  summary: { type: "string" },
-                },
-              },
-            },
-          },
       const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -377,7 +347,6 @@ export async function POST(req: Request) {
         signal: controller.signal,
       });
 
-      if (!response.ok) {
       console.log("INTERPRET_STATUS", response.status);
 
       if (!response.ok) {
@@ -395,13 +364,8 @@ export async function POST(req: Request) {
       };
 
       const content = payload?.choices?.[0]?.message?.content || "";
-      if (!content) return safeOutput();
 
-      const parsed = JSON.parse(content) as { headline?: unknown; summary?: unknown };
-      const headline = sanitizeString(parsed?.headline, 100);
-      const summary = sanitizeString(parsed?.summary, 5000);
       console.log("INTERPRET_RAW_CONTENT", content);
-
       if (!content) return safeOutput();
 
       const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -434,7 +398,6 @@ export async function POST(req: Request) {
     } finally {
       clearTimeout(timeoutId);
     }
-  } catch {
   } catch (err) {
     console.log("INTERPRET_CAUGHT_ERROR", err);
     return safeOutput();

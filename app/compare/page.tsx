@@ -1840,3 +1840,4 @@ export default function ComparePage() {
     </main>
   );
 }
+}
