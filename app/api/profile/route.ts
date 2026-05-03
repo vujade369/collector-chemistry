@@ -803,59 +803,105 @@ async function fetchMarketAttention(
   if (!OPENSEA_API_KEY || !nfts.length) return null;
 
   try {
-    // Step 1: Resolve slugs for all NFTs in parallel (batched by contract)
-    // Group NFTs by contract address to avoid duplicate slug lookups
-    const contractToSlug = new Map<string, string | null>();
-    const contractsNeedingLookup: string[] = [];
+    return await withTimeout((async () => {
+      let candidates: Array<{
+        slug: string;
+        tokenId: string;
+        name: string | null;
+        imageUrl: string | null;
+        openseaUrl: string | null;
+        contractAddress: string | null;
+      }> = [];
 
-    for (const nft of nfts) {
-      // Already has a slug from enrichment
-      if (String(nft.displayCollectionSlug || "").trim()) continue;
-      const contract = normalizeAddress(nft.contract?.address || "");
-      if (contract && !contractToSlug.has(contract) && !contractsNeedingLookup.includes(contract)) {
-        contractsNeedingLookup.push(contract);
-      }
-    }
-
-    // Resolve slugs for all unknown contracts in parallel (cap at 80)
-    await Promise.all(
-      contractsNeedingLookup.slice(0, 80).map(async (contractAddress) => {
-        const contractData = await fetchOpenSeaJson<OpenSeaContractResponse>(
-          `/chain/ethereum/contract/${contractAddress}`,
-          {} as OpenSeaContractResponse
+      if (resolvedAddress && isEthAddress(resolvedAddress)) {
+        const inventory = await fetchOpenSeaJson<{
+          nfts?: Array<{
+            identifier?: string;
+            collection?: string;
+            name?: string;
+            image_url?: string;
+            display_image_url?: string;
+            opensea_url?: string;
+            contract?: string;
+          }>;
+        }>(
+          `/chain/ethereum/account/${encodeURIComponent(resolvedAddress)}/nfts?limit=200`,
+          {}
         );
-        const slug = String(
-          contractData?.collection ||
-          contractData?.slug ||
-          contractData?.collections?.[0]?.slug ||
-          ""
-        ).trim();
-        contractToSlug.set(contractAddress, slug || null);
-      })
-    );
 
-    // Step 2: Build candidate list — every NFT that has or can resolve a slug
-    const candidates: Array<{ slug: string; tokenId: string; nft: WalletProfileNFT }> = [];
-
-    for (const nft of nfts) {
-      const tokenId = pickTokenId(nft);
-      if (!tokenId) continue;
-
-      let slug = String(nft.displayCollectionSlug || "").trim();
-      if (!slug) {
-        const contract = normalizeAddress(nft.contract?.address || "");
-        slug = String(contractToSlug.get(contract) || "").trim();
+        const inventoryNfts = Array.isArray(inventory?.nfts) ? inventory.nfts : [];
+        if (inventoryNfts.length) {
+          candidates = inventoryNfts
+            .map((nft) => {
+              const tokenId = normalizeTokenIdForOpenSea(nft?.identifier);
+              const slug = String(nft?.collection || "").trim();
+              if (!tokenId || !slug) return null;
+              return {
+                slug,
+                tokenId,
+                name: String(nft?.name || "").trim() || null,
+                imageUrl: String(nft?.image_url || nft?.display_image_url || "").trim() || null,
+                openseaUrl: String(nft?.opensea_url || "").trim() || null,
+                contractAddress: normalizeAddress(nft?.contract || "") || null,
+              };
+            })
+            .filter((item): item is NonNullable<typeof item> => Boolean(item));
+        }
       }
-      if (!slug) continue;
 
-      candidates.push({ slug, tokenId, nft });
-    }
+      if (!candidates.length) {
+        const contractToSlug = new Map<string, string | null>();
+        const contractsNeedingLookup: string[] = [];
+        for (const nft of nfts) {
+          if (String(nft.displayCollectionSlug || "").trim()) continue;
+          const contract = normalizeAddress(nft.contract?.address || "");
+          if (contract && !contractToSlug.has(contract) && !contractsNeedingLookup.includes(contract)) {
+            contractsNeedingLookup.push(contract);
+          }
+        }
 
-    if (!candidates.length) return null;
+        await Promise.all(
+          contractsNeedingLookup.slice(0, 80).map(async (contractAddress) => {
+            const contractData = await fetchOpenSeaJson<OpenSeaContractResponse>(
+              `/chain/ethereum/contract/${contractAddress}`,
+              {} as OpenSeaContractResponse
+            );
+            const slug = String(
+              contractData?.collection ||
+              contractData?.slug ||
+              contractData?.collections?.[0]?.slug ||
+              ""
+            ).trim();
+            contractToSlug.set(contractAddress, slug || null);
+          })
+        );
 
-    // Step 3: Check all candidates for best offer in parallel
-    const responses = await Promise.all(
-      candidates.map(async ({ slug, tokenId, nft }) => {
+        candidates = nfts
+          .map((nft) => {
+            const tokenId = pickTokenId(nft);
+            if (!tokenId) return null;
+            let slug = String(nft.displayCollectionSlug || "").trim();
+            if (!slug) {
+              const contract = normalizeAddress(nft.contract?.address || "");
+              slug = String(contractToSlug.get(contract) || "").trim();
+            }
+            if (!slug) return null;
+            return {
+              slug,
+              tokenId,
+              name: String(nft.name || nft.title || "").trim() || null,
+              imageUrl: extractNFTImageUrl(nft) || null,
+              openseaUrl: null,
+              contractAddress: normalizeAddress(nft.contract?.address || "") || null,
+            };
+          })
+          .filter((item): item is NonNullable<typeof item> => Boolean(item));
+      }
+
+      if (!candidates.length) return null;
+
+      const responses = await Promise.all(
+        candidates.map(async ({ slug, tokenId, name, imageUrl, openseaUrl, contractAddress }) => {
         const data = await fetchOpenSeaJson<{
           price?: { value?: string; currency?: string };
           protocol_data?: {
@@ -884,8 +930,8 @@ async function fetchMarketAttention(
         const currency = String(data?.price?.currency || "ETH").trim().toUpperCase();
         const currencyLabel = currency === "WETH" ? "WETH" : "ETH";
 
-        const contractAddress = normalizeAddress(
-          nft.contract?.address ||
+        const normalizedContractAddress = normalizeAddress(
+          contractAddress ||
           data?.protocol_data?.parameters?.consideration?.[0]?.token ||
           ""
         );
@@ -894,47 +940,54 @@ async function fetchMarketAttention(
           eth,
           weiValue,
           currencyLabel,
-          contractAddress: contractAddress || null,
+          contractAddress: normalizedContractAddress || null,
           tokenId,
-          title: String(nft.name || nft.title || "").trim() || null,
-          imageUrl: extractNFTImageUrl(nft) || null,
-          collectionName: resolveCollectionName(nft) || null,
+          title: name || null,
+          imageUrl: imageUrl || null,
+          collectionName: slug || null,
+          collectionSlug: slug,
+          openseaUrl: openseaUrl || null,
         };
-      })
-    );
+        })
+      );
 
-    const valid = responses.filter(
-      (item): item is NonNullable<typeof item> => Boolean(item)
-    );
-    if (!valid.length) return null;
+      const valid = responses.filter(
+        (item): item is NonNullable<typeof item> => Boolean(item)
+      );
+      if (!valid.length) return null;
 
-    valid.sort((a, b) => b.eth - a.eth);
-    const winner = valid[0];
+      valid.sort((a, b) => b.eth - a.eth);
+      const winner = valid[0];
 
-    let finalTitle = winner.title;
-    let finalImageUrl = winner.imageUrl;
-    let finalCollectionName = winner.collectionName;
+      let finalTitle = winner.title;
+      let finalImageUrl = winner.imageUrl;
+      let finalCollectionName = winner.collectionName || winner.collectionSlug || null;
+      let finalOpenseaUrl = winner.openseaUrl;
 
-    if ((!finalTitle || !finalImageUrl) && winner.contractAddress && winner.tokenId) {
-      const enriched = await fetchOpenSeaAsset(winner.contractAddress, winner.tokenId);
-      finalTitle = finalTitle || enriched.title || null;
-      finalImageUrl = finalImageUrl || enriched.imageUrl || null;
-      finalCollectionName = finalCollectionName || enriched.collectionName || null;
-    }
+      if ((!finalTitle || !finalImageUrl) && winner.contractAddress && winner.tokenId) {
+        const enriched = await fetchOpenSeaAsset(winner.contractAddress, winner.tokenId);
+        finalTitle = finalTitle || enriched.title || null;
+        finalImageUrl = finalImageUrl || enriched.imageUrl || null;
+        finalCollectionName = finalCollectionName || enriched.collectionName || null;
+        finalOpenseaUrl = finalOpenseaUrl || enriched.openseaUrl || null;
+      }
 
-    return {
-      ethAmountLabel: `${Number(weiToEth(winner.weiValue)).toFixed(3)} ${winner.currencyLabel}`,
-      collectionName: finalCollectionName || null,
-      title: finalTitle || null,
-      imageUrl: finalImageUrl || null,
-      contractAddress: winner.contractAddress,
-      tokenId: winner.tokenId,
-      collectionSlug: null,
-      openseaUrl: winner.contractAddress && winner.tokenId
-        ? `https://opensea.io/item/ethereum/${winner.contractAddress}/${winner.tokenId}`
-        : null,
-      sourceLabel: "Highest current offer",
-    };
+      return {
+        ethAmountLabel: `${Number(weiToEth(winner.weiValue)).toFixed(3)} ${winner.currencyLabel}`,
+        collectionName: finalCollectionName || null,
+        title: finalTitle || null,
+        imageUrl: finalImageUrl || null,
+        contractAddress: winner.contractAddress,
+        tokenId: winner.tokenId,
+        collectionSlug: winner.collectionSlug || null,
+        openseaUrl: finalOpenseaUrl || (
+          winner.contractAddress && winner.tokenId
+            ? `https://opensea.io/item/ethereum/${winner.contractAddress}/${winner.tokenId}`
+            : null
+        ),
+        sourceLabel: "Highest current offer",
+      };
+    })(), 30000, null as MarketAttention | null);
   } catch {
     return null;
   }
@@ -1204,8 +1257,8 @@ export async function GET(req: Request) {
 
     // Check all NFTs for active offers, pick the highest — capped at 20s total
     const marketAttentionTask = withTimeout(
-      fetchMarketAttention(enrichedNFTs),
-      20000,
+      fetchMarketAttention(enrichedNFTs, primaryResolvedAddress),
+      30000,
       null as MarketAttention | null
     );
 

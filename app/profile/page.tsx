@@ -4,7 +4,6 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import "./profile.css";
-import WalletBanner from "@/components/profile/WalletBanner";
 import WalletConverter from "@/components/profile/WalletConverter";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -237,6 +236,10 @@ export default function ProfilePage() {
   const [compareWallet, setCompareWallet] = useState("");
   const [loadingStep, setLoadingStep] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState<string>("");
+  const [showWalletInput, setShowWalletInput] = useState(false);
+  const [walletInput, setWalletInput] = useState("");
+  const [walletInputError, setWalletInputError] = useState("");
+  const [isWalletReloading, setIsWalletReloading] = useState(false);
 
   const loadingPhrases = [
     "Indexing holdings",
@@ -296,6 +299,16 @@ export default function ProfilePage() {
     void load();
   }, [walletFromQuery]);
 
+  useEffect(() => {
+    if (!loading) setIsWalletReloading(false);
+  }, [loading]);
+
+  useEffect(() => {
+    if (!walletInputError) return;
+    const timer = setTimeout(() => setWalletInputError(""), 3000);
+    return () => clearTimeout(timer);
+  }, [walletInputError]);
+
   // ── Derived values ───────────────────────────────────────────────────────────
 
   const profile = result?.profile || null;
@@ -351,6 +364,9 @@ export default function ProfilePage() {
   const topCollections = (profile?.topCollections || []).slice(0, 5);
   const collectionCount = profile?.totalCollections || profile?.topCollections?.length || 0;
   const canCompare = isValidInput(compareWallet);
+  const activeWallets = result?.wallets || initialWalletsFromQuery;
+  const walletCount = result?.walletCount || result?.wallets?.length || initialWalletsFromQuery.length;
+
 
   const behavioralReads = useMemo(
     () => (profile?.behavioralReads || []).filter(Boolean).slice(0, 3),
@@ -471,18 +487,37 @@ export default function ProfilePage() {
   }
 
   function addWallet(wallet: string) {
-    const next = Array.from(
-      new Set([...(result?.wallets || initialWalletsFromQuery), wallet.trim()]),
-    ).slice(0, 5);
+    const next = Array.from(new Set([...activeWallets, wallet.trim()])).slice(0, 3);
+    setIsWalletReloading(true);
     updateWalletQuery(next);
   }
 
   function removeWallet(wallet: string) {
-    const next = (result?.wallets || initialWalletsFromQuery).filter(
-      (w) => w !== wallet,
-    );
+    const next = activeWallets.filter((w) => w !== wallet);
     if (next.length === 0) return;
+    setIsWalletReloading(true);
     updateWalletQuery(next);
+  }
+
+  function handleAddWalletSubmit() {
+    const trimmed = walletInput.trim();
+    if (!isValidInput(trimmed)) {
+      setWalletInputError("Enter a valid Ethereum address or ENS name.");
+      return;
+    }
+
+    const isDuplicate = activeWallets.some(
+      (wallet) => wallet.toLowerCase() === trimmed.toLowerCase(),
+    );
+    if (isDuplicate) {
+      setShowWalletInput(false);
+      setWalletInput("");
+      return;
+    }
+
+    addWallet(trimmed);
+    setShowWalletInput(false);
+    setWalletInput("");
   }
 
   function handleCompareSubmit(e: FormEvent) {
@@ -556,6 +591,9 @@ export default function ProfilePage() {
                 <p className="profile-eyebrow">Collector</p>
                 <h1 className="profile-display-name">{headerDisplayName}</h1>
                 <p className="profile-address">{shortenAddress(resolvedWallet)}</p>
+                {walletCount > 1 && (
+                  <p className="profile-wallet-count-line">{walletCount} wallets combined</p>
+                )}
                 <p className="profile-eyebrow" style={{ marginTop: 8 }}>
                   Class
                 </p>
@@ -631,6 +669,80 @@ export default function ProfilePage() {
                 </div>
               )}
             </section>
+
+            <div className="profile-wallet-chip-zone">
+              {isWalletReloading && loading ? (
+                <p className="profile-wallet-updating">Updating profile...</p>
+              ) : (
+                <>
+                  {activeWallets.map((wallet, index) => {
+                    const isAnchorWallet = index === 0;
+                    const showAnchorDot = isAnchorWallet && activeWallets.length > 1;
+                    const canRemove = !isAnchorWallet && activeWallets.length > 1;
+                    return (
+                      <div className="profile-wallet-chip" key={wallet}>
+                        {showAnchorDot && <span className="profile-wallet-anchor-dot" aria-hidden="true" />}
+                        <span>{toDisplayName(wallet)}</span>
+                        {canRemove && (
+                          <button
+                            type="button"
+                            className="profile-wallet-remove"
+                            onClick={() => removeWallet(wallet)}
+                            aria-label={`Remove ${toDisplayName(wallet)}`}
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {activeWallets.length < 3 && !showWalletInput && (
+                    <button
+                      type="button"
+                      className="profile-wallet-add"
+                      onClick={() => {
+                        setWalletInput("");
+                        setWalletInputError("");
+                        setShowWalletInput(true);
+                      }}
+                    >
+                      + Add wallet
+                    </button>
+                  )}
+
+                  {activeWallets.length < 3 && showWalletInput && (
+                    <div className="profile-wallet-add-inline">
+                      <input
+                        className="profile-input profile-input-compact"
+                        placeholder="Wallet address or ENS"
+                        value={walletInput}
+                        onChange={(e) => setWalletInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleAddWalletSubmit();
+                          }
+                          if (e.key === "Escape") {
+                            setShowWalletInput(false);
+                            setWalletInput("");
+                            setWalletInputError("");
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="profile-btn-primary profile-btn-primary-compact"
+                        onClick={handleAddWalletSubmit}
+                      >
+                        Add
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+            {walletInputError && <p className="profile-wallet-note">{walletInputError}</p>}
 
             {/* ── Stats ── */}
             <section className="profile-stats-grid">
@@ -1065,13 +1177,6 @@ export default function ProfilePage() {
                 </div>
               </section>
             )}
-
-            {/* ── Multi-wallet banner ── */}
-            <WalletBanner
-              wallets={result?.wallets || initialWalletsFromQuery}
-              onAdd={addWallet}
-              onRemove={removeWallet}
-            />
 
             {/* ── Compare CTA ── */}
             <section className="profile-panel profile-compare-cta">
