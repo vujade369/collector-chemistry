@@ -406,72 +406,96 @@ export async function fetchWalletTotalOfferViaMcp(
       },
     });
 
-    try {
+   try {
       await client.connect(transport);
-      const toolResult = await client.callTool({
-        name: "get_nft_balances",
-        arguments: {
-          address: walletAddress,
-          sortBy: "TOP_OFFER",
-          sortDirection: "DESC",
-          limit: 200,
-        },
-      });
-
-      const textPayload = Array.isArray(toolResult?.content)
-        ? toolResult.content.find((part) => part?.type === "text")?.text
-        : null;
-      if (!textPayload) return { totalOfferETH: 0, offerCount: 0, itemCount: 0, error: "no_offers" };
-
-      const parsed = JSON.parse(textPayload) as {
-        items?: Array<Record<string, unknown>>;
-        nfts?: Array<Record<string, unknown>>;
-        data?: {
-          items?: Array<Record<string, unknown>>;
-          nfts?: Array<Record<string, unknown>>;
-        };
-      };
-
-      const items = Array.isArray(parsed?.items)
-        ? parsed.items
-        : Array.isArray(parsed?.nfts)
-          ? parsed.nfts
-          : Array.isArray(parsed?.data?.items)
-            ? parsed.data.items
-            : Array.isArray(parsed?.data?.nfts)
-              ? parsed.data.nfts
-              : [];
-
       let totalOfferETH = 0;
       let offerCount = 0;
+      let itemCount = 0;
+      let nextCursor: string | null = null;
+      const MAX_PAGES = 40;
 
-      for (const rawItem of items) {
-        const item = rawItem as {
-          bestOffer?: {
-            pricePerItem?: {
-              native?: { unit?: string | number; symbol?: string };
-              token?: { unit?: string | number; symbol?: string };
+      for (let page = 0; page < MAX_PAGES; page += 1) {
+        let parsed: {
+          items?: Array<Record<string, unknown>>;
+          nfts?: Array<Record<string, unknown>>;
+          nextPageCursor?: string | null;
+          data?: {
+            items?: Array<Record<string, unknown>>;
+            nfts?: Array<Record<string, unknown>>;
+            nextPageCursor?: string | null;
+          };
+        } | null = null;
+
+        try {
+          const toolResult = await client.callTool({
+            name: "get_nft_balances",
+            arguments: {
+              address: walletAddress,
+              sortBy: "TOP_OFFER",
+              sortDirection: "DESC",
+              limit: 50,
+              ...(nextCursor ? { cursor: nextCursor } : {}),
+            },
+          });
+
+          const textPayload = Array.isArray(toolResult?.content)
+            ? toolResult.content.find((part) => part?.type === "text")?.text
+            : null;
+          if (!textPayload) {
+            if (page === 0) return { totalOfferETH: 0, offerCount: 0, itemCount: 0, error: "no_offers" };
+            break;
+          }
+          parsed = JSON.parse(textPayload);
+        } catch {
+          if (page === 0) return { totalOfferETH: 0, offerCount: 0, itemCount: 0, error: "no_offers" };
+          break;
+        }
+
+        const items = Array.isArray(parsed?.items)
+          ? parsed.items
+          : Array.isArray(parsed?.nfts)
+            ? parsed.nfts
+            : Array.isArray(parsed?.data?.items)
+              ? parsed.data.items
+              : Array.isArray(parsed?.data?.nfts)
+                ? parsed.data.nfts
+                : [];
+
+        itemCount += items.length;
+
+        for (const rawItem of items) {
+          const item = rawItem as {
+            bestOffer?: {
+              pricePerItem?: {
+                native?: { unit?: string | number; symbol?: string };
+                token?: { unit?: string | number; symbol?: string };
+              };
             };
           };
-        };
-        const bestOffer = item.bestOffer?.pricePerItem;
-        if (!bestOffer) continue;
+          const bestOffer = item.bestOffer?.pricePerItem;
+          if (!bestOffer) continue;
 
-        const symbol = String(bestOffer.token?.symbol || bestOffer.native?.symbol || "").toUpperCase();
-        if (symbol !== "ETH" && symbol !== "WETH") continue;
+          const symbol = String(bestOffer.token?.symbol || bestOffer.native?.symbol || "").toUpperCase();
+          if (symbol !== "ETH" && symbol !== "WETH") continue;
 
-        const amountRaw = String(bestOffer.native?.unit ?? bestOffer.token?.unit ?? "").trim();
-        const amount = Number(amountRaw.replace(/,/g, ""));
-        if (!Number.isFinite(amount) || amount <= 0) continue;
+          const amountRaw = String(bestOffer.native?.unit ?? bestOffer.token?.unit ?? "").trim();
+          const amount = Number(amountRaw.replace(/,/g, ""));
+          if (!Number.isFinite(amount) || amount <= 0) continue;
 
-        totalOfferETH += amount;
-        offerCount += 1;
+          totalOfferETH += amount;
+          offerCount += 1;
+        }
+
+        if (items.length < 50) break;
+        const cursor = String(parsed?.nextPageCursor || parsed?.data?.nextPageCursor || "").trim();
+        if (!cursor) break;
+        nextCursor = cursor;
       }
 
       return {
         totalOfferETH,
         offerCount,
-        itemCount: items.length,
+        itemCount,
         error: totalOfferETH > 0 ? null : "no_offers",
       };
     } finally {
