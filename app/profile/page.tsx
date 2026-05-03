@@ -99,6 +99,7 @@ type CategoryPreview = {
   imageUrl?: string;
   collectionSlug?: string;
   contractAddress?: string;
+  openseaUrl?: string;
 };
 
 type CategoryGroup = {
@@ -895,13 +896,17 @@ export default function ProfilePage() {
                     </button>
                   ))}
                 </div>
-                {selectedPreviews.length > 0 ? (
+                  {selectedPreviews.length > 0 ? (
                   <div className="category-preview-grid">
                     {selectedPreviews.map((preview, idx) => {
                       const previewImage = normalizeImageUrl(preview.imageUrl);
-                      const previewLink = preview.collectionSlug
-                        ? `https://opensea.io/collection/${preview.collectionSlug}`
-                        : "";
+                      const previewLink =
+                        preview.openseaUrl ||
+                        (preview.collectionSlug
+                          ? `https://opensea.io/collection/${preview.collectionSlug}`
+                          : preview.contractAddress
+                            ? `https://opensea.io/assets/ethereum/${preview.contractAddress}`
+                            : "");
                       return (
                         <article
                           key={`${preview.collectionName || "preview"}-${idx}`}
@@ -922,7 +927,7 @@ export default function ProfilePage() {
                           <p className="category-preview-title">
                             {preview.collectionName || "Untitled collection"}
                           </p>
-                          {previewLink ? (
+                          {previewLink && (
                             <a
                               href={previewLink}
                               target="_blank"
@@ -931,10 +936,6 @@ export default function ProfilePage() {
                             >
                               View Collection ↗
                             </a>
-                          ) : (
-                            <p className="category-preview-empty">
-                              No marketplace link available.
-                            </p>
                           )}
                         </article>
                       );
