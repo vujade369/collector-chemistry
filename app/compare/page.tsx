@@ -1,7 +1,7 @@
 // app/compare/page.tsx
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import "./compare.css";
 
@@ -1027,7 +1027,7 @@ function TasteSignature({
   );
 }
 
-export default function ComparePage() {
+function ComparePageContent() {
   const [walletA, setWalletA] = useState("");
   const [walletB, setWalletB] = useState("");
   const [submittedA, setSubmittedA] = useState("");
@@ -1090,19 +1090,21 @@ export default function ComparePage() {
       .slice(0, 6);
   }, [data, tasteKeys]);
 
-  function buildInterpretRequest(json: CompareResponse): InterpretRequest {
-    const sharedCollectionKeys = Object.keys(json.shared.collections || {});
-    const sharedArtistKeys = Object.keys(json.shared.artists || {});
   const walletATasteSlices = useMemo(
     () => buildTasteSlices(data?.walletA?.taste || {}, 6),
     [data]
   );
+
   const walletBTasteSlices = useMemo(
     () => buildTasteSlices(data?.walletB?.taste || {}, 6),
     [data]
   );
 
-  function buildInterpretRequest(json: CompareResponse, walletInputA: string, walletInputB: string): InterpretRequest {
+  function buildInterpretRequest(
+    json: CompareResponse,
+    walletInputA: string,
+    walletInputB: string
+  ): InterpretRequest {
     const sharedCollectionKeys = Object.keys(json.shared.collections || {});
     const sharedArtistKeys = Object.keys(json.shared.artists || {});
     const interpretNameA = getCollectorDisplayName(json.walletA.profile, walletInputA, walletInputA);
@@ -1199,9 +1201,6 @@ export default function ComparePage() {
       setData(json);
       setSubmittedA(a);
       setSubmittedB(b);
-      setShowMoreCollections(false);
-      setShowMoreArtists(false);
-      void fetchInterpretation(buildInterpretRequest(json));
       setIsCollectionsExpanded(false);
       setIsArtistsExpanded(false);
       void fetchInterpretation(buildInterpretRequest(json, a, b));
@@ -1840,4 +1839,21 @@ export default function ComparePage() {
     </main>
   );
 }
+
+export default function ComparePage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="compare-page">
+          <div className="cc-shell">
+            <section className="cc-input-section">
+              <p className="cc-loading">Loading compare experience...</p>
+            </section>
+          </div>
+        </main>
+      }
+    >
+      <ComparePageContent />
+    </Suspense>
+  );
 }

@@ -1500,7 +1500,17 @@ function buildTasteDNA(nfts: NFT[]) {
   const counts: Record<string, number> = {};
 
   nfts.forEach((nft) => {
-    const type = getCategoryDisplayLabel(classifyCategoryWithSource(nft).category);
+    const normalizedNft = {
+  ...nft,
+  acquiredAt:
+    nft.acquiredAt && typeof nft.acquiredAt === "object"
+      ? nft.acquiredAt
+      : undefined,
+};
+
+const type = getCategoryDisplayLabel(
+  classifyCategoryWithSource(normalizedNft).category,
+);
     counts[type] = (counts[type] || 0) + 1;
   });
 
