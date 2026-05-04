@@ -556,9 +556,7 @@ function buildCategoryGroups(nfts: WalletProfileNFT[]): Record<string, {
         const contractAddress = String(nft.contract?.address || "").trim().toLowerCase() || undefined;
         const openseaUrl = collectionSlug
           ? `https://opensea.io/collection/${collectionSlug}`
-          : contractAddress
-            ? `https://opensea.io/assets/ethereum/${contractAddress}`
-            : undefined;
+          : undefined;
         return { title: nft.name || nft.title || collectionName, collectionName, imageUrl, collectionSlug, contractAddress, openseaUrl };
       });
 

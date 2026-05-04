@@ -950,7 +950,7 @@ export function buildWalletProfile(nfts: WalletProfileNFT[]): WalletProfile {
   }
 
   const topCollections: TopCollection[] = topCollectionsSource
-    .slice(0, 3)
+    .slice(0, 5)
     .map((item) => {
       const key = normalizeEntityKey(item.name);
       const matches = collectionBuckets.get(key) || [];

@@ -610,7 +610,7 @@ export default function ProfilePage() {
                   className="profile-panel profile-first-mint-plaque profile-first-mint-plaque-link"
                   href={firstMint.openseaUrl}
                   target="_blank"
-                  rel="noopener noreferrer"
+                  rel="noreferrer"
                 >
                   <span className="profile-first-mint-external" aria-hidden="true">
                     ↗
@@ -795,8 +795,9 @@ export default function ProfilePage() {
                         <a
                           href={firstMint.openseaUrl}
                           target="_blank"
-                          rel="noopener noreferrer"
+                          rel="noreferrer"
                           className="profile-external-link"
+                          aria-label={`View ${originTitle} on OpenSea`}
                         >
                           View NFT ↗
                         </a>
@@ -848,8 +849,9 @@ export default function ProfilePage() {
                         <a
                           href={highestOffer.openseaUrl}
                           target="_blank"
-                          rel="noopener noreferrer"
+                          rel="noreferrer"
                           className="profile-external-link"
+                          aria-label={`View ${(highestOffer?.title || highestOffer?.tokenId || "NFT")} on OpenSea`}
                         >
                           View NFT ↗
                         </a>
@@ -893,8 +895,9 @@ export default function ProfilePage() {
                         <a
                           href={latestArrival.openseaUrl}
                           target="_blank"
-                          rel="noopener noreferrer"
+                          rel="noreferrer"
                           className="profile-external-link"
+                          aria-label={`View ${(latestArrival?.title || latestArrival?.tokenId || "NFT")} on OpenSea`}
                         >
                           View NFT ↗
                         </a>
@@ -1017,9 +1020,7 @@ export default function ProfilePage() {
                         preview.openseaUrl ||
                         (preview.collectionSlug
                           ? `https://opensea.io/collection/${preview.collectionSlug}`
-                          : preview.contractAddress
-                            ? `https://opensea.io/assets/ethereum/${preview.contractAddress}`
-                            : "");
+                          : "");
                       return (
                         <article
                           key={`${preview.collectionName || "preview"}-${idx}`}
@@ -1044,8 +1045,9 @@ export default function ProfilePage() {
                             <a
                               href={previewLink}
                               target="_blank"
-                              rel="noopener noreferrer"
+                              rel="noreferrer"
                               className="profile-external-link"
+                              aria-label={`View ${preview.collectionName || "collection"} on OpenSea`}
                             >
                               View Collection ↗
                             </a>
@@ -1104,8 +1106,9 @@ export default function ProfilePage() {
                             <a
                               href={openseaUrl}
                               target="_blank"
-                              rel="noopener noreferrer"
+                              rel="noreferrer"
                               className="profile-external-link"
+                              aria-label={`View ${collection.name} on OpenSea`}
                             >
                               View Collection ↗
                             </a>
@@ -1163,7 +1166,7 @@ export default function ProfilePage() {
                               <a
                                 href={linkUrl}
                                 target="_blank"
-                                rel="noopener noreferrer"
+                                rel="noreferrer"
                                 className="profile-external-link"
                               >
                                 View Profile ↗
