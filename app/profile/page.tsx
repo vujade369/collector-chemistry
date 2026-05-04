@@ -245,13 +245,15 @@ export default function ProfilePage() {
 ];
 
   useEffect(() => {
-    if (!loading) return;
-    const timer = setInterval(
-      () => setLoadingStep((prev) => (prev + 1) % loadingPhrases.length),
-      1200,
-    );
-    return () => clearInterval(timer);
-  }, [loading, loadingPhrases.length]);
+  if (!loading) return;
+
+  const timer = setInterval(
+    () => setLoadingStep((prev) => (prev + 1) % loadingProcessLines.length),
+    1800,
+  );
+
+  return () => clearInterval(timer);
+}, [loading, loadingProcessLines.length]);
 
   useEffect(() => {
     async function load() {
