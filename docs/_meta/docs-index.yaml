@@ -1,0 +1,64 @@
+version: 1
+
+statuses:
+  - canonical
+  - living
+  - reference
+  - historical
+  - draft
+  - deprecated
+
+docs:
+  docs/PRODUCT_SOUL.md:
+    category: product
+    status: canonical
+    owner: product
+    edit_policy: approval_required
+    read_for:
+      - all_tasks
+
+  docs/ARCHITECTURE.md:
+    category: architecture
+    status: canonical
+    owner: data_api
+    edit_policy: coordinated
+    read_for:
+      - data_api
+      - code_health
+      - mixed
+
+  docs/DATA_MODEL.md:
+    category: architecture
+    status: canonical
+    owner: data_api
+    edit_policy: coordinated
+    read_for:
+      - data_api
+      - mixed
+
+  docs/DISPLAY_CONTRACT.md:
+    category: design
+    status: canonical
+    owner: product_ui
+    edit_policy: approval_required
+    read_for:
+      - product_ui
+      - mixed
+
+  docs/COMPONENT_MAP.md:
+    category: architecture
+    status: canonical
+    owner: product_ui
+    edit_policy: coordinated
+    read_for:
+      - product_ui
+      - code_health
+      - mixed
+
+  docs/KNOWN_ISSUES.md:
+    category: operations
+    status: living
+    owner: maintainer
+    edit_policy: append_or_update
+    read_for:
+      - all_tasks

@@ -2,9 +2,11 @@
 
 Before making changes, read:
 
-1. `.agents/ORCHESTRATOR.md`
+1. `.agents/agents/ORCHESTRATOR.md`
 2. The relevant specialist agent doc
 3. The relevant product/spec docs listed by the orchestrator
+
+Before making edits, agents must consult `.agents/registry.yaml` when it exists.
 
 Collector Chemistry is a product for reading cultural signal, taste, overlap, and collecting behavior from wallets.
 
