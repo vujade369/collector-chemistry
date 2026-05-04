@@ -166,10 +166,7 @@ export async function GET(req: Request) {
               offerCount: walletResults[index]?.offerCount ?? 0,
               itemCount: walletResults[index]?.itemCount ?? 0,
               error: walletResults[index]?.error ?? "mcp_failed",
-<<<<<<< ours
-=======
               debug: walletResults[index]?.debug,
->>>>>>> theirs
             })),
           }
         : undefined,

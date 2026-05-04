@@ -455,20 +455,21 @@ export async function fetchWalletTotalOfferViaMcp(
       },
     });
 
-   try {
+    try {
       await client.connect(transport);
       let totalOfferETH = 0;
       let offerCount = 0;
       let itemCount = 0;
       let nextCursor: string | null = null;
+
       const seenNftKeys = new Set<string>();
       const seenCursors = new Set<string>();
+
       let duplicateItemCount = 0;
       let pageCount = 0;
-<<<<<<< ours
-=======
       let breakReason = "completed";
       let lastCursor: string | null = null;
+
       const perPage: Array<{
         page: number;
         rawItemCount: number;
@@ -477,6 +478,7 @@ export async function fetchWalletTotalOfferViaMcp(
         cursorCandidates: Record<string, string | null>;
         chosenCursor: string | null;
       }> = [];
+
       const sampleCountedOffers: Array<{
         nftKey: string;
         collectionSlug?: string;
@@ -484,7 +486,7 @@ export async function fetchWalletTotalOfferViaMcp(
         amount: number;
         symbol: string;
       }> = [];
->>>>>>> theirs
+
       const MAX_PAGES = 40;
       const PAGE_LIMIT = 50;
 
@@ -505,6 +507,9 @@ export async function fetchWalletTotalOfferViaMcp(
             cursor?: string | null;
             next?: string | null;
           };
+          pageInfo?: { nextCursor?: string | null };
+          metadata?: { nextCursor?: string | null };
+          pagination?: { nextCursor?: string | null };
         } | null = null;
 
         try {
@@ -524,11 +529,13 @@ export async function fetchWalletTotalOfferViaMcp(
             : null;
           if (!textPayload) {
             if (page === 0) return { totalOfferETH: 0, offerCount: 0, itemCount: 0, error: "no_offers" };
+            breakReason = "missing_text_payload";
             break;
           }
           parsed = JSON.parse(textPayload);
         } catch {
           if (page === 0) return { totalOfferETH: 0, offerCount: 0, itemCount: 0, error: "no_offers" };
+          breakReason = "parse_or_tool_failed";
           break;
         }
 
@@ -543,8 +550,8 @@ export async function fetchWalletTotalOfferViaMcp(
                 : [];
 
         let pageUniqueCount = 0;
-
         let pageDuplicateCount = 0;
+
         for (const rawItem of items) {
           const item = rawItem as {
             contract?: string;
@@ -579,14 +586,13 @@ export async function fetchWalletTotalOfferViaMcp(
               : fallbackId;
 
           if (!nftKey) continue;
+
           if (seenNftKeys.has(nftKey)) {
             duplicateItemCount += 1;
-<<<<<<< ours
-=======
             pageDuplicateCount += 1;
->>>>>>> theirs
             continue;
           }
+
           seenNftKeys.add(nftKey);
           pageUniqueCount += 1;
           itemCount += 1;
@@ -609,6 +615,7 @@ export async function fetchWalletTotalOfferViaMcp(
 
           totalOfferETH += amount;
           offerCount += 1;
+
           if (includeDebug && sampleCountedOffers.length < 10) {
             sampleCountedOffers.push({
               nftKey,
@@ -620,23 +627,6 @@ export async function fetchWalletTotalOfferViaMcp(
           }
         }
 
-<<<<<<< ours
-        if (pageUniqueCount === 0) break;
-        if (items.length < PAGE_LIMIT) break;
-        const cursor = String(
-          parsed?.nextPageCursor ||
-            parsed?.nextCursor ||
-            parsed?.cursor ||
-            parsed?.next ||
-            parsed?.data?.nextPageCursor ||
-            parsed?.data?.nextCursor ||
-            parsed?.data?.cursor ||
-            parsed?.data?.next ||
-            ""
-        ).trim();
-        if (!cursor) break;
-        if (seenCursors.has(cursor)) break;
-=======
         const cursorCandidates = {
           nextPageCursor: String(parsed?.nextPageCursor || "").trim() || null,
           nextCursor: String(parsed?.nextCursor || "").trim() || null,
@@ -646,10 +636,11 @@ export async function fetchWalletTotalOfferViaMcp(
           dataNextCursor: String(parsed?.data?.nextCursor || "").trim() || null,
           dataCursor: String(parsed?.data?.cursor || "").trim() || null,
           dataNext: String(parsed?.data?.next || "").trim() || null,
-          pageInfoNextCursor: String((parsed as { pageInfo?: { nextCursor?: string } } | null)?.pageInfo?.nextCursor || "").trim() || null,
-          metadataNextCursor: String((parsed as { metadata?: { nextCursor?: string } } | null)?.metadata?.nextCursor || "").trim() || null,
-          paginationNextCursor: String((parsed as { pagination?: { nextCursor?: string } } | null)?.pagination?.nextCursor || "").trim() || null,
+          pageInfoNextCursor: String(parsed?.pageInfo?.nextCursor || "").trim() || null,
+          metadataNextCursor: String(parsed?.metadata?.nextCursor || "").trim() || null,
+          paginationNextCursor: String(parsed?.pagination?.nextCursor || "").trim() || null,
         };
+
         const cursor =
           cursorCandidates.nextPageCursor ||
           cursorCandidates.nextCursor ||
@@ -690,12 +681,9 @@ export async function fetchWalletTotalOfferViaMcp(
           breakReason = "repeated_cursor";
           break;
         }
->>>>>>> theirs
         seenCursors.add(cursor);
         nextCursor = cursor;
       }
-      void duplicateItemCount;
-      void pageCount;
 
       return {
         totalOfferETH,
@@ -723,6 +711,7 @@ export async function fetchWalletTotalOfferViaMcp(
     return { totalOfferETH: 0, offerCount: 0, itemCount: 0, error: "mcp_failed" };
   }
 }
+
 export async function buildWalletOfferEstimate(wallet: string, includeDebug = false): Promise<WalletOfferEstimateResult> {
   if (!OPENSEA_API_KEY) {
     return {
