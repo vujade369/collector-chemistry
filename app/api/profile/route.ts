@@ -530,7 +530,7 @@ function buildTasteDNA(nfts: WalletProfileNFT[]) {
 
 function buildCategoryGroups(nfts: WalletProfileNFT[]): Record<string, {
   totalCount: number;
-  previews: Array<{ title: string; collectionName: string; imageUrl: string; collectionSlug?: string; contractAddress?: string; openseaUrl?: string }>;
+  previews: Array<{ title: string; tokenId?: string; collectionName: string; imageUrl: string; collectionSlug?: string; contractAddress?: string; openseaUrl?: string }>;
   collections: Array<{ name: string; count: number }>;
 }> {
   const grouped = new Map<string, WalletProfileNFT[]>();
@@ -554,10 +554,13 @@ function buildCategoryGroups(nfts: WalletProfileNFT[]): Record<string, {
         const imageUrl = extractNFTImageUrl(nft) || nft.contract?.openSeaMetadata?.imageUrl || "";
         const collectionSlug = String(nft.displayCollectionSlug || "").trim().toLowerCase() || undefined;
         const contractAddress = String(nft.contract?.address || "").trim().toLowerCase() || undefined;
-        const openseaUrl = collectionSlug
-          ? `https://opensea.io/collection/${collectionSlug}`
-          : undefined;
-        return { title: nft.name || nft.title || collectionName, collectionName, imageUrl, collectionSlug, contractAddress, openseaUrl };
+        const tokenId = String(nft.tokenId || "").trim() || undefined;
+        const openseaUrl = contractAddress && tokenId
+          ? `https://opensea.io/assets/ethereum/${contractAddress}/${tokenId}`
+          : collectionSlug
+            ? `https://opensea.io/collection/${collectionSlug}`
+            : undefined;
+        return { title: nft.name || nft.title || collectionName, tokenId, collectionName, imageUrl, collectionSlug, contractAddress, openseaUrl };
       });
 
       const collectionCounts = new Map<string, number>();

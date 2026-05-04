@@ -110,12 +110,12 @@ export default function WalletConverter({ wallet, wallets }: { wallet: string; w
     <section className="wallet-converter">
       <div className="converter-intro">
         <h2 className="converter-headline">Trade the constellation.</h2>
-        <p className="converter-subline">See what your collection could become.</p>
+        <p className="converter-subline">Pick a collection. See what your wallet could turn into.</p>
       </div>
 
       {(phase === "idle" || phase === "searching") && (
         <div className="converter-search">
-          <input type="text" placeholder="Search any collection..." value={query} onChange={(e) => setQuery(e.target.value)} className="converter-input" />
+          <input type="text" placeholder="Search a collection..." value={query} onChange={(e) => setQuery(e.target.value)} className="converter-input" />
           {query.trim().length > 1 && (
             <ul className="converter-dropdown">
               {searchResults.length > 0 ? (
@@ -178,9 +178,16 @@ export default function WalletConverter({ wallet, wallets }: { wallet: string; w
                   {displayCount >= 100 ? <p className={`converter-caveat${visible ? " visible" : ""}`}>You could fill a room.</p> : null}
                 </>
               )}
-              <p className={`converter-caveat${visible ? " visible" : ""}`}>Offers detected: {result.offerCount} across {result.checkedNftCount} checked NFTs.</p>
-              <p className={`converter-caveat${visible ? " visible" : ""}`}>Based on active ETH/WETH offers across your collections.</p>
-              <p className={`converter-caveat${visible ? " visible" : ""}`}>Estimate only. Offers, floors, fees, royalties, and liquidity change.</p>
+              <p className={`converter-caveat${visible ? " visible" : ""}`}>
+                A rough glimpse at what your current offers could become.
+              </p>
+              <p className={`converter-caveat${visible ? " visible" : ""}`}>
+                Based on the best active ETH/WETH offers currently available across your unique NFTs, divided by the current {result.targetCollection?.name} floor.
+              </p>
+              <p className={`converter-caveat${visible ? " visible" : ""}`}>
+                {result.offerCount} NFTs currently have active offers. {result.checkedNftCount} unique NFTs checked.
+              </p>
+              <p className={`converter-caveat${visible ? " visible" : ""}`}>Estimate only. Offers, floors, fees, royalties, and liquidity can change.</p>
             </>
           ) : (
             <>

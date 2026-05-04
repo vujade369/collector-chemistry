@@ -839,6 +839,18 @@ function getContractAddress(nft: WalletProfileNFT) {
   return String(nft.contract?.address || "").trim().toLowerCase();
 }
 
+
+function pickMostReliableCollectionSlug(nfts: WalletProfileNFT[]) {
+  const counts = new Map<string, number>();
+  for (const nft of nfts) {
+    const slug = getCollectionSlug(nft);
+    if (!slug) continue;
+    counts.set(slug, (counts.get(slug) || 0) + 1);
+  }
+  const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  return ranked[0]?.[0] || "";
+}
+
 function getCollectionKeys(nft: WalletProfileNFT) {
   const keys = [
     getCollectionSlug(nft),
@@ -955,7 +967,7 @@ export function buildWalletProfile(nfts: WalletProfileNFT[]): WalletProfile {
       const key = normalizeEntityKey(item.name);
       const matches = collectionBuckets.get(key) || [];
       const representative = matches.find((nft) => extractNFTImageUrl(nft)) || matches[0];
-      const collectionSlug = representative ? getCollectionSlug(representative) || undefined : undefined;
+      const collectionSlug = pickMostReliableCollectionSlug(matches) || (representative ? getCollectionSlug(representative) || "" : "") || undefined;
       const contractAddress = representative ? getContractAddress(representative) || undefined : undefined;
       return {
         name: item.name,
