@@ -32,6 +32,22 @@ function formatError(error: ConverterResult["error"]): string {
   return "Couldn’t build an estimate right now.";
 }
 
+function formatHumanizedResultLine(count: number, targetCollectionName?: string | null): string {
+  const safeName = String(targetCollectionName || "this collection").trim() || "this collection";
+  const wholeCount = Math.floor(count);
+  const hasFraction = count - wholeCount >= 0.01;
+
+  if (count < 1) {
+    return "Not quite one yet, but there’s signal.";
+  }
+
+  if (!hasFraction) {
+    return `Enough for ${wholeCount} ${wholeCount === 1 ? "piece" : "pieces"} from ${safeName}.`;
+  }
+
+  return `Enough for ${wholeCount} ${wholeCount === 1 ? "piece" : "pieces"} from ${safeName}, plus a little change.`;
+}
+
 export default function WalletConverter({ wallet, wallets }: { wallet: string; wallets?: string[] }) {
   const [phase, setPhase] = useState<"idle" | "searching" | "loading" | "result" | "error">("idle");
   const [query, setQuery] = useState("");
@@ -49,13 +65,17 @@ export default function WalletConverter({ wallet, wallets }: { wallet: string; w
       setPhase("idle");
       return;
     }
+
     setPhase("searching");
+
     if (timerRef.current) clearTimeout(timerRef.current);
+
     timerRef.current = setTimeout(async () => {
       const res = await fetch(`/api/converter/search?q=${encodeURIComponent(query)}`);
       const json = await res.json();
       setSearchResults(json.results || []);
     }, 300);
+
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
@@ -66,11 +86,13 @@ export default function WalletConverter({ wallet, wallets }: { wallet: string; w
       const t = setTimeout(() => setVisible(true), 40);
       return () => clearTimeout(t);
     }
+
     setVisible(false);
   }, [phase]);
 
   async function handleSelect(collection: CollectionSearchResult) {
     setPhase("loading");
+
     const res = await fetch(`/api/converter/calculate?wallet=${encodeURIComponent(walletParam)}&slug=${encodeURIComponent(collection.slug)}`);
     const json = (await res.json()) as ConverterResult;
 
@@ -105,6 +127,7 @@ export default function WalletConverter({ wallet, wallets }: { wallet: string; w
   const hiddenTileCount = Math.max(0, wholeCount - visibleFullTiles);
   const partialPercent = Math.max(0, Math.min(100, Math.round(fractionalRemainder * 100)));
   const tileImage = result?.targetCollection?.imageUrl || "";
+  const humanizedResultLine = formatHumanizedResultLine(displayCount, result?.targetCollection?.name);
 
   return (
     <section className="wallet-converter">
@@ -115,17 +138,35 @@ export default function WalletConverter({ wallet, wallets }: { wallet: string; w
 
       {(phase === "idle" || phase === "searching") && (
         <div className="converter-search">
-          <input type="text" placeholder="Search a collection..." value={query} onChange={(e) => setQuery(e.target.value)} className="converter-input" />
+          <input
+            type="text"
+            placeholder="Search a collection..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="converter-input"
+          />
+
           {query.trim().length > 1 && (
             <ul className="converter-dropdown">
               {searchResults.length > 0 ? (
                 searchResults.map((item) => (
                   <li key={item.slug} onClick={() => handleSelect(item)}>
                     <div className="converter-row-left">
-                      <div className="converter-thumb-wrap">{item.imageUrl ? <img src={item.imageUrl} alt={item.name} className="converter-thumb" /> : <span className="converter-thumb-fallback">✦</span>}</div>
+                      <div className="converter-thumb-wrap">
+                        {item.imageUrl ? (
+                          <img src={item.imageUrl} alt={item.name} className="converter-thumb" />
+                        ) : (
+                          <span className="converter-thumb-fallback">✦</span>
+                        )}
+                      </div>
+
                       <div>
                         <span className="converter-result-name">{item.name}</span>
-                        <div className="converter-result-meta">{(item.verified || item.safelistStatus) && <span className="converter-result-badge">{item.verified ? "Verified" : item.safelistStatus}</span>}</div>
+                        <div className="converter-result-meta">
+                          {(item.verified || item.safelistStatus) && (
+                            <span className="converter-result-badge">{item.verified ? "Verified" : item.safelistStatus}</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </li>
@@ -153,6 +194,7 @@ export default function WalletConverter({ wallet, wallets }: { wallet: string; w
               <div className={`converter-count${visible ? " visible" : ""}`} style={{ fontSize: "44px", lineHeight: 1.05, fontWeight: 600 }}>
                 ~{displayCountLabel} {result.targetCollection?.name}
               </div>
+
               {displayCount > 0 && (
                 <>
                   {tileImage ? (
@@ -161,6 +203,7 @@ export default function WalletConverter({ wallet, wallets }: { wallet: string; w
                         {Array.from({ length: visibleFullTiles }).map((_, index) => (
                           <img key={`full-${index}`} src={tileImage} alt={result.targetCollection?.name || "Collection"} className="converter-tile" />
                         ))}
+
                         {showPartialTile && (
                           <div className="converter-tile converter-tile-partial">
                             <img src={tileImage} alt={result.targetCollection?.name || "Collection"} className="converter-tile-base" />
@@ -170,32 +213,39 @@ export default function WalletConverter({ wallet, wallets }: { wallet: string; w
                           </div>
                         )}
                       </div>
+
                       {hiddenTileCount > 0 && <span className="converter-tile-more">+{hiddenTileCount} more</span>}
                     </div>
                   ) : null}
+
                   {displayCount < 0.1 ? <p className={`converter-caveat${visible ? " visible" : ""}`}>Not quite there yet</p> : null}
                   {displayCount >= 0.1 && displayCount < 1 ? <p className={`converter-caveat${visible ? " visible" : ""}`}>~{Math.round(displayCount * 100)}% of one</p> : null}
                   {displayCount >= 100 ? <p className={`converter-caveat${visible ? " visible" : ""}`}>You could fill a room.</p> : null}
                 </>
               )}
+
+              <p className={`converter-caveat${visible ? " visible" : ""}`}>{humanizedResultLine}</p>
+
               <p className={`converter-caveat${visible ? " visible" : ""}`}>
                 A rough glimpse at what your current offers could become.
               </p>
+
               <p className={`converter-caveat${visible ? " visible" : ""}`}>
-                Based on the best active ETH/WETH offers currently available across your unique NFTs, divided by the current {result.targetCollection?.name} floor.
+                Based on the best active ETH/WETH offers currently available across your unique NFTs, divided by the current{" "}
+                {result.targetCollection?.name || "target collection"} floor.
               </p>
+
               <p className={`converter-caveat${visible ? " visible" : ""}`}>
                 {result.offerCount} NFTs currently have active offers. {result.checkedNftCount} unique NFTs checked.
               </p>
+
               <p className={`converter-caveat${visible ? " visible" : ""}`}>Estimate only. Offers, floors, fees, royalties, and liquidity can change.</p>
             </>
           ) : (
-            <>
-              <p className="converter-zero">{errorMessage}</p>
-            </>
+            <p className="converter-zero">{errorMessage}</p>
           )}
 
-          <button className={`converter-reset visible`} onClick={handleReset}>
+          <button className="converter-reset visible" onClick={handleReset}>
             Try another collection →
           </button>
         </div>
