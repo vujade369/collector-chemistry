@@ -76,6 +76,31 @@ export type WalletOfferEstimateResult = {
       lookupFailed?: number;
       rankedOut?: number;
     };
+    inventory?: {
+      source: "inventory-best-offer";
+      rawNftCount: number;
+      uniqueNftCount: number;
+      candidateCount: number;
+      checkedNftCount: number;
+      offerLookupsAttempted: number;
+      offersFound: number;
+      noOffer: number;
+      unsupportedCurrency: number;
+      missingIdentity: number;
+      missingSlug: number;
+      slugResolvedCount: number;
+      lookupFailures: number;
+      scanCapped: boolean;
+      scanCap: number;
+      totalEthWethEquivalent: number;
+      sampleCountedOffers: Array<{
+        nftKey: string;
+        collectionSlug?: string;
+        tokenId?: string;
+        amount: number;
+        symbol: string;
+      }>;
+    };
     mcp?: {
       pageCount: number;
       duplicateItemCount: number;
@@ -115,6 +140,8 @@ export type ConverterCollectionSearchResult = {
 };
 
 const OFFER_CANDIDATE_CAP = 20;
+const OFFER_LOOKUP_CONCURRENCY = 6;
+const FULL_SCAN_MAX_NFTS = 750;
 const offerCache = new Map<string, { ethAmount: number; symbol: string } | null>();
 const slugCache = new Map<string, string | null>();
 
@@ -401,6 +428,175 @@ async function fetchBestOfferEth(slug: string, tokenId: string): Promise<{ ethAm
 }
 
 
+
+async function runWithConcurrency<T>(items: T[], concurrency: number, worker: (item: T, index: number) => Promise<void>) {
+  if (!items.length) return;
+  const safeConcurrency = Math.max(1, Math.min(concurrency, items.length));
+  let cursor = 0;
+
+  await Promise.all(
+    Array.from({ length: safeConcurrency }, async () => {
+      while (true) {
+        const index = cursor;
+        cursor += 1;
+        if (index >= items.length) return;
+        await worker(items[index], index);
+      }
+    })
+  );
+}
+
+export async function fetchWalletTotalOfferViaInventory(
+  walletAddress: string,
+  includeDebug = false
+): Promise<{
+  totalOfferETH: number;
+  offerCount: number;
+  itemCount: number;
+  candidateCount: number;
+  error: null | "missing_opensea" | "inventory_failed" | "no_offers";
+  debug?: {
+    source: "inventory-best-offer";
+    rawNftCount: number;
+    uniqueNftCount: number;
+    candidateCount: number;
+    checkedNftCount: number;
+    offerLookupsAttempted: number;
+    offersFound: number;
+    noOffer: number;
+    unsupportedCurrency: number;
+    missingIdentity: number;
+    missingSlug: number;
+    slugResolvedCount: number;
+    lookupFailures: number;
+    scanCapped: boolean;
+    scanCap: number;
+    totalEthWethEquivalent: number;
+    sampleCountedOffers: Array<{
+      nftKey: string;
+      collectionSlug?: string;
+      tokenId?: string;
+      amount: number;
+      symbol: string;
+    }>;
+  };
+}> {
+  if (!OPENSEA_API_KEY) {
+    return { totalOfferETH: 0, offerCount: 0, itemCount: 0, candidateCount: 0, error: "missing_opensea" };
+  }
+  if (!ALCHEMY_API_KEY) {
+    return { totalOfferETH: 0, offerCount: 0, itemCount: 0, candidateCount: 0, error: "inventory_failed" };
+  }
+
+  try {
+    const nfts = await fetchWalletNFTs<any>(walletAddress, ALCHEMY_API_KEY);
+    const rawNftCount = nfts.length;
+    const uniqueEligible = new Map<string, { key: string; slug: string; tokenId: string; contractAddress: string }>();
+
+    let missingIdentity = 0;
+    let missingSlug = 0;
+    let slugResolvedCount = 0;
+
+    for (const nft of nfts) {
+      const contractAddress = normalizeAddress(String(nft?.contract?.address || nft?.contractAddress || "").trim());
+      const tokenId = pickTokenId(nft);
+      if (!contractAddress || !tokenId) {
+        missingIdentity += 1;
+        continue;
+      }
+
+      const key = `${contractAddress}:${tokenId}`;
+      if (uniqueEligible.has(key)) continue;
+
+      let slug = String(nft?.displayCollectionSlug || nft?.collection?.slug || nft?.collectionSlug || "").trim();
+      if (!slug) {
+        const resolvedSlug = await resolveSlugFromContract(contractAddress);
+        if (resolvedSlug) {
+          slug = resolvedSlug;
+          slugResolvedCount += 1;
+        }
+      }
+
+      if (!slug) {
+        missingSlug += 1;
+        continue;
+      }
+
+      uniqueEligible.set(key, { key, slug, tokenId, contractAddress });
+    }
+
+    const uniqueNfts = Array.from(uniqueEligible.values()).sort((a, b) => a.key.localeCompare(b.key));
+    const uniqueNftCount = uniqueNfts.length;
+    const scanCapped = uniqueNfts.length > FULL_SCAN_MAX_NFTS;
+    const candidates = scanCapped ? uniqueNfts.slice(0, FULL_SCAN_MAX_NFTS) : uniqueNfts;
+    const candidateCount = candidates.length;
+
+    let totalOfferETH = 0;
+    let offerCount = 0;
+    let checkedNftCount = 0;
+    let noOffer = 0;
+    let lookupFailures = 0;
+    const unsupportedCurrency = 0;
+    const sampleCountedOffers: Array<{ nftKey: string; collectionSlug?: string; tokenId?: string; amount: number; symbol: string }> = [];
+
+    await runWithConcurrency(candidates, OFFER_LOOKUP_CONCURRENCY, async (candidate) => {
+      checkedNftCount += 1;
+      try {
+        const offer = await fetchBestOfferEth(candidate.slug, candidate.tokenId);
+        if (!offer || offer.ethAmount <= 0) {
+          noOffer += 1;
+          return;
+        }
+
+        totalOfferETH += offer.ethAmount;
+        offerCount += 1;
+
+        if (includeDebug && sampleCountedOffers.length < 10) {
+          sampleCountedOffers.push({
+            nftKey: candidate.key,
+            collectionSlug: candidate.slug,
+            tokenId: candidate.tokenId,
+            amount: offer.ethAmount,
+            symbol: offer.symbol,
+          });
+        }
+      } catch {
+        lookupFailures += 1;
+      }
+    });
+
+    return {
+      totalOfferETH,
+      offerCount,
+      itemCount: checkedNftCount,
+      candidateCount,
+      error: totalOfferETH > 0 ? null : "no_offers",
+      debug: includeDebug
+        ? {
+            source: "inventory-best-offer",
+            rawNftCount,
+            uniqueNftCount,
+            candidateCount,
+            checkedNftCount,
+            offerLookupsAttempted: checkedNftCount,
+            offersFound: offerCount,
+            noOffer,
+            unsupportedCurrency,
+            missingIdentity,
+            missingSlug,
+            slugResolvedCount,
+            lookupFailures,
+            scanCapped,
+            scanCap: FULL_SCAN_MAX_NFTS,
+            totalEthWethEquivalent: totalOfferETH,
+            sampleCountedOffers,
+          }
+        : undefined,
+    };
+  } catch {
+    return { totalOfferETH: 0, offerCount: 0, itemCount: 0, candidateCount: 0, error: "inventory_failed" };
+  }
+}
 
 export async function fetchWalletTotalOfferViaMcp(
   walletAddress: string,
@@ -737,25 +933,25 @@ export async function buildWalletOfferEstimate(wallet: string, includeDebug = fa
   }
 
   try {
-    const mcpResult = await fetchWalletTotalOfferViaMcp(wallet, includeDebug);
-    if (mcpResult.error !== "mcp_failed") {
+    const inventoryResult = await fetchWalletTotalOfferViaInventory(wallet, includeDebug);
+    if (inventoryResult.error !== "inventory_failed") {
       return {
         wallet,
-        detectedOfferValueETH: mcpResult.totalOfferETH,
-        offerCount: mcpResult.offerCount,
-        checkedNftCount: mcpResult.itemCount,
-        candidateCount: mcpResult.itemCount,
-        estimateQuality: mcpResult.offerCount >= 5 ? "high" : mcpResult.offerCount >= 2 ? "medium" : "low",
-        error: mcpResult.error === "missing_opensea" ? "missing_opensea" : mcpResult.error === "no_offers" ? "no_wallet_offers" : null,
+        detectedOfferValueETH: inventoryResult.totalOfferETH,
+        offerCount: inventoryResult.offerCount,
+        checkedNftCount: inventoryResult.itemCount,
+        candidateCount: inventoryResult.candidateCount,
+        estimateQuality: inventoryResult.offerCount >= 5 ? "high" : inventoryResult.offerCount >= 2 ? "medium" : "low",
+        error: inventoryResult.error === "missing_opensea" ? "missing_opensea" : inventoryResult.error === "no_offers" ? "no_wallet_offers" : null,
         debug: includeDebug
           ? ({
-              candidateStrategy: "mcp-wallet-top-offer",
-              candidateCap: 50,
-              candidateCount: mcpResult.itemCount,
-              checkedNftCount: mcpResult.itemCount,
+              candidateStrategy: "inventory-best-offer",
+              candidateCap: FULL_SCAN_MAX_NFTS,
+              candidateCount: inventoryResult.candidateCount,
+              checkedNftCount: inventoryResult.itemCount,
               candidatesChecked: [],
               offersFound: [],
-              mcp: mcpResult.debug,
+              inventory: inventoryResult.debug,
             } as WalletOfferEstimateResult["debug"])
           : undefined,
       };
