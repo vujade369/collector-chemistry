@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import "./profile.css";
+import WalletBanner from "@/components/profile/WalletBanner";
 import WalletConverter from "@/components/profile/WalletConverter";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -180,17 +181,7 @@ function formatCollectorSince(timestamp?: string): string {
 }
 
 function formatCategoryLabel(value: string): string {
-  const normalized = value.replace(/_/g, " ").trim().toLowerCase();
-  if (normalized === "other") return "Long tail";
-  if (normalized === "pfp") return "PFP";
-  if (normalized === "fine art") return "Fine art";
-  return normalized.replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
-
-function formatFocusLabel(value?: "Focused" | "Balanced" | "Explorer"): string {
-  if (value === "Balanced") return "Anchored explorer";
-  return value || "Collector";
+  return value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function getCategoryAccent(categoryKey: string): string {
@@ -246,19 +237,12 @@ export default function ProfilePage() {
   const [compareWallet, setCompareWallet] = useState("");
   const [loadingStep, setLoadingStep] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState<string>("");
-  const [showWalletInput, setShowWalletInput] = useState(false);
-  const [walletInput, setWalletInput] = useState("");
-  const [walletInputError, setWalletInputError] = useState("");
-  const [isWalletReloading, setIsWalletReloading] = useState(false);
 
-  const loadingPhrases = [
-    "Indexing holdings",
-    "Finding origin signal",
-    "Mapping collection gravity",
-    "Reading taste signals",
-    "Tracing mint vs acquisition patterns",
-    "Preparing your collector dossier",
-  ];
+  const loadingProcessLines = [
+  "Finding the shape of the collection.",
+  "Looking for the gravity point.",
+  "Building the read.",
+];
 
   useEffect(() => {
     if (!loading) return;
@@ -308,16 +292,6 @@ export default function ProfilePage() {
 
     void load();
   }, [walletFromQuery]);
-
-  useEffect(() => {
-    if (!loading) setIsWalletReloading(false);
-  }, [loading]);
-
-  useEffect(() => {
-    if (!walletInputError) return;
-    const timer = setTimeout(() => setWalletInputError(""), 3000);
-    return () => clearTimeout(timer);
-  }, [walletInputError]);
 
   // ── Derived values ───────────────────────────────────────────────────────────
 
@@ -374,9 +348,6 @@ export default function ProfilePage() {
   const topCollections = (profile?.topCollections || []).slice(0, 5);
   const collectionCount = profile?.totalCollections || profile?.topCollections?.length || 0;
   const canCompare = isValidInput(compareWallet);
-  const activeWallets = result?.wallets || initialWalletsFromQuery;
-  const walletCount = result?.walletCount || result?.wallets?.length || initialWalletsFromQuery.length;
-
 
   const behavioralReads = useMemo(
     () => (profile?.behavioralReads || []).filter(Boolean).slice(0, 3),
@@ -488,7 +459,7 @@ export default function ProfilePage() {
 
   function originLabel(): string {
     if (!firstMint) return "Origin Signal";
-    if (firstMint.timestamp) return "Earliest Trace";
+    if (firstMint.timestamp) return "Earliest Known NFT";
     return "Origin Signal";
   }
 
@@ -497,37 +468,18 @@ export default function ProfilePage() {
   }
 
   function addWallet(wallet: string) {
-    const next = Array.from(new Set([...activeWallets, wallet.trim()])).slice(0, 3);
-    setIsWalletReloading(true);
+    const next = Array.from(
+      new Set([...(result?.wallets || initialWalletsFromQuery), wallet.trim()]),
+    ).slice(0, 5);
     updateWalletQuery(next);
   }
 
   function removeWallet(wallet: string) {
-    const next = activeWallets.filter((w) => w !== wallet);
-    if (next.length === 0) return;
-    setIsWalletReloading(true);
-    updateWalletQuery(next);
-  }
-
-  function handleAddWalletSubmit() {
-    const trimmed = walletInput.trim();
-    if (!isValidInput(trimmed)) {
-      setWalletInputError("Enter a valid Ethereum address or ENS name.");
-      return;
-    }
-
-    const isDuplicate = activeWallets.some(
-      (wallet) => wallet.toLowerCase() === trimmed.toLowerCase(),
+    const next = (result?.wallets || initialWalletsFromQuery).filter(
+      (w) => w !== wallet,
     );
-    if (isDuplicate) {
-      setShowWalletInput(false);
-      setWalletInput("");
-      return;
-    }
-
-    addWallet(trimmed);
-    setShowWalletInput(false);
-    setWalletInput("");
+    if (next.length === 0) return;
+    updateWalletQuery(next);
   }
 
   function handleCompareSubmit(e: FormEvent) {
@@ -545,18 +497,20 @@ export default function ProfilePage() {
       <div className="profile-shell">
 
         {/* Loading */}
-        {loading && (
-          <section className="profile-loading-panel">
-            <div className="loading-ring" aria-hidden="true" />
-            <h2>Reading your wallet</h2>
-            <p>{loadingPhrases[loadingStep]}</p>
-            <div className="loading-bars" aria-hidden="true">
-              <span />
-              <span />
-              <span />
-            </div>
-          </section>
-        )}
+{loading && (
+  <section className="profile-loading-panel">
+    <div className="loading-ring" aria-hidden="true" />
+    <h2>Reading your wallet</h2>
+    <p className="profile-loading-process">
+      {loadingProcessLines[loadingStep % loadingProcessLines.length]}
+    </p>
+    <div className="loading-bars" aria-hidden="true">
+      <span />
+      <span />
+      <span />
+    </div>
+  </section>
+)}
 
         {/* Error */}
         {!loading && error && (
@@ -601,13 +555,10 @@ export default function ProfilePage() {
                 <p className="profile-eyebrow">Collector</p>
                 <h1 className="profile-display-name">{headerDisplayName}</h1>
                 <p className="profile-address">{shortenAddress(resolvedWallet)}</p>
-                {walletCount > 1 && (
-                  <p className="profile-wallet-count-line">{walletCount} wallets, read as one identity</p>
-                )}
                 <p className="profile-eyebrow" style={{ marginTop: 8 }}>
-                  Pattern
+                  Class
                 </p>
-                <p className="profile-class-label">{formatFocusLabel(profile.focusLabel)}</p>
+                <p className="profile-class-label">{profile.focusLabel || "Collector"}</p>
                 {profile.collectorIdentityLabel && (
                   <p className="profile-collector-identity-line">
                     {profile.collectorIdentityLabel}
@@ -620,7 +571,7 @@ export default function ProfilePage() {
                   className="profile-panel profile-first-mint-plaque profile-first-mint-plaque-link"
                   href={firstMint.openseaUrl}
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                 >
                   <span className="profile-first-mint-external" aria-hidden="true">
                     ↗
@@ -640,15 +591,14 @@ export default function ProfilePage() {
                     )}
                   </div>
                   <div className="profile-first-mint-plaque-content">
-                    <p className="profile-eyebrow">Origin Point</p>
+                    <p className="profile-eyebrow">First Mint</p>
                     <p className="profile-first-mint-date">
                       {formatCollectorSince(firstMint?.timestamp)}
                     </p>
-                    <p className="profile-first-mint-meta">
-                      {originCollectionName
-                        ? `Entered through ${originCollectionName}${originTitle && originTitle !== originCollectionName ? ` ${originTitle}` : ""}`
-                        : originTitle}
-                    </p>
+                    {originCollectionName && (
+                      <p className="profile-first-mint-meta">{originCollectionName}</p>
+                    )}
+                    <p className="profile-first-mint-meta">{originTitle}</p>
                   </div>
                 </a>
               ) : (
@@ -668,116 +618,41 @@ export default function ProfilePage() {
                     )}
                   </div>
                   <div className="profile-first-mint-plaque-content">
-                    <p className="profile-eyebrow">Origin Point</p>
+                    <p className="profile-eyebrow">First Mint</p>
                     <p className="profile-first-mint-date">
                       {formatCollectorSince(firstMint?.timestamp)}
                     </p>
-                    <p className="profile-first-mint-meta">
-                      {originCollectionName
-                        ? `Entered through ${originCollectionName}${originTitle && originTitle !== originCollectionName ? ` ${originTitle}` : ""}`
-                        : originTitle}
-                    </p>
+                    {originCollectionName && (
+                      <p className="profile-first-mint-meta">{originCollectionName}</p>
+                    )}
+                    <p className="profile-first-mint-meta">{originTitle}</p>
                   </div>
                 </div>
               )}
             </section>
 
-            <div className="profile-wallet-chip-zone">
-              {isWalletReloading && loading ? (
-                <p className="profile-wallet-updating">Updating profile...</p>
-              ) : (
-                <>
-                  {activeWallets.map((wallet, index) => {
-                    const isAnchorWallet = index === 0;
-                    const showAnchorDot = isAnchorWallet && activeWallets.length > 1;
-                    const canRemove = !isAnchorWallet && activeWallets.length > 1;
-                    return (
-                      <div className="profile-wallet-chip" key={wallet}>
-                        {showAnchorDot && <span className="profile-wallet-anchor-dot" aria-hidden="true" />}
-                        <span>{toDisplayName(wallet)}</span>
-                        {canRemove && (
-                          <button
-                            type="button"
-                            className="profile-wallet-remove"
-                            onClick={() => removeWallet(wallet)}
-                            aria-label={`Remove ${toDisplayName(wallet)}`}
-                          >
-                            ×
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-
-                  {activeWallets.length < 3 && !showWalletInput && (
-                    <button
-                      type="button"
-                      className="profile-wallet-add"
-                      onClick={() => {
-                        setWalletInput("");
-                        setWalletInputError("");
-                        setShowWalletInput(true);
-                      }}
-                    >
-                      + Add another wallet
-                    </button>
-                  )}
-
-                  {activeWallets.length < 3 && showWalletInput && (
-                    <div className="profile-wallet-add-inline">
-                      <input
-                        className="profile-input profile-input-compact"
-                        placeholder="Wallet address or ENS"
-                        value={walletInput}
-                        onChange={(e) => setWalletInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            handleAddWalletSubmit();
-                          }
-                          if (e.key === "Escape") {
-                            setShowWalletInput(false);
-                            setWalletInput("");
-                            setWalletInputError("");
-                          }
-                        }}
-                      />
-                      <button
-                        type="button"
-                        className="profile-btn-primary profile-btn-primary-compact"
-                        onClick={handleAddWalletSubmit}
-                      >
-                        Add
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-            {walletInputError && <p className="profile-wallet-note">{walletInputError}</p>}
-
             {/* ── Stats ── */}
             <section className="profile-stats-grid">
               <article className="profile-panel profile-stat-card profile-stat-card--holdings">
                 <p className="profile-stat-value">{profile.totalNFTs || 0}</p>
-                <p className="profile-section-label">Held Pieces</p>
+                <p className="profile-section-label">Pieces Held</p>
               </article>
               <article className="profile-panel profile-stat-card profile-stat-card--collections">
                 <p className="profile-stat-value">{collectionCount}</p>
-                <p className="profile-section-label">Collection Stops</p>
+                <p className="profile-section-label">Collections</p>
               </article>
               <article className="profile-panel profile-stat-card profile-stat-card--since">
                 <p className="profile-stat-value">
                   {formatCollectorSince(firstMint?.timestamp)}
                 </p>
-                <p className="profile-section-label">Onchain Since</p>
+                <p className="profile-section-label">Collector Since</p>
               </article>
             </section>
 
-            {/* ── Signal Flares ── */}
+            {/* ── Key Signals ── */}
             {showKeySignals && (
               <section className="profile-panel">
-                <p className="profile-section-label">Signal Flares</p>
+                <p className="profile-section-label">Key Signals</p>
                 <div className="profile-key-signals">
                   {showFirstMintSignal && (
                     <article className="signal-card signal-card--first-mint">
@@ -807,11 +682,10 @@ export default function ProfilePage() {
                         <a
                           href={firstMint.openseaUrl}
                           target="_blank"
-                          rel="noreferrer"
+                          rel="noopener noreferrer"
                           className="profile-external-link"
-                          aria-label={`View ${originTitle} on OpenSea`}
                         >
-                          View on OpenSea ↗
+                          View NFT ↗
                         </a>
                       )}
                     </article>
@@ -833,7 +707,7 @@ export default function ProfilePage() {
                       </div>
                       <p className="signal-label">
                         {highestOffer?.ethAmountLabel
-                          ? "Market Heat"
+                          ? "Highest Current Offer"
                           : "Market Attention"}
                       </p>
                       {highestOffer && (
@@ -842,12 +716,12 @@ export default function ProfilePage() {
                         </p>
                       )}
                       {highestOffer?.ethAmountLabel && (
-                        <p className="signal-support">Best active offer: {highestOffer.ethAmountLabel}</p>
+                        <p className="signal-support">{highestOffer.ethAmountLabel}</p>
                       )}
                       {!highestOffer?.ethAmountLabel &&
                         result?.marketAttention?.ethAmountLabel && (
                           <p className="signal-support">
-                            Best active offer: {result.marketAttention.ethAmountLabel}
+                            {result.marketAttention.ethAmountLabel}
                           </p>
                         )}
                       {(highestOffer?.collectionName ||
@@ -861,11 +735,10 @@ export default function ProfilePage() {
                         <a
                           href={highestOffer.openseaUrl}
                           target="_blank"
-                          rel="noreferrer"
+                          rel="noopener noreferrer"
                           className="profile-external-link"
-                          aria-label={`View ${(highestOffer?.title || highestOffer?.tokenId || "NFT")} on OpenSea`}
                         >
-                          View on OpenSea ↗
+                          View NFT ↗
                         </a>
                       )}
                     </article>
@@ -907,11 +780,10 @@ export default function ProfilePage() {
                         <a
                           href={latestArrival.openseaUrl}
                           target="_blank"
-                          rel="noreferrer"
+                          rel="noopener noreferrer"
                           className="profile-external-link"
-                          aria-label={`View ${(latestArrival?.title || latestArrival?.tokenId || "NFT")} on OpenSea`}
                         >
-                          View on OpenSea ↗
+                          View NFT ↗
                         </a>
                       )}
                     </article>
@@ -920,10 +792,10 @@ export default function ProfilePage() {
               </section>
             )}
 
-            {/* ── The Read ── */}
+            {/* ── Interpretation ── */}
             {hasInterpretation && (
               <section className="profile-panel profile-interpretation-panel">
-                <p className="profile-section-label">The Read</p>
+                <p className="profile-section-label">Interpretation</p>
                 {profile.patternLine && (
                   <p className="profile-pattern-quote">{profile.patternLine}</p>
                 )}
@@ -952,7 +824,7 @@ export default function ProfilePage() {
             {/* ── Taste System ── */}
             <section className="profile-pattern-grid">
               <article className="profile-panel profile-panel-glow">
-                <p className="profile-section-label">Taste Territory</p>
+                <p className="profile-section-label">Taste Map</p>
                 <TasteSignature slices={tasteSlices} />
                 <div className="taste-map-legend">
                   {categoryExplorerItems.map((slice) => (
@@ -970,7 +842,7 @@ export default function ProfilePage() {
               </article>
 
               <article className="profile-panel">
-                <p className="profile-section-label">Taste Breakdown</p>
+                <p className="profile-section-label">Taste DNA</p>
                 <div className="taste-bars">
                   {tasteSlices.slice(0, 6).map((slice) => (
                     <div className="taste-bar-row" key={slice.label}>
@@ -1011,8 +883,7 @@ export default function ProfilePage() {
             {/* ── Category Explorer (full width) ── */}
             {categoryExplorerItems.length > 0 && (
               <section className="profile-panel">
-                <p className="profile-section-label">Browse the Territory</p>
-                <p className="profile-muted-copy">Move through the wallet by taste lane.</p>
+                <p className="profile-section-label">Explore by Category</p>
                 <div className="category-tab-row">
                   {categoryExplorerItems.map((slice) => (
                     <button
@@ -1033,7 +904,9 @@ export default function ProfilePage() {
                         preview.openseaUrl ||
                         (preview.collectionSlug
                           ? `https://opensea.io/collection/${preview.collectionSlug}`
-                          : "");
+                          : preview.contractAddress
+                            ? `https://opensea.io/assets/ethereum/${preview.contractAddress}`
+                            : "");
                       return (
                         <article
                           key={`${preview.collectionName || "preview"}-${idx}`}
@@ -1058,11 +931,10 @@ export default function ProfilePage() {
                             <a
                               href={previewLink}
                               target="_blank"
-                              rel="noreferrer"
+                              rel="noopener noreferrer"
                               className="profile-external-link"
-                              aria-label={`View ${preview.collectionName || "collection"} on OpenSea`}
                             >
-                              View on OpenSea ↗
+                              View Collection ↗
                             </a>
                           )}
                         </article>
@@ -1077,9 +949,9 @@ export default function ProfilePage() {
               </section>
             )}
 
-            {/* ── Where This Wallet Returns ── */}
+            {/* ── Top Collections ── */}
             <section className="profile-panel">
-              <p className="profile-section-label">Where This Wallet Returns</p>
+              <p className="profile-section-label">Top Collections</p>
               <div className="profile-collection-list">
                 {topCollectionsWithImages.map((collection, index) => {
                   const thumbUrl = collection.resolvedImageUrl;
@@ -1113,17 +985,16 @@ export default function ProfilePage() {
                         <div>
                           <p className="profile-collection-title">{collection.name}</p>
                           <p className="profile-muted-copy">
-                            {collection.count} pieces · {walletPct}% of wallet
+                            Holdings {collection.count} · {walletPct}% of wallet
                           </p>
                           {openseaUrl && (
                             <a
                               href={openseaUrl}
                               target="_blank"
-                              rel="noreferrer"
+                              rel="noopener noreferrer"
                               className="profile-external-link"
-                              aria-label={`View ${collection.name} on OpenSea`}
                             >
-                              View on OpenSea ↗
+                              View Collection ↗
                             </a>
                           )}
                         </div>
@@ -1179,7 +1050,7 @@ export default function ProfilePage() {
                               <a
                                 href={linkUrl}
                                 target="_blank"
-                                rel="noreferrer"
+                                rel="noopener noreferrer"
                                 className="profile-external-link"
                               >
                                 View Profile ↗
@@ -1194,33 +1065,41 @@ export default function ProfilePage() {
               </section>
             )}
 
+            {/* ── Multi-wallet banner ── */}
+            <WalletBanner
+              wallets={result?.wallets || initialWalletsFromQuery}
+              onAdd={addWallet}
+              onRemove={removeWallet}
+            />
+
             {/* ── Compare CTA ── */}
             <section className="profile-panel profile-compare-cta">
               <p className="profile-section-label">Compare & Chemistry</p>
-              <h2>Find your collector echo.</h2>
+              <h2>Find your collector counterpart.</h2>
               <p>
-                See where two wallets overlap, diverge, or quietly rhyme.
+                See where your taste overlaps or clashes. Find your people. Or your
+                nemesis.
               </p>
               <form onSubmit={handleCompareSubmit} className="profile-compare-form">
                 <input
                   className="profile-input"
                   value={compareWallet}
                   onChange={(e) => setCompareWallet(e.target.value)}
-                  placeholder="Paste another wallet or ENS"
+                  placeholder="Second wallet address or ENS"
                 />
                 <button
                   className="profile-btn-primary"
                   disabled={!canCompare}
                   type="submit"
                 >
-                  Run chemistry
+                  Compare Wallet
                 </button>
               </form>
               <Link
                 href={`/profile?wallet=${encodeURIComponent(resolvedWallet)}`}
                 className="profile-inline-link"
               >
-                Copy profile link
+                View this profile link
               </Link>
             </section>
 
