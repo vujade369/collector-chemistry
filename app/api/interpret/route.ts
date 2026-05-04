@@ -23,43 +23,6 @@ type InterpretRequest = {
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_INTERPRETATION_MODEL || "gpt-4o";
 
-const INTERPRETATION_SYSTEM_PROMPT = `You are writing a "why this match" interpretation for Collector Chemistry,
-a cultural compatibility tool that compares two public NFT collector profiles.
-
-The goal is not to summarize overlap.
-The goal is to help each collector understand something true about themselves
-through the lens of someone who made similar choices.
-
-The comparison is the mechanism. Self-recognition is the outcome.
-
-Follow this structure exactly:
-1. Headline — one line, names the dynamic not the data, creates tension or curiosity
-2. Separation — describes how each collector moves, written in identity language
-3. The gap — acknowledges the real difference honestly, earns the turn
-4. The turn — the shared instinct one level beneath the surface
-5. Closing line — short, resonant, leaves space
-
-Voice rules:
-- Identity language, not category language
-- One level deeper than the data
-- Let the difference be real before resolving it
-- Match emotional temperature to the chemistry label:
-  Strong Signal (80+): warm, kinetic, high recognition
-  Kindred (60-79): grounded, considered, quiet recognition
-  Interesting Tension (40-59): cool, unresolved, almost melancholic
-  Distant But Related (below 40): honest, direct, distance acknowledged
-- Say the insight once, clearly, then stop
-- No financial language, no rarity language, ever
-- No bullets, no markdown, no headers
-- Do not invent traits or psychology not supported by the provided inputs
-- Do not use "Wallet A" or "Wallet B" language
-- Do not name-drop collections as the main point — they are evidence, not the story
-
-Output as JSON with two fields:
-- headline: one line, maximum 100 characters
-- summary: the full interpretation as plain prose paragraphs separated by
-  double newlines (\\n\\n), matching the length and depth of the reference
-  interpretations in the spec, typically 250-400 words`;
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const GROQ_MODEL = process.env.GROQ_INTERPRETATION_MODEL || "llama-3.3-70b-versatile";
 
@@ -118,244 +81,187 @@ Bad turn: "They both seek meaning through collecting."
 Bad turn: "A shared desire to engage with digital culture."
 Bad turn: "Both are drawn to work that speaks to something deeper."
 
-Good turn: "They both stopped at the same place — not because they were going the same direction, but because they both noticed something other people walked past."
-Good turn: "One collects what they find funny. The other collects what might be useful. What they share is a refusal to collect what everyone else is collecting."
-Good turn: "The meme overlap is not coincidence. It is the place where [name A]'s instinct for the absurd and [name B]'s instinct for community signal the same thing at the same time."
-
-Test: does the turn still work if you remove every collection name from it?
-
 5. CLOSING LINE
-One sentence. Short. Resonant. Leaves space. Not a summary. A weight.
-
-Must be specific enough that it could only apply to these two collectors.
-Must be short enough to stand alone.
-Must leave space rather than explain.
-
-Bad: "In the end, the distance between their approaches is not about opposition, but about perspective."
-Bad: "A reminder that even the most divergent paths can occasionally intersect in meaningful ways."
-Bad: "In the end, it is not about the collections themselves, but about the collectors."
-
-Good: "They arrived differently. They stopped in the same place."
-Good: "The overlap is small. What it reveals is not."
-Good: "Different maps. One or two of the same landmarks."
-
-Test: could this line stand alone as a sentence worth remembering?
-
----
-
-GROUNDING RULES:
-
-- Do not describe what they collect. Describe how they decide.
-- Avoid abstract personality language unless grounded in observable behavior from the provided inputs. "You have a refined sense of taste" is not grounded. "You return to the same artists even when the rest of your collection moves on" is grounded.
-- Use at least one grounded detail in the summary — a collection name, a behavior pattern, a count — but never make it the main point. It is evidence. The insight is the story.
-- If entry dates are provided, treat them as testimony not timestamps. Do not write "Collector A entered Sep 2025." Write instead: "One of them was here before most people noticed." or "They were paying attention before it had a name." or "The record shows someone who arrived early and stayed." Never repeat the same construction twice.
-
----
-
-WHAT "TOO GENERIC" LOOKS LIKE — NEVER WRITE THESE:
-
-These are failure patterns. If any of these appear in your output, rewrite.
-
-- "a desire to engage with the cultural narrative in a meaningful way"
-- "the transformative power of engagement and participation"
-- "both collectors are participants in a broader dialogue"
-- "a shared passion for the evolving landscape of digital culture"
-- "in the end it is not about the destination but the journey"
-- "a common language that transcends their differences"
-- "in the end it is not about the collections themselves but about the collectors"
-- Any sentence that would be true of every NFT collector on earth
-- Any closing line that contains the word "culture", "landscape", "journey", "dialogue", "narrative", or "realm"
-
----
-
-EMOTIONAL TEMPERATURE BY CHEMISTRY LABEL:
-
-Strong Signal (80+): Warm, kinetic, high recognition. Don't oversell it. Let it land.
-
-Kindred (60-79): Grounded, considered, quiet recognition. The turn should feel surprising but true.
-
-Interesting Tension (40-59): Cool, unresolved, almost melancholic. The gap deserves real weight before the turn.
-
-Distant But Related (below 40): Honest. The distance is acknowledged directly. The thread required going all the way down to find it.
+One short paragraph. Resonant. Not conclusive. Leaves space.
 
 ---
 
 VOICE RULES:
 
-- Feel before explain.
-- Identity language, not category language.
-- Say the insight once, clearly, then stop.
-- No financial language. No rarity language. No portfolio language. Ever.
-- No bullets, no markdown, no headers in the output.
-- Do not invent traits not supported by the provided inputs.
-- Do not use "Wallet A" or "Wallet B" language.
-- Collections are evidence, not the story.
-- Use the collector's name or ENS handle when provided. Do not use "Collector A", "Collector B", "one collector", or "the other collector."
-- Use names naturally. Do not repeat a name in every sentence. Use it where it improves clarity or recognition, not as a structural habit.
-- SEPARATION paragraphs must not mirror each other. Do not use the same sentence structure for both collectors. Do not swap names into the same template.
-- If both collectors show similar patterns, describe how those patterns differ in expression, timing, or depth. Similarity is not sameness.
-- Vary sentence rhythm and construction across the full output. Avoid parallel phrasing between the two collector descriptions.
-
-LENGTH:
-
-Four to six short paragraphs. Every sentence earns its place. If a sentence could be removed without losing anything, remove it.
-
----
-
-QUALITY TEST BEFORE RESPONDING:
-
-1. Does the separation work if you remove every collection name from it?
-2. Does the turn name something specific to these two collectors that they could not have told you themselves?
-3. Could the closing line stand alone as a sentence worth remembering?
-4. Does the emotional temperature match the chemistry label?
-5. Is every insight grounded in something observable from the inputs?
-6. Does any sentence appear in the "too generic" failure list above? If yes, rewrite it.
-
-If any of these fail, rewrite before responding.
+- Identity language, not category language
+- Interpretive, not analytical
+- Specific, not generic
+- Honest about difference
+- No financial language
+- No rarity language
+- No investment language
+- No market language
+- No bullets
+- No markdown
+- No headers
+- No labels like "Separation" or "The Turn"
+- Do not say "Wallet A" or "Wallet B"
+- Do not say "NFTs" unless unavoidable
+- Do not overuse collection names
+- Collection names are evidence, not the story
+- Do not invent traits or psychology not supported by the provided inputs
+- Do not flatten everyone into "curious," "intentional," or "community-driven"
 
 ---
 
-RESPONSE FORMAT:
+EMOTIONAL TEMPERATURE:
 
-Respond with valid JSON only. No markdown. No code fences.
+Strong Signal (80+):
+Warm, kinetic, high recognition. The writing should feel like two people recognizing each other quickly.
 
-{"headline": "...", "summary": "..."}
+Kindred (60-79):
+Grounded, considered, quiet recognition. The writing should feel like adjacent instincts.
 
-Where summary contains the full interpretation as flowing prose paragraphs.`;
+Interesting Tension (40-59):
+Cooler, more unresolved, slightly melancholic. The writing should honor the distance.
 
-function sanitizeString(value: unknown, maxLength = 150) {
+Distant But Related (below 40):
+Direct, restrained, honest. Do not force closeness.
+
+---
+
+OUTPUT FORMAT:
+
+Return JSON only.
+
+{
+  "headline": "one line, maximum 100 characters",
+  "summary": "plain prose paragraphs separated by double newlines"
+}
+
+The summary should usually be 250-400 words.`;
+
+function sanitizeString(value: unknown, maxLength = 400): string {
   if (typeof value !== "string") return "";
   return value.trim().slice(0, maxLength);
 }
 
-function sanitizeNumber(value: unknown) {
-  const parsed = Number(value);
-  if (Number.isNaN(parsed)) return 0;
-  return parsed;
+function sanitizeNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
 }
 
-function sanitizeStringArray(value: unknown, limit: number) {
+function sanitizeList(value: unknown, maxItems = 8): string[] {
   if (!Array.isArray(value)) return [];
   return value
-    .map((item) => sanitizeString(item))
+    .map((item) => sanitizeString(item, 120))
     .filter(Boolean)
-    .slice(0, limit);
-}
-
-function pushLine(lines: string[], label: string, value: string | number) {
-  if (typeof value === "number") {
-    if (!Number.isFinite(value) || value <= 0) return;
-    lines.push(`- ${label}: ${value}`);
-    return;
-  }
-
-  if (!value.trim()) return;
-  lines.push(`- ${label}: ${value}`);
-}
-
-function buildUserMessage(input: InterpretRequest) {
-  const nameA = sanitizeString(input.nameA);
-  const nameB = sanitizeString(input.nameB);
-  const archetypeA = sanitizeString(input.archetypeA);
-  const archetypeB = sanitizeString(input.archetypeB);
-  const profileLineA = sanitizeString(input.profileLineA);
-  const profileLineB = sanitizeString(input.profileLineB);
-  const primaryLeanA = sanitizeString(input.primaryLeanA);
-  const primaryLeanB = sanitizeString(input.primaryLeanB);
-  const contrastA = sanitizeString(input.contrastA);
-  const contrastB = sanitizeString(input.contrastB);
-  const chemistryLabel = sanitizeString(input.chemistryLabel);
-  const chemistryScore = sanitizeNumber(input.chemistryScore);
-  const exactCount = sanitizeNumber(input.exactCount);
-  const sharedCollections = sanitizeStringArray(input.sharedCollections, 5);
-  const sharedArtists = sanitizeStringArray(input.sharedArtists, 3);
-  const topCollectionsA = sanitizeStringArray(input.topCollectionsA, 3);
-  const topCollectionsB = sanitizeStringArray(input.topCollectionsB, 3);
-
-  const lines: string[] = ["Inputs:"];
-  lines.push(`- Collector A name: ${nameA}`);
-  lines.push(`- Collector B name: ${nameB}`);
-
-  const archetypeALine = [archetypeA, profileLineA].filter(Boolean).join(" — ");
-  const archetypeBLine = [archetypeB, profileLineB].filter(Boolean).join(" — ");
-
-  pushLine(lines, "Archetype A", archetypeALine);
-  pushLine(lines, "Archetype B", archetypeBLine);
-  pushLine(lines, "Primary taste A", primaryLeanA);
-  pushLine(lines, "Primary taste B", primaryLeanB);
-  pushLine(lines, "What distinguishes A", contrastA);
-  pushLine(lines, "What distinguishes B", contrastB);
-  pushLine(lines, "Top collections A", topCollectionsA.join(", "));
-  pushLine(lines, "Top collections B", topCollectionsB.join(", "));
-  pushLine(lines, "Shared collections", sharedCollections.join(", "));
-  pushLine(lines, "Shared artists", sharedArtists.join(", "));
-  pushLine(lines, "Exact overlapping NFTs", exactCount);
-  pushLine(lines, "Chemistry score", chemistryScore);
-  pushLine(lines, "Chemistry label", chemistryLabel);
-
-  lines.push("");
-  lines.push("Before writing, identify the relationship dynamic:");
-  lines.push("- Same instinct, different expression");
-  lines.push("- Different instincts, shared sensitivity");
-  lines.push("- Distant, but connected by a deeper thread");
-  lines.push("- Parallel, but rarely intersecting");
-  lines.push("");
-  lines.push("Then write the five-part interpretation.");
-
-  return lines.join("\n");
+    .slice(0, maxItems);
 }
 
 function safeOutput() {
-  return NextResponse.json({ headline: "", summary: "" }, { status: 200 });
+  return NextResponse.json(
+    {
+      headline: "A shared signal, seen from different angles.",
+      summary:
+        "There is enough overlap here to suggest a real point of contact, but not enough reliable context to turn that signal into a full interpretation. What stands out is not a single shared category or collection, but the possibility that both collectors are responding to a similar cultural frequency from different positions.\n\nThat kind of match is often more interesting than simple sameness. It leaves room for difference, distance, and recognition without forcing the comparison to say more than the data can support.",
+    },
+    { status: 200 },
+  );
 }
 
-export async function POST(req: Request) {
+function buildPrompt(payload: InterpretRequest): string {
+  const nameA = sanitizeString(payload.nameA, 80) || "Collector A";
+  const nameB = sanitizeString(payload.nameB, 80) || "Collector B";
+  const archetypeA = sanitizeString(payload.archetypeA, 120);
+  const archetypeB = sanitizeString(payload.archetypeB, 120);
+  const chemistryLabel = sanitizeString(payload.chemistryLabel, 80);
+  const chemistryScore = sanitizeNumber(payload.chemistryScore);
+  const profileLineA = sanitizeString(payload.profileLineA, 300);
+  const profileLineB = sanitizeString(payload.profileLineB, 300);
+  const primaryLeanA = sanitizeString(payload.primaryLeanA, 160);
+  const primaryLeanB = sanitizeString(payload.primaryLeanB, 160);
+  const contrastA = sanitizeString(payload.contrastA, 160);
+  const contrastB = sanitizeString(payload.contrastB, 160);
+  const topCollectionsA = sanitizeList(payload.topCollectionsA);
+  const topCollectionsB = sanitizeList(payload.topCollectionsB);
+  const sharedCollections = sanitizeList(payload.sharedCollections);
+  const sharedArtists = sanitizeList(payload.sharedArtists);
+  const exactCount = sanitizeNumber(payload.exactCount);
+
+  return `Write a Collector Chemistry interpretation using only the inputs below.
+
+Collectors:
+- ${nameA}
+- ${nameB}
+
+Chemistry:
+- Label: ${chemistryLabel || "Unknown"}
+- Score: ${chemistryScore ?? "Unknown"}
+- Exact shared collection count: ${exactCount ?? "Unknown"}
+
+${nameA}:
+- Archetype: ${archetypeA || "Unknown"}
+- Profile line: ${profileLineA || "Unknown"}
+- Primary lean: ${primaryLeanA || "Unknown"}
+- Contrast: ${contrastA || "Unknown"}
+- Top collections: ${topCollectionsA.join(", ") || "Unknown"}
+
+${nameB}:
+- Archetype: ${archetypeB || "Unknown"}
+- Profile line: ${profileLineB || "Unknown"}
+- Primary lean: ${primaryLeanB || "Unknown"}
+- Contrast: ${contrastB || "Unknown"}
+- Top collections: ${topCollectionsB.join(", ") || "Unknown"}
+
+Shared evidence:
+- Shared collections: ${sharedCollections.join(", ") || "None provided"}
+- Shared artists/creators: ${sharedArtists.join(", ") || "None provided"}
+
+Do not overstate the evidence. If the match is thin, write with restraint.
+Return JSON only.`;
+}
+
+export async function POST(request: Request) {
   try {
-    const body = (await req.json()) as InterpretRequest;
-    const userMessage = buildUserMessage(body || {});
-    console.log("INTERPRET_INPUT", userMessage.slice(0, 300));
-    console.log("INTERPRET_USER_MESSAGE", userMessage);
-
-    if (!GROQ_API_KEY) {
-      console.log("INTERPRET_ERROR: missing GROQ_API_KEY");
-      return safeOutput();
-    }
-
-    if (!userMessage.trim()) {
-      console.log("INTERPRET_ERROR: empty user message");
-      return safeOutput();
-    }
+    const payload = (await request.json()) as InterpretRequest;
+    const userPrompt = buildPrompt(payload);
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const timeoutId = setTimeout(() => controller.abort(), 18_000);
 
     try {
-      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      const apiKey = GROQ_API_KEY || OPENAI_API_KEY;
+      const model = GROQ_API_KEY ? GROQ_MODEL : OPENAI_MODEL;
+      const endpoint = GROQ_API_KEY
+        ? "https://api.groq.com/openai/v1/chat/completions"
+        : "https://api.openai.com/v1/chat/completions";
+
+      if (!apiKey) return safeOutput();
+
+      const response = await fetch(endpoint, {
         method: "POST",
+        signal: controller.signal,
         headers: {
+          Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
-          Authorization: `Bearer ${GROQ_API_KEY}`,
         },
         body: JSON.stringify({
-          model: GROQ_MODEL,
-          max_tokens: 600,
+          model,
+          temperature: 0.7,
+          response_format: { type: "json_object" },
           messages: [
             { role: "system", content: INTERPRETATION_SYSTEM_PROMPT },
-            { role: "user", content: userMessage },
+            { role: "user", content: userPrompt },
           ],
         }),
-        signal: controller.signal,
       });
 
-      console.log("INTERPRET_STATUS", response.status);
-
       if (!response.ok) {
-        const errorText = await response.text();
-        console.log("INTERPRET_ERROR", errorText);
+        console.log("INTERPRET_API_ERROR", response.status, await response.text());
         return safeOutput();
       }
 
-      const payload = (await response.json()) as {
+      const json = (await response.json()) as {
         choices?: Array<{
           message?: {
             content?: string;
@@ -363,14 +269,8 @@ export async function POST(req: Request) {
         }>;
       };
 
-      const content = payload?.choices?.[0]?.message?.content || "";
-
-      console.log("INTERPRET_RAW_CONTENT", content);
-      if (!content) return safeOutput();
-
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) return safeOutput();
-      const cleaned = jsonMatch[0].trim();
+      const content = json.choices?.[0]?.message?.content || "";
+      const cleaned = content.trim();
 
       let headline = "";
       let summary = "";

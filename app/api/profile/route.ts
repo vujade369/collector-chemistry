@@ -553,7 +553,7 @@ function buildCategoryGroups(nfts: WalletProfileNFT[]): Record<string, {
         const collectionName = resolveCollectionName(nft);
         const imageUrl = extractNFTImageUrl(nft) || nft.contract?.openSeaMetadata?.imageUrl || "";
         const collectionSlug = String(nft.displayCollectionSlug || "").trim().toLowerCase() || undefined;
-        const contractAddress = String(nft.contract?.address || nft.contractAddress || "").trim().toLowerCase() || undefined;
+        const contractAddress = String(nft.contract?.address || "").trim().toLowerCase() || undefined;
         const openseaUrl = collectionSlug
           ? `https://opensea.io/collection/${collectionSlug}`
           : contractAddress
@@ -1041,20 +1041,30 @@ async function fetchMarketAttention(
         if (!Number.isFinite(eth) || eth <= 0) return null;
 
         // Filter out bundle/sweep offers that require selling more than 1 NFT
-        const nftConsideration = data?.protocol_data?.parameters?.consideration?.find(
-          (c) => c.itemType === 4 || c.itemType === 3 // ERC1155 or ERC721 criteria
-        );
-        const nftQuantity = Number(nftConsideration?.startAmount || 1);
-        if (nftQuantity > 1) return null;
+type SeaportConsiderationItem = {
+  itemType?: number;
+  startAmount?: string | number;
+  token?: string;
+};
 
-        const currency = String(data?.price?.currency || "ETH").trim().toUpperCase();
-        const currencyLabel = currency === "WETH" ? "WETH" : "ETH";
+const consideration =
+  (data?.protocol_data?.parameters?.consideration ?? []) as SeaportConsiderationItem[];
 
-        const normalizedContractAddress = normalizeAddress(
-          contractAddress ||
-          data?.protocol_data?.parameters?.consideration?.[0]?.token ||
-          ""
-        );
+const nftConsideration = consideration.find(
+  (c) => c.itemType === 4 || c.itemType === 3 // ERC1155 or ERC721 criteria
+);
+
+const nftQuantity = Number(nftConsideration?.startAmount || 1);
+if (nftQuantity > 1) return null;
+
+const currency = String(data?.price?.currency || "ETH").trim().toUpperCase();
+const currencyLabel = currency === "WETH" ? "WETH" : "ETH";
+
+const normalizedContractAddress = normalizeAddress(
+  contractAddress ||
+    consideration[0]?.token ||
+    ""
+);
 
         return {
           eth,
@@ -1089,7 +1099,7 @@ async function fetchMarketAttention(
         finalTitle = finalTitle || enriched.title || null;
         finalImageUrl = finalImageUrl || enriched.imageUrl || null;
         finalCollectionName = finalCollectionName || enriched.collectionName || null;
-        finalOpenseaUrl = finalOpenseaUrl || enriched.openseaUrl || null;
+        finalOpenseaUrl = finalOpenseaUrl || null;
       }
 
       return {
