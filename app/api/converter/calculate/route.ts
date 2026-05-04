@@ -214,8 +214,9 @@ export async function GET(req: Request) {
   }
 
   const rawCount = estimate.detectedOfferValueETH / floor.floorPriceETH;
-  const count = rawCount < 1 ? Math.round(rawCount * 10) / 10 : Math.round(rawCount);
-  const error = count < 0.1 ? "zero_result" : null;
+  const roundedCount = Math.round(rawCount * 100) / 100;
+  const count = rawCount > 0 && roundedCount === 0 ? 0.01 : roundedCount;
+  const error = rawCount < 0.01 ? "zero_result" : null;
 
   return NextResponse.json({
     targetCollection: { slug, name: metadata.name || slug, imageUrl: metadata.image_url || metadata.imageUrl || null, floorPriceETH: floor.floorPriceETH, openseaUrl: `https://opensea.io/collection/${slug}` },

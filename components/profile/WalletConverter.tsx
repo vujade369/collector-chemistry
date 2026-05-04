@@ -96,6 +96,16 @@ export default function WalletConverter({ wallet, wallets }: { wallet: string; w
 
   if (!walletParam) return null;
 
+  const displayCount = result?.count ?? 0;
+  const displayCountLabel = displayCount >= 1 ? displayCount.toFixed(2).replace(/\.00$/, "") : displayCount.toFixed(2);
+  const wholeCount = Math.floor(displayCount);
+  const fractionalRemainder = displayCount - wholeCount;
+  const visibleFullTiles = Math.min(wholeCount, 6);
+  const showPartialTile = fractionalRemainder > 0.01;
+  const hiddenTileCount = Math.max(0, wholeCount - visibleFullTiles);
+  const partialPercent = Math.max(0, Math.min(100, Math.round(fractionalRemainder * 100)));
+  const tileImage = result?.targetCollection?.imageUrl || "";
+
   return (
     <section className="wallet-converter">
       <div className="converter-intro">
@@ -141,50 +151,35 @@ export default function WalletConverter({ wallet, wallets }: { wallet: string; w
           {phase === "result" ? (
             <>
               <div className={`converter-count${visible ? " visible" : ""}`} style={{ fontSize: "44px", lineHeight: 1.05, fontWeight: 600 }}>
-                ~{result.count} {result.targetCollection?.name}
+                ~{displayCountLabel} {result.targetCollection?.name}
               </div>
-              {result.count > 0 && (
+              {displayCount > 0 && (
                 <>
-                  {(() => {
-                    const fullImages = Math.min(Math.floor(result.count), 5);
-                    const fractional = result.count % 1;
-                    const showFractional = fractional > 0.05 && fullImages < 5;
-                    const overflowCount = Math.floor(result.count) - 5;
-                    const imageUrl = result.targetCollection?.imageUrl || "";
-                    return (
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "12px", flexWrap: "wrap" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                          {Array.from({ length: fullImages }).map((_, index) => (
-                            <img
-                              key={`full-${index}`}
-                              src={imageUrl}
-                              alt={result.targetCollection?.name || "Collection"}
-                              style={{ width: "64px", height: "64px", borderRadius: "10px", objectFit: "cover", background: "#efefef" }}
-                            />
-                          ))}
-                          {showFractional && (
-                            <div style={{ width: `${Math.round(fractional * 64)}px`, height: "64px", overflow: "hidden", borderRadius: "10px", background: "#efefef" }}>
-                              <img
-                                src={imageUrl}
-                                alt={result.targetCollection?.name || "Collection"}
-                                style={{ width: "64px", height: "64px", objectFit: "cover", objectPosition: "left" }}
-                              />
+                  {tileImage ? (
+                    <div className="converter-tiles-wrap">
+                      <div className="converter-tiles">
+                        {Array.from({ length: visibleFullTiles }).map((_, index) => (
+                          <img key={`full-${index}`} src={tileImage} alt={result.targetCollection?.name || "Collection"} className="converter-tile" />
+                        ))}
+                        {showPartialTile && (
+                          <div className="converter-tile converter-tile-partial">
+                            <img src={tileImage} alt={result.targetCollection?.name || "Collection"} className="converter-tile-base" />
+                            <div className="converter-tile-color-fill" style={{ height: `${partialPercent}%` }}>
+                              <img src={tileImage} alt={result.targetCollection?.name || "Collection"} className="converter-tile-color" />
                             </div>
-                          )}
-                        </div>
-                        {overflowCount > 0 && <span style={{ fontSize: "12px", color: "#555" }}>+{overflowCount} more</span>}
+                          </div>
+                        )}
                       </div>
-                    );
-                  })()}
-                  {result.count < 0.1 ? <p className={`converter-caveat${visible ? " visible" : ""}`}>Not quite there yet</p> : null}
-                  {result.count >= 0.1 && result.count < 1 ? (
-                    <p className={`converter-caveat${visible ? " visible" : ""}`}>~{Math.round(result.count * 100)}% of one</p>
+                      {hiddenTileCount > 0 && <span className="converter-tile-more">+{hiddenTileCount} more</span>}
+                    </div>
                   ) : null}
-                  {result.count >= 100 ? <p className={`converter-caveat${visible ? " visible" : ""}`}>You could fill a room.</p> : null}
+                  {displayCount < 0.1 ? <p className={`converter-caveat${visible ? " visible" : ""}`}>Not quite there yet</p> : null}
+                  {displayCount >= 0.1 && displayCount < 1 ? <p className={`converter-caveat${visible ? " visible" : ""}`}>~{Math.round(displayCount * 100)}% of one</p> : null}
+                  {displayCount >= 100 ? <p className={`converter-caveat${visible ? " visible" : ""}`}>You could fill a room.</p> : null}
                 </>
               )}
               <p className={`converter-caveat${visible ? " visible" : ""}`}>Offers detected: {result.offerCount} across {result.checkedNftCount} checked NFTs.</p>
-              <p className={`converter-caveat${visible ? " visible" : ""}`}>Based on current offers across your NFTs and the current entry point for this collection.</p>
+              <p className={`converter-caveat${visible ? " visible" : ""}`}>Based on active ETH/WETH offers across your collections.</p>
               <p className={`converter-caveat${visible ? " visible" : ""}`}>Estimate only. Offers, floors, fees, royalties, and liquidity change.</p>
             </>
           ) : (

@@ -134,6 +134,14 @@
 .converter-collection-name.visible { opacity: 1; }
 .converter-caveat { margin: 0; color: #666; font-size: 11px; opacity: 0; transition: opacity .4s ease .3s; }
 .converter-caveat.visible { opacity: 1; }
+.converter-tiles-wrap { display: flex; align-items: center; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.converter-tiles { display: flex; align-items: center; gap: 8px; }
+.converter-tile { width: 64px; height: 64px; border-radius: 10px; object-fit: cover; background: #efefef; }
+.converter-tile-partial { position: relative; overflow: hidden; border: 1px solid #2c2c2c; }
+.converter-tile-base { width: 100%; height: 100%; object-fit: cover; filter: grayscale(1) saturate(0.2); }
+.converter-tile-color-fill { position: absolute; left: 0; right: 0; bottom: 0; overflow: hidden; }
+.converter-tile-color { width: 100%; height: 64px; object-fit: cover; object-position: bottom; position: absolute; left: 0; bottom: 0; }
+.converter-tile-more { font-size: 12px; color: #777; }
 .converter-zero { margin: 0; color: #a8a49d; font-size: 14px; }
 .converter-reset { margin-top: 4px; border: none; background: transparent; color: #888; font-size: 12px; text-align: left; padding: 0; cursor: pointer; }
 
