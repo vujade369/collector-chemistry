@@ -1,0 +1,132 @@
+version: 1
+project: collector-chemistry
+
+entrypoints:
+  canonical: AGENTS.md
+  orchestrator: .agents/agents/ORCHESTRATOR.md
+
+product_boundaries:
+  forbidden_modes:
+    - finance_dashboard
+    - marketplace
+    - leaderboard
+    - generic_analytics
+    - investment_advice
+
+required_task_contract:
+  pre_edit:
+    - task_type
+    - task_size
+    - docs_read
+    - files_to_touch
+    - files_not_to_touch
+    - risk_areas
+  post_edit:
+    - files_changed
+    - behavior_changed
+    - behavior_preserved
+    - checks_run
+    - known_issues
+    - outside_scope_changes
+
+task_types:
+  product_ui:
+    agent: .agents/agents/product-ui-agent.md
+    required_docs:
+      - docs/PRODUCT_SOUL.md
+      - docs/VISUAL_REFERENCES.md
+      - docs/DESIGN_SYSTEM.md
+      - docs/DISPLAY_CONTRACT.md
+      - docs/COMPONENT_MAP.md
+    allowed_paths:
+      - app/**
+      - components/**
+      - docs/**
+    forbidden_paths:
+      - app/api/**
+      - lib/data/**
+      - lib/opensea/**
+    checks:
+      - npm run lint
+      - npm run build
+
+  data_api:
+    agent: .agents/agents/data-api-agent.md
+    required_docs:
+      - docs/ARCHITECTURE.md
+      - docs/DATA_MODEL.md
+      - docs/DATA_SOURCES.md
+      - docs/API_PATTERNS.md
+      - docs/OPENSEA_INTEGRATION.md
+      - docs/KNOWN_ISSUES.md
+    allowed_paths:
+      - app/api/**
+      - lib/**
+      - docs/**
+    forbidden_paths:
+      - components/**
+      - app/**/page.tsx
+    checks:
+      - npm run lint
+      - npm run build
+
+  code_health:
+    agent: .agents/agents/code-health-agent.md
+    required_docs:
+      - docs/ARCHITECTURE.md
+      - docs/COMPONENT_MAP.md
+      - docs/BUILD_LOG.md
+      - docs/KNOWN_ISSUES.md
+    allowed_paths:
+      - app/**
+      - components/**
+      - lib/**
+      - docs/**
+    forbidden_behavior:
+      - api_shape_change
+      - visual_redesign
+      - product_copy_rewrite
+    checks:
+      - npm run lint
+      - npm run build
+
+  docs:
+    agent: .agents/agents/ORCHESTRATOR.md
+    required_docs:
+      - AGENTS.md
+      - docs/README.md
+      - docs/_meta/docs-index.yaml
+    allowed_paths:
+      - docs/**
+      - .agents/**
+      - README.md
+      - AGENTS.md
+      - CLAUDE.md
+    forbidden_behavior:
+      - product_boundary_change_without_approval
+      - deleting_canonical_docs_without_replacement
+    checks:
+      - npm run docs:check
+      - npm run agents:check
+
+  mixed:
+    agent: .agents/agents/ORCHESTRATOR.md
+    required_docs:
+      - AGENTS.md
+      - docs/PRODUCT_SOUL.md
+      - docs/ARCHITECTURE.md
+      - docs/DATA_MODEL.md
+      - docs/DISPLAY_CONTRACT.md
+      - docs/COMPONENT_MAP.md
+      - docs/KNOWN_ISSUES.md
+    allowed_paths:
+      - app/**
+      - components/**
+      - lib/**
+      - docs/**
+    requires_phase_plan: true
+    checks:
+      - npm run lint
+      - npm run build
+      - npm run docs:check
+      - npm run agents:check

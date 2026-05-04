@@ -1,0 +1,44 @@
+version: 1
+skill: opensea
+mode: read_only
+
+allowed:
+  - get_collections
+  - get_items
+  - get_nft_balances
+  - get_activity
+  - account_lookup
+  - search_collections
+  - search_items
+  - fetch_collection_metadata
+  - fetch_nft_metadata
+  - fetch_collection_stats_for_context
+
+allowed_with_caution:
+  - get_best_listing
+  - get_best_offer
+  - get_floor_price
+
+forbidden:
+  - get_token_swap_quote
+  - swaps_quote
+  - fulfill_listing
+  - fulfill_offer
+  - mint_action
+  - deploy_seadrop_contract
+  - create_listing
+  - create_offer
+  - sign_transaction
+  - submit_transaction
+  - request_wallet_signature
+  - configure_private_key
+  - configure_privy_signing_wallet
+
+secrets:
+  allowed:
+    - OPENSEA_API_KEY
+  forbidden:
+    - PRIVATE_KEY
+    - PRIVY_APP_SECRET
+    - PRIVY_WALLET_ID
+    - wallet_seed_phrase

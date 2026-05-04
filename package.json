@@ -6,7 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "docs:check": "node scripts/validate-docs-index.mjs",
+    "agents:check": "node scripts/validate-agent-registry.mjs",
+    "skills:check": "node scripts/validate-opensea-policy.mjs",
+    "check": "npm run lint && npm run build && npm run docs:check && npm run agents:check && npm run skills:check"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
@@ -21,7 +25,9 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
+    "fast-glob": "^3.3.3",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "yaml": "^2.8.4"
   }
 }
