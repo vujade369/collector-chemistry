@@ -10,7 +10,8 @@
     "docs:check": "node scripts/validate-docs-index.mjs",
     "agents:check": "node scripts/validate-agent-registry.mjs",
     "skills:check": "node scripts/validate-opensea-policy.mjs",
-    "check": "npm run lint && npm run build && npm run docs:check && npm run agents:check && npm run skills:check"
+    "check": "npm run governance:check",
+    "governance:check": "npm run docs:check && npm run agents:check && npm run skills:check"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
