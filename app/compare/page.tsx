@@ -1254,10 +1254,10 @@ function ComparePageContent() {
         {/* Input form */}
         <section className="cc-input-section">
           <div className="cc-input-header">
-            <p className="cc-eyebrow">Collector Chemistry</p>
-            <h1 className="cc-hero-title">Compare two collectors.</h1>
+            <p className="cc-eyebrow">Constellate</p>
+            <h1 className="cc-hero-title">Compare two wallets.</h1>
             <p className="cc-hero-sub">
-              Paste two wallet addresses or ENS names to see where their taste overlaps.
+              Paste two wallets or ENS names to see where their patterns overlap.
             </p>
           </div>
 
@@ -1305,7 +1305,7 @@ function ComparePageContent() {
             {error && <p className="cc-error">{error}</p>}
             {loading && (
               <p className="cc-loading">
-                Pulling holdings, mapping overlap, and scoring chemistry...
+                Reading both wallets and mapping overlap...
               </p>
             )}
           </form>
@@ -1328,7 +1328,7 @@ function ComparePageContent() {
                 </div>
 
                 <div className="cc-score-center">
-                  <p className="cc-score-eyebrow">chemistry</p>
+                  <p className="cc-score-eyebrow">recognition</p>
                   <p className="cc-score-label">{data.scoring.label}</p>
                 </div>
 

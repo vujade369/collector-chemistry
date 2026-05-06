@@ -78,7 +78,7 @@ export default function HomePage() {
           className={`fade-item eyebrow ${isVisible ? "visible" : ""}`}
           style={{ transitionDelay: "0ms", marginBottom: "24px", color: "var(--text-dimmer)" }}
         >
-          COLLECTOR CHEMISTRY
+          CONSTELLATE
         </div>
 
         <h1

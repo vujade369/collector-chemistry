@@ -461,7 +461,7 @@ export default function ProfilePage() {
 
   function originLabel(): string {
     if (!firstMint) return "Origin Signal";
-    if (firstMint.timestamp) return "Earliest Known NFT";
+    if (firstMint.timestamp) return "Origin Signal";
     return "Origin Signal";
   }
 
@@ -554,11 +554,11 @@ export default function ProfilePage() {
               </article>
 
               <article className="profile-panel profile-hero-left">
-                <p className="profile-eyebrow">Collector</p>
+                <p className="profile-eyebrow">Your Constellation</p>
                 <h1 className="profile-display-name">{headerDisplayName}</h1>
                 <p className="profile-address">{shortenAddress(resolvedWallet)}</p>
                 <p className="profile-eyebrow" style={{ marginTop: 8 }}>
-                  Class
+                  Pattern
                 </p>
                 <p className="profile-class-label">{profile.focusLabel || "Collector"}</p>
                 {profile.collectorIdentityLabel && (
@@ -593,7 +593,7 @@ export default function ProfilePage() {
                     )}
                   </div>
                   <div className="profile-first-mint-plaque-content">
-                    <p className="profile-eyebrow">First Mint</p>
+                    <p className="profile-eyebrow">Origin Point</p>
                     <p className="profile-first-mint-date">
                       {formatCollectorSince(firstMint?.timestamp)}
                     </p>
@@ -620,7 +620,7 @@ export default function ProfilePage() {
                     )}
                   </div>
                   <div className="profile-first-mint-plaque-content">
-                    <p className="profile-eyebrow">First Mint</p>
+                    <p className="profile-eyebrow">Origin Point</p>
                     <p className="profile-first-mint-date">
                       {formatCollectorSince(firstMint?.timestamp)}
                     </p>
@@ -637,7 +637,7 @@ export default function ProfilePage() {
             <section className="profile-stats-grid">
               <article className="profile-panel profile-stat-card profile-stat-card--holdings">
                 <p className="profile-stat-value">{profile.totalNFTs || 0}</p>
-                <p className="profile-section-label">Pieces Held</p>
+                <p className="profile-section-label">Pieces Kept</p>
               </article>
               <article className="profile-panel profile-stat-card profile-stat-card--collections">
                 <p className="profile-stat-value">{collectionCount}</p>
@@ -651,10 +651,39 @@ export default function ProfilePage() {
               </article>
             </section>
 
-            {/* ── Key Signals ── */}
+            {/* ── The Read ── */}
+            {hasInterpretation && (
+              <section className="profile-panel profile-interpretation-panel">
+                <p className="profile-section-label">The Read</p>
+                {profile.patternLine && (
+                  <p className="profile-pattern-quote">{profile.patternLine}</p>
+                )}
+                {profile.identityParagraph && (
+                  <p className="profile-interpretation-copy">
+                    {profile.identityParagraph}
+                  </p>
+                )}
+                {behavioralReads.length > 0 && (
+                  <div className="profile-tag-row">
+                    {behavioralReads.map((read, idx) => (
+                      <span key={`${read}-${idx}`} className="profile-tag">
+                        {read}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {profile.whatStandsOut && (
+                  <p className="profile-interpretation-standout">
+                    {profile.whatStandsOut}
+                  </p>
+                )}
+              </section>
+            )}
+
+            {/* ── Signal Points ── */}
             {showKeySignals && (
               <section className="profile-panel">
-                <p className="profile-section-label">Key Signals</p>
+                <p className="profile-section-label">Signal Points</p>
                 <div className="profile-key-signals">
                   {showFirstMintSignal && (
                     <article className="signal-card signal-card--first-mint">
@@ -709,7 +738,7 @@ export default function ProfilePage() {
                       </div>
                       <p className="signal-label">
                         {highestOffer?.ethAmountLabel
-                          ? "Highest Current Offer"
+                          ? "Current Attention"
                           : "Market Attention"}
                       </p>
                       {highestOffer && (
@@ -794,34 +823,7 @@ export default function ProfilePage() {
               </section>
             )}
 
-            {/* ── Interpretation ── */}
-            {hasInterpretation && (
-              <section className="profile-panel profile-interpretation-panel">
-                <p className="profile-section-label">Interpretation</p>
-                {profile.patternLine && (
-                  <p className="profile-pattern-quote">{profile.patternLine}</p>
-                )}
-                {profile.identityParagraph && (
-                  <p className="profile-interpretation-copy">
-                    {profile.identityParagraph}
-                  </p>
-                )}
-                {behavioralReads.length > 0 && (
-                  <div className="profile-tag-row">
-                    {behavioralReads.map((read, idx) => (
-                      <span key={`${read}-${idx}`} className="profile-tag">
-                        {read}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                {profile.whatStandsOut && (
-                  <p className="profile-interpretation-standout">
-                    {profile.whatStandsOut}
-                  </p>
-                )}
-              </section>
-            )}
+
 
             {/* ── Taste System ── */}
             <section className="profile-pattern-grid">
@@ -844,7 +846,7 @@ export default function ProfilePage() {
               </article>
 
               <article className="profile-panel">
-                <p className="profile-section-label">Taste DNA</p>
+                <p className="profile-section-label">Taste Pattern</p>
                 <div className="taste-bars">
                   {tasteSlices.slice(0, 6).map((slice) => (
                     <div className="taste-bar-row" key={slice.label}>
@@ -885,7 +887,7 @@ export default function ProfilePage() {
             {/* ── Category Explorer (full width) ── */}
             {categoryExplorerItems.length > 0 && (
               <section className="profile-panel">
-                <p className="profile-section-label">Explore by Category</p>
+                <p className="profile-section-label">Explore the Worlds</p>
                 <div className="category-tab-row">
                   {categoryExplorerItems.map((slice) => (
                     <button
@@ -953,7 +955,7 @@ export default function ProfilePage() {
 
             {/* ── Top Collections ── */}
             <section className="profile-panel">
-              <p className="profile-section-label">Top Collections</p>
+              <p className="profile-section-label">Where This Wallet Returns</p>
               <div className="profile-collection-list">
                 {topCollectionsWithImages.map((collection, index) => {
                   const thumbUrl = collection.resolvedImageUrl;
@@ -1076,11 +1078,11 @@ export default function ProfilePage() {
 
             {/* ── Compare CTA ── */}
             <section className="profile-panel profile-compare-cta">
-              <p className="profile-section-label">Compare & Chemistry</p>
-              <h2>Find your collector counterpart.</h2>
+              <p className="profile-section-label">Find Overlap</p>
+              <h2>See where your patterns overlap.</h2>
               <p>
-                See where your taste overlaps or clashes. Find your people. Or your
-                nemesis.
+                Compare with another wallet to find shared worlds and unexpected
+                points of recognition.
               </p>
               <form onSubmit={handleCompareSubmit} className="profile-compare-form">
                 <input

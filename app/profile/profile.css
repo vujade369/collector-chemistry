@@ -7,7 +7,7 @@
 .profile-eyebrow, .profile-section-label { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: #555; margin: 0; }
 .profile-display-name { font-size: 36px; font-weight: 300; letter-spacing: -0.03em; color: #f0ede6; margin: 0; line-height: 1.05; }
 .profile-address { margin: 0; color: rgba(216,213,206,0.56); font-size: 11px; }
-.profile-class-label { color: #ff3399; margin: 0; font-size: 12px; }
+.profile-class-label { color: #ff3399; margin: 0; font-size: 13px; line-height: 1.45; }
 .profile-pattern-copy, .profile-muted-copy { margin: 0; color: #a8a49d; }
 
 .profile-loading-panel { min-height: 52vh; display: grid; place-items: center; gap: 12px; text-align: center; background: radial-gradient(circle at center, rgba(149,117,255,0.08), transparent 60%), #111; border: 0.5px solid #222; border-radius: 18px; }
@@ -24,6 +24,7 @@
 
 .profile-hero-composed { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 14px; align-items: stretch; }
 .profile-hero-avatar-card, .profile-hero-left { background: rgba(17,17,17,0.88); border-color: #252525; }
+.profile-hero-left { align-content: center; padding: 28px; background: radial-gradient(circle at 90% 12%, rgba(255,51,153,0.06), transparent 38%), rgba(17,17,17,0.9); }
 .profile-hero-avatar-card { padding: 0; overflow: hidden; height: 100%; }
 .profile-hero-image { width: 100%; height: 100%; min-height: 100%; border-radius: 14px; border: 0.5px solid #2e2e2e; object-fit: cover; background: #0f0f0f; }
 .profile-hero-avatar-card .profile-hero-image { min-height: 200px; }
@@ -38,10 +39,10 @@
 .profile-first-mint-date { margin: 0; font-size: 30px; font-weight: 300; color: #f0ede6; letter-spacing: -0.03em; }
 .profile-first-mint-meta { margin: 0; color: #666; font-size: 11px; }
 
-.profile-stats-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.profile-stat-card { border-radius: 14px; padding: 20px; position: relative; overflow: hidden; }
+.profile-stats-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.profile-stat-card { border-radius: 14px; padding: 17px 18px; position: relative; overflow: hidden; background: rgba(17,17,17,0.72); }
 .profile-stat-card::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px; opacity: 0.6; }
-.profile-stat-value { margin: 0; font-size: 32px; letter-spacing: -0.03em; font-weight: 300; color: #f0ede6; }
+.profile-stat-value { margin: 0; font-size: 28px; letter-spacing: -0.03em; font-weight: 300; color: #f0ede6; }
 .profile-stat-card--holdings .profile-stat-value { color: #ff3399; }
 .profile-stat-card--holdings::before { background: #ff3399; }
 .profile-stat-card--collections .profile-stat-value { color: #29b6f6; }
@@ -174,12 +175,12 @@
 .profile-tag { display: inline-block; padding: 4px 11px; border-radius: 20px; border: 0.5px solid #2e2e2e; background: #141414; font-size: 11px; letter-spacing: 0.01em; color: #c8c5be; }
 .profile-collector-identity-line { margin: 0; font-size: 12px; color: #a8a49d; }
 
-.profile-interpretation-panel { padding: 28px; border-left: 2px solid rgba(255,51,153,0.25); }
+.profile-interpretation-panel { padding: 30px; border-left: 2px solid rgba(255,51,153,0.34); background: radial-gradient(circle at 0% 0%, rgba(255,51,153,0.07), transparent 42%), #111; }
 .profile-interpretation-copy { margin: 0; font-size: 14px; color: #a8a49d; line-height: 1.75; max-width: 58ch; }
 .profile-interpretation-standout { margin: 0; font-size: 13px; font-style: italic; color: #666; }
 .profile-tag-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .profile-tag { padding: 4px 11px; border-radius: 20px; border: 0.5px solid #2e2e2e; background: #141414; color: #c8c5be; font-size: 11px; letter-spacing: 0.01em; }
-.profile-pattern-quote { line-height: 1.2; }
+.profile-pattern-quote { margin: 0; font-size: 28px; line-height: 1.18; letter-spacing: -0.025em; font-weight: 300; color: #f0ede6; max-width: 18ch; }
 
 .category-tab-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .category-tab-btn { background: #141414; border: 0.5px solid #2e2e2e; color: #666; padding: 5px 12px; border-radius: 20px; font-size: 11px; cursor: pointer; }
