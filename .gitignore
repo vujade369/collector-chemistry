@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Obsidian local workspace state
+vault/.obsidian/workspace.json
+vault/.obsidian/workspace-mobile.json
