@@ -312,7 +312,11 @@ export default function WalletConverter({ wallet, wallets }: { wallet: string; w
   const offerValueLabel = formatEth(result?.detectedOfferValueETH);
   const floorPriceLabel = formatEth(result?.targetCollection?.floorPriceETH);
   const showEquation = Boolean(offerValueLabel && floorPriceLabel && result?.targetCollection?.name);
-  const proofLine = result ? `Found ${result.offerCount} active offers across ${result.checkedNftCount} unique NFTs checked.` : "";
+  const proofLine = result
+    ? result.offerCount === 1
+      ? `1 NFT in this wallet currently has an actionable ETH/WETH offer totaling ${offerValueLabel ?? `${result.detectedOfferValueETH} ETH`}.`
+      : `${result.offerCount} NFTs in this wallet currently have actionable ETH/WETH offers totaling ${offerValueLabel ?? `${result.detectedOfferValueETH} ETH`}.`
+    : "";
 
   return (
     <section className="wallet-converter">
@@ -426,7 +430,9 @@ export default function WalletConverter({ wallet, wallets }: { wallet: string; w
                 {proofLine}
               </p>
 
-              <p className={`converter-caveat${visible ? " visible" : ""}`}>Estimate only. Offers, floors, fees, royalties, and liquidity can move.</p>
+              <p className={`converter-caveat${visible ? " visible" : ""}`}>
+                Checked {result.checkedNftCount} unique NFTs. Estimate only. Offers, floors, fees, and royalties can change.
+              </p>
             </>
           ) : (
             <p className="converter-zero">{errorMessage}</p>
