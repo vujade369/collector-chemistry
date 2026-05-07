@@ -223,11 +223,13 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
   utility: [
     "utility",
     "membership",
+    "member",
     "pass",
-    "access",
+    "access pass",
     "ticket",
+    "claim",
     "allowlist",
-    "whitelist",
+    "gated",
     "redeem",
   ],
   music: [
@@ -364,6 +366,88 @@ function collectTraitKeys(nft: WalletProfileNFT) {
   ];
 }
 
+function getRawClassifierText(nft: WalletProfileNFT) {
+  return [
+    nft.displayCollectionName,
+    nft.displayCollectionSlug,
+    nft.contractMetadata?.name,
+    nft.contract?.name,
+    typeof nft.collection === "object" ? nft.collection?.name : nft.collection,
+    nft.metadata?.collection,
+    nft.metadata?.collection_name,
+    nft.raw?.metadata?.collection,
+    nft.raw?.metadata?.collection_name,
+    nft.metadata?.name,
+    nft.metadata?.description,
+    nft.raw?.metadata?.name,
+    nft.raw?.metadata?.description,
+    nft.name,
+    nft.title,
+    nft.description,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function includesAnyText(value: string, terms: string[]) {
+  return terms.some((term) => value.includes(term));
+}
+
+function hasFineArtProtection(classifierText: string) {
+  const knownArtCues = ["krista kim", "mendezmendez", "xsullo", "signature series"];
+  if (includesAnyText(classifierText, knownArtCues)) return true;
+
+  const strongArtCues = [
+    "fine art",
+    "artwork",
+    "artist",
+    "photography",
+    "photograph",
+    "edition",
+  ];
+  if (includesAnyText(classifierText, strongArtCues)) return true;
+
+  const seriesArtPairingCues = [
+    "artist",
+    "photography",
+    "photograph",
+    "edition",
+    "gallery",
+    "artwork",
+    "fine art",
+  ];
+  return classifierText.includes("series") && includesAnyText(classifierText, seriesArtPairingCues);
+}
+
+function hasDomainCue(rawClassifierText: string, classifierText: string) {
+  const raw = String(rawClassifierText || "").toLowerCase();
+  return (
+    includesAnyText(classifierText, [
+      "ethereum name service",
+      "unstoppable domains",
+      "domain",
+      "domains",
+    ]) ||
+    /\bens\b/.test(raw) ||
+    /\.(eth|nft)(\s|$|[^\w])/i.test(raw)
+  );
+}
+
+function hasPfpIdentityCue(classifierText: string) {
+  return includesAnyText(classifierText, [
+    "pfp",
+    "avatar",
+    "profile picture",
+    "character",
+    "characters",
+    "ape",
+    "punk",
+    "doodle",
+    "cat",
+    "penguin",
+  ]);
+}
+
 function getAttributeText(rawAttributes: unknown) {
   const attributes = toAttributeArray(rawAttributes);
   if (!attributes.length) return "";
@@ -416,12 +500,25 @@ export function classifyCategoryWithSource(nft: WalletProfileNFT): {
     }
   }
 
+  const rawClassifierText = getRawClassifierText(nft);
+  const classifierText = normalizeText(rawClassifierText);
+  if (hasFineArtProtection(classifierText)) {
+    return { category: "fine_art", source: "keyword" };
+  }
+
+  if (hasDomainCue(rawClassifierText, classifierText)) {
+    return { category: "utility", source: "keyword" };
+  }
+
   const traitKeys = collectTraitKeys(nft);
   for (const signal of TRAIT_DENSITY_SIGNALS) {
     const matchingKeys = new Set<string>();
     for (const traitKey of traitKeys) {
       const matchedKey = signal.keys.find((key) => traitKey === key || traitKey.includes(key));
       if (matchedKey) matchingKeys.add(matchedKey);
+    }
+    if (signal.category === "pfp" && !hasPfpIdentityCue(classifierText)) {
+      continue;
     }
     if (matchingKeys.size >= signal.threshold) {
       return { category: signal.category, source: "keyword" };
