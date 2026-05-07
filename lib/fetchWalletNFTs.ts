@@ -67,6 +67,18 @@ export type WalletNFTFetchDebug = {
   openSeaVisibleFilterCacheHit: boolean;
   openSeaVisibleFilterCacheAgeMs: number | null;
   openSeaVisibleFilterCacheTtlMs: number;
+  inventorySource: "alchemy_filtered" | "opensea_visible_fallback";
+  inventoryComplete: boolean;
+  visibilitySource: "opensea_visible_filter" | "opensea_include_hidden_false";
+  openseaFallbackUsed: boolean;
+  openseaFallbackMs: number;
+  openseaFallbackPageCount: number;
+  openseaFallbackNFTCount: number;
+  openseaFallbackReason: string | null;
+  openseaFallbackSkippedRows: number;
+  openseaFallbackSkipReason: string | null;
+  openseaFallbackSampleNFTs: WalletOwnerNFT[];
+  metadataConfidence: "normal" | "reduced";
 };
 
 export type WalletNFTFetchResult<T extends WalletOwnerNFT = WalletOwnerNFT> = {
@@ -100,6 +112,18 @@ function createFetchDebug(): WalletNFTFetchDebug {
     openSeaVisibleFilterCacheHit: false,
     openSeaVisibleFilterCacheAgeMs: null,
     openSeaVisibleFilterCacheTtlMs: OPENSEA_VISIBLE_TOKEN_CACHE_TTL_MS,
+    inventorySource: "alchemy_filtered",
+    inventoryComplete: false,
+    visibilitySource: "opensea_visible_filter",
+    openseaFallbackUsed: false,
+    openseaFallbackMs: 0,
+    openseaFallbackPageCount: 0,
+    openseaFallbackNFTCount: 0,
+    openseaFallbackReason: null,
+    openseaFallbackSkippedRows: 0,
+    openseaFallbackSkipReason: null,
+    openseaFallbackSampleNFTs: [],
+    metadataConfidence: "normal",
   };
 }
 
@@ -131,6 +155,30 @@ function aggregateFetchDebug(debugs: WalletNFTFetchDebug[]): WalletNFTFetchDebug
     if (!aggregate.openSeaVisibleFilterFallbackReason && debug.openSeaVisibleFilterFallbackReason) {
       aggregate.openSeaVisibleFilterFallbackReason = debug.openSeaVisibleFilterFallbackReason;
     }
+    if (debug.inventorySource === "opensea_visible_fallback") {
+      aggregate.inventorySource = "opensea_visible_fallback";
+    }
+    aggregate.inventoryComplete = aggregate.inventoryComplete || debug.inventoryComplete;
+    if (debug.visibilitySource === "opensea_include_hidden_false") {
+      aggregate.visibilitySource = "opensea_include_hidden_false";
+    }
+    aggregate.openseaFallbackUsed = aggregate.openseaFallbackUsed || debug.openseaFallbackUsed;
+    aggregate.openseaFallbackMs = Math.max(aggregate.openseaFallbackMs, debug.openseaFallbackMs);
+    aggregate.openseaFallbackPageCount += debug.openseaFallbackPageCount;
+    aggregate.openseaFallbackNFTCount += debug.openseaFallbackNFTCount;
+    aggregate.openseaFallbackSkippedRows += debug.openseaFallbackSkippedRows;
+    if (!aggregate.openseaFallbackReason && debug.openseaFallbackReason) {
+      aggregate.openseaFallbackReason = debug.openseaFallbackReason;
+    }
+    if (!aggregate.openseaFallbackSkipReason && debug.openseaFallbackSkipReason) {
+      aggregate.openseaFallbackSkipReason = debug.openseaFallbackSkipReason;
+    }
+    if (!aggregate.openseaFallbackSampleNFTs.length && debug.openseaFallbackSampleNFTs.length) {
+      aggregate.openseaFallbackSampleNFTs = debug.openseaFallbackSampleNFTs;
+    }
+    if (debug.metadataConfidence === "reduced") {
+      aggregate.metadataConfidence = "reduced";
+    }
   }
   return aggregate;
 }
@@ -140,6 +188,14 @@ function getValidAlchemyPageKey(value: unknown): string | undefined {
   const trimmed = value.trim();
   if (!trimmed || trimmed.toLowerCase() === "null") return undefined;
   return trimmed;
+}
+
+function shouldAttemptOpenSeaFallback(params: {
+  pageKey: string | undefined;
+  fetchedCount: number;
+  pageCount: number;
+}) {
+  return Boolean(params.pageKey && params.fetchedCount > 0 && params.pageCount > 0);
 }
 
 export async function fetchWalletNFTsWithDebug<T extends WalletOwnerNFT = WalletOwnerNFT>(
@@ -161,6 +217,38 @@ export async function fetchWalletNFTsWithDebug<T extends WalletOwnerNFT = Wallet
   let pageKey: string | undefined = undefined;
 
   const alchemyStartMs = Date.now();
+  const attemptOpenSeaFallback = async (fallbackReason: string): Promise<WalletNFTFetchResult<T> | null> => {
+    debug.alchemyFetchMs = Date.now() - alchemyStartMs;
+    debug.totalFetchedNFTs = allNfts.length;
+    debug.alchemyBreakReason = fallbackReason;
+
+    const ensResolveStartMs = Date.now();
+    const resolvedAddress = await resolveEnsToAddress(owner);
+    debug.ensResolveMs = Date.now() - ensResolveStartMs;
+
+    const fallback = await fetchOpenSeaVisibleInventoryFallback<T>(resolvedAddress);
+    debug.openseaFallbackMs = fallback.elapsedMs;
+    debug.openseaFallbackPageCount = fallback.pageCount;
+    debug.openseaFallbackNFTCount = fallback.nftCount;
+    debug.openseaFallbackReason = fallback.reason;
+    debug.openseaFallbackSkippedRows = fallback.skippedRows;
+    debug.openseaFallbackSkipReason = fallback.skipReason;
+    debug.openseaFallbackSampleNFTs = fallback.sampleNFTs;
+
+    if (!fallback.nfts) {
+      return null;
+    }
+
+    debug.inventorySource = "opensea_visible_fallback";
+    debug.inventoryComplete = true;
+    debug.visibilitySource = "opensea_include_hidden_false";
+    debug.openseaFallbackUsed = true;
+    debug.metadataConfidence = "reduced";
+    debug.visibleTokenCount = fallback.nftCount;
+    debug.returnedNFTs = fallback.nfts.length;
+    return { nfts: fallback.nfts, debug };
+  };
+
   do {
     const params = new URLSearchParams({
       owner,
@@ -188,6 +276,10 @@ export async function fetchWalletNFTsWithDebug<T extends WalletOwnerNFT = Wallet
       const fetchErr = error as Error & {
         cause?: { message?: string; code?: string };
       };
+      if (shouldAttemptOpenSeaFallback({ pageKey, fetchedCount: allNfts.length, pageCount: debug.alchemyPageCount })) {
+        const fallbackResult = await attemptOpenSeaFallback("alchemy_page_fetch_failed");
+        if (fallbackResult) return fallbackResult;
+      }
       throw new WalletFetchError({
         message: "fetch failed",
         errorType: "UPSTREAM_FETCH_FAILED",
@@ -207,6 +299,13 @@ export async function fetchWalletNFTsWithDebug<T extends WalletOwnerNFT = Wallet
 
     if (!res.ok) {
       const text = await res.text();
+      if (shouldAttemptOpenSeaFallback({ pageKey, fetchedCount: allNfts.length, pageCount: debug.alchemyPageCount })) {
+        const reason = text.toLowerCase().includes("null")
+          ? "alchemy_page_key_rejected"
+          : `alchemy_page_request_failed_${res.status}`;
+        const fallbackResult = await attemptOpenSeaFallback(reason);
+        if (fallbackResult) return fallbackResult;
+      }
       throw new WalletFetchError({
         message: `Alchemy request failed: ${res.status} ${text.slice(0, 180)}`,
         errorType: "UPSTREAM_FETCH_FAILED",
@@ -258,6 +357,7 @@ export async function fetchWalletNFTsWithDebug<T extends WalletOwnerNFT = Wallet
   });
   debug.normalizationMs = Date.now() - normalizationStartMs;
   debug.returnedNFTs = nfts.length;
+  debug.inventoryComplete = true;
 
   return { nfts, debug };
 }
@@ -349,6 +449,9 @@ export async function fetchAndMergeWalletNFTsWithDebug<T extends WalletOwnerNFT 
     .filter((entry): entry is WalletNFTFetchDebug => Boolean(entry));
   const debug: WalletMergeFetchDebug = {
     ...aggregateFetchDebug(successfulDebug),
+    inventoryComplete:
+      successfulDebug.length === uniqueWallets.length &&
+      successfulDebug.every((entry) => entry.inventoryComplete),
     returnedNFTs: mergedNFTs.length,
     wallets: walletDebug,
   };
@@ -407,13 +510,40 @@ async function resolveEnsToAddress(ensOrAddress: string): Promise<string> {
 type OpenSeaAccountNFT = {
   identifier?: string | number;
   token_id?: string | number;
-  contract?: string | { address?: string };
+  token_standard?: string;
+  tokenStandard?: string;
+  token_type?: string;
+  contract?: string | { address?: string; name?: string; token_standard?: string; token_type?: string };
   contract_address?: string;
+  collection?: string | {
+    slug?: string;
+    name?: string;
+    category?: string;
+    image_url?: string;
+  };
+  collection_slug?: string;
+  name?: string;
+  title?: string;
+  image_url?: string;
+  display_image_url?: string;
+  opensea_url?: string;
+  permalink?: string;
 };
 
 type OpenSeaAccountNFTResponse = {
   nfts?: OpenSeaAccountNFT[];
   next?: string | null;
+};
+
+type OpenSeaFallbackInventoryResult<T extends WalletOwnerNFT = WalletOwnerNFT> = {
+  nfts: T[] | null;
+  pageCount: number;
+  nftCount: number;
+  elapsedMs: number;
+  reason: string | null;
+  skippedRows: number;
+  skipReason: string | null;
+  sampleNFTs: WalletOwnerNFT[];
 };
 
 function isEthAddress(value: string) {
@@ -435,6 +565,23 @@ function normalizeTokenId(value: string) {
   return trimmed;
 }
 
+function normalizeOpenSeaImageUrl(url?: string) {
+  const value = String(url || "").trim();
+  if (!value) return "";
+  if (value.startsWith("ipfs://ipfs/")) return value.replace("ipfs://ipfs/", "https://ipfs.io/ipfs/");
+  if (value.startsWith("ipfs://")) return value.replace("ipfs://", "https://ipfs.io/ipfs/");
+  if (value.startsWith("ar://")) return value.replace("ar://", "https://arweave.net/");
+  return value;
+}
+
+function slugToDisplayName(slug: string) {
+  return slug
+    .split("-")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ")
+    .trim();
+}
+
 function getContractAddress(value: WalletOwnerNFT["contract"] | string | undefined) {
   if (typeof value === "string") return value.toLowerCase();
   return String(value?.address || "").toLowerCase();
@@ -454,6 +601,195 @@ function getOpenSeaNftKey(nft: OpenSeaAccountNFT) {
   const tokenId = normalizeTokenId(rawTokenId);
   if (!contract || !tokenId) return "";
   return `${contract}:${tokenId}`;
+}
+
+function adaptOpenSeaAccountNFT<T extends WalletOwnerNFT = WalletOwnerNFT>(
+  nft: OpenSeaAccountNFT
+): T | null {
+  const contractAddress = getContractAddress(nft.contract || nft.contract_address || "");
+  const rawTokenId = String(nft.identifier ?? nft.token_id ?? "").trim();
+  const tokenId = normalizeTokenId(rawTokenId);
+  if (!contractAddress || !tokenId) return null;
+
+  const collection = nft.collection;
+  const collectionSlug = String(
+    nft.collection_slug ||
+      (typeof collection === "string" ? collection : collection?.slug || "")
+  ).trim();
+  const collectionName = String(
+    typeof collection === "object" ? collection?.name || "" : ""
+  ).trim() || slugToDisplayName(collectionSlug);
+  const imageUrl = normalizeOpenSeaImageUrl(nft.display_image_url || nft.image_url || "");
+  const tokenStandard = String(
+    nft.token_standard ||
+      nft.tokenStandard ||
+      nft.token_type ||
+      (typeof nft.contract === "object" ? nft.contract.token_standard || nft.contract.token_type || "" : "")
+  ).trim();
+  const title = String(nft.name || nft.title || "").trim();
+  const openseaUrl = String(nft.opensea_url || nft.permalink || "").trim();
+
+  return {
+    contract: {
+      address: contractAddress,
+      name: typeof nft.contract === "object" ? nft.contract.name : undefined,
+      openSeaMetadata: imageUrl ? { imageUrl } : undefined,
+    },
+    tokenId,
+    token_id: tokenId,
+    identifier: tokenId,
+    token_standard: tokenStandard || undefined,
+    tokenType: tokenStandard || undefined,
+    collection: collectionName ? { name: collectionName } : collectionSlug,
+    displayCollectionName: collectionName || undefined,
+    displayCollectionSlug: collectionSlug || undefined,
+    displayCollectionCategory:
+      typeof collection === "object" ? String(collection?.category || "").trim() || undefined : undefined,
+    displayCategorySource:
+      typeof collection === "object" && collection?.category ? "opensea" : undefined,
+    metadata: {
+      name: title || undefined,
+      collection: collectionName || collectionSlug || undefined,
+      collection_name: collectionName || undefined,
+      category: typeof collection === "object" ? collection?.category || undefined : undefined,
+    },
+    raw: {
+      metadata: {
+        name: title || undefined,
+        collection: collectionName || collectionSlug || undefined,
+        collection_name: collectionName || undefined,
+        category: typeof collection === "object" ? collection?.category || undefined : undefined,
+      },
+    },
+    image: imageUrl ? { cachedUrl: imageUrl, thumbnailUrl: imageUrl } : undefined,
+    name: title || undefined,
+    title: title || undefined,
+    openseaUrl: openseaUrl || undefined,
+  } as unknown as T;
+}
+
+async function fetchOpenSeaVisibleInventoryFallback<T extends WalletOwnerNFT = WalletOwnerNFT>(
+  owner: string
+): Promise<OpenSeaFallbackInventoryResult<T>> {
+  const startedMs = Date.now();
+  const finish = (params: {
+    nfts: T[] | null;
+    pageCount: number;
+    reason: string | null;
+    skippedRows?: number;
+    skipReason?: string | null;
+  }): OpenSeaFallbackInventoryResult<T> => ({
+    ...params,
+    nftCount: params.nfts?.length || 0,
+    elapsedMs: Date.now() - startedMs,
+    skippedRows: params.skippedRows || 0,
+    skipReason: params.skipReason || null,
+    sampleNFTs: (params.nfts || []).slice(0, 3),
+  });
+
+  if (!OPENSEA_API_KEY) {
+    return finish({ nfts: null, pageCount: 0, reason: "missing_opensea_api_key" });
+  }
+  if (!isEthAddress(owner)) {
+    return finish({ nfts: null, pageCount: 0, reason: "non_eth_owner" });
+  }
+
+  const openseaApiKey = OPENSEA_API_KEY;
+  const nfts: T[] = [];
+  let skippedRows = 0;
+  let next = "";
+  let page = 0;
+
+  while (page < OPENSEA_MAX_PAGES) {
+    const params = new URLSearchParams({
+      limit: "200",
+      include_hidden: "false",
+    });
+    if (next) params.set("next", next);
+
+    let res: Response;
+    try {
+      res = await fetch(
+        `${OPENSEA_BASE_URL}/chain/ethereum/account/${owner}/nfts?${params.toString()}`,
+        {
+          cache: "no-store",
+          headers: {
+            accept: "application/json",
+            "x-api-key": openseaApiKey,
+          },
+        }
+      );
+    } catch {
+      return finish({
+        nfts: null,
+        pageCount: page,
+        reason: "request_failed",
+        skippedRows,
+        skipReason: skippedRows ? "missing_core_identity" : null,
+      });
+    }
+
+    if (!res.ok) {
+      return finish({
+        nfts: null,
+        pageCount: page,
+        reason: `http_${res.status}`,
+        skippedRows,
+        skipReason: skippedRows ? "missing_core_identity" : null,
+      });
+    }
+
+    let data: OpenSeaAccountNFTResponse;
+    try {
+      data = (await res.json()) as OpenSeaAccountNFTResponse;
+    } catch {
+      return finish({
+        nfts: null,
+        pageCount: page,
+        reason: "invalid_json",
+        skippedRows,
+        skipReason: skippedRows ? "missing_core_identity" : null,
+      });
+    }
+
+    for (const row of data.nfts || []) {
+      const adapted = adaptOpenSeaAccountNFT<T>(row);
+      if (adapted) {
+        nfts.push(adapted);
+      } else {
+        skippedRows += 1;
+      }
+    }
+
+    next = String(data.next || "");
+    page += 1;
+    if (!next) {
+      if (!nfts.length) {
+        return finish({
+          nfts: null,
+          pageCount: page,
+          reason: "empty_fallback_inventory",
+          skippedRows,
+          skipReason: skippedRows ? "missing_core_identity" : null,
+        });
+      }
+      return finish({
+        nfts,
+        pageCount: page,
+        reason: null,
+        skippedRows,
+        skipReason: skippedRows ? "missing_core_identity" : null,
+      });
+    }
+  }
+
+  return finish({
+    nfts: null,
+    pageCount: page,
+    reason: "page_cap_reached",
+    skippedRows,
+    skipReason: skippedRows ? "missing_core_identity" : null,
+  });
 }
 
 async function fetchOpenSeaVisibleTokenKeysWithDebug(owner: string): Promise<OpenSeaVisibleTokenResult> {
