@@ -175,6 +175,7 @@ const OFFER_CANDIDATE_CAP = 20;
 const OFFER_LOOKUP_CONCURRENCY = 6;
 const FULL_SCAN_MAX_NFTS = 750;
 const offerCache = new Map<string, { ethAmount: number; symbol: string } | null>();
+const collectionOfferCache = new Map<string, { ethAmount: number; symbol: string } | null>();
 const slugCache = new Map<string, string | null>();
 
 export function isEthAddress(value: string) {
@@ -518,25 +519,76 @@ async function buildOfferCandidates(wallet: string): Promise<{
   };
 }
 
+// Fetches the best collection-wide (criteria) offer for a slug.
+// Cached per slug — one HTTP call per collection regardless of how many tokens are checked.
+// Does not capture trait/criteria sub-offers; those would require a separate criteria endpoint.
+async function fetchCollectionBestOfferEth(slug: string): Promise<{ ethAmount: number; symbol: string } | null> {
+  if (collectionOfferCache.has(slug)) return collectionOfferCache.get(slug) ?? null;
+
+  const data = await fetchOpenSeaJson<{
+    offers?: Array<{
+      price?: {
+        current?: { value?: string; currency?: string };
+        value?: string;
+      };
+      price_type?: { symbol?: string };
+      payment_token?: { symbol?: string };
+      protocol_data?: { parameters?: { offer?: Array<{ startAmount?: string }> } };
+    }>;
+  }>(`/offers/collection/${encodeURIComponent(slug)}/best`, {});
+
+  const first = data?.offers?.[0];
+  if (!first) {
+    collectionOfferCache.set(slug, null);
+    return null;
+  }
+
+  const symbol = String(
+    first?.price?.current?.currency || first?.price_type?.symbol || first?.payment_token?.symbol || "WETH"
+  ).toUpperCase();
+  if (symbol !== "ETH" && symbol !== "WETH") {
+    collectionOfferCache.set(slug, null);
+    return null;
+  }
+
+  const rawWei = String(
+    first?.price?.current?.value || first?.price?.value || first?.protocol_data?.parameters?.offer?.[0]?.startAmount || ""
+  ).trim();
+  const eth = /^\d+$/.test(rawWei) ? weiToEth(rawWei) : 0;
+  const value = Number.isFinite(eth) && eth > 0 ? { ethAmount: eth, symbol } : null;
+  collectionOfferCache.set(slug, value);
+  return value;
+}
+
 async function fetchBestOfferEth(slug: string, tokenId: string): Promise<{ ethAmount: number; symbol: string } | null> {
   const cacheKey = `${slug}:${tokenId}`;
   if (offerCache.has(cacheKey)) return offerCache.get(cacheKey) ?? null;
 
-  const offer = await fetchOpenSeaJson<{
-    price?: { value?: string };
-    price_type?: { symbol?: string };
-    payment_token?: { symbol?: string };
-    protocol_data?: { parameters?: { offer?: Array<{ startAmount?: string }> } };
-  }>(`/offers/collection/${encodeURIComponent(slug)}/nfts/${encodeURIComponent(tokenId)}/best`, {});
+  const [itemOfferRaw, collectionOffer] = await Promise.all([
+    fetchOpenSeaJson<{
+      price?: { value?: string };
+      price_type?: { symbol?: string };
+      payment_token?: { symbol?: string };
+      protocol_data?: { parameters?: { offer?: Array<{ startAmount?: string }> } };
+    }>(`/offers/collection/${encodeURIComponent(slug)}/nfts/${encodeURIComponent(tokenId)}/best`, {}),
+    fetchCollectionBestOfferEth(slug),
+  ]);
 
-  const symbol = String(offer?.price_type?.symbol || offer?.payment_token?.symbol || "WETH").toUpperCase();
-  if (symbol !== "ETH" && symbol !== "WETH") {
-    offerCache.set(cacheKey, null);
-    return null;
+  const itemSymbol = String(itemOfferRaw?.price_type?.symbol || itemOfferRaw?.payment_token?.symbol || "WETH").toUpperCase();
+  let itemEth = 0;
+  if (itemSymbol === "ETH" || itemSymbol === "WETH") {
+    const rawWei = String(itemOfferRaw?.price?.value || itemOfferRaw?.protocol_data?.parameters?.offer?.[0]?.startAmount || "").trim();
+    itemEth = /^\d+$/.test(rawWei) ? weiToEth(rawWei) : 0;
   }
-  const rawWei = String(offer?.price?.value || offer?.protocol_data?.parameters?.offer?.[0]?.startAmount || "").trim();
-  const eth = /^\d+$/.test(rawWei) ? weiToEth(rawWei) : 0;
-  const value = Number.isFinite(eth) && eth > 0 ? { ethAmount: eth, symbol } : null;
+
+  const candidates: Array<{ ethAmount: number; symbol: string }> = [];
+  if (Number.isFinite(itemEth) && itemEth > 0) candidates.push({ ethAmount: itemEth, symbol: itemSymbol });
+  if (collectionOffer && collectionOffer.ethAmount > 0) candidates.push(collectionOffer);
+
+  const value = candidates.length > 0
+    ? candidates.reduce((best, c) => c.ethAmount > best.ethAmount ? c : best)
+    : null;
+
   offerCache.set(cacheKey, value);
   return value;
 }
