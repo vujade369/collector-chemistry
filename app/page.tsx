@@ -2,6 +2,7 @@
 
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import WalletInput from "@/components/shared/WalletInput";
 
 function isLikelyValidInput(value: string) {
   const trimmed = value.trim();
@@ -105,8 +106,7 @@ export default function HomePage() {
           onSubmit={handleSubmit}
         >
           <div style={{ position: "relative", maxWidth: "480px" }}>
-            <input
-              type="text"
+            <WalletInput
               placeholder="Paste a wallet or ENS name"
               className="input"
               value={walletInput}

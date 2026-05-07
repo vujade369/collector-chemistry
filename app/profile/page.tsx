@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import "./profile.css";
+import WalletInput from "@/components/shared/WalletInput";
 import WalletBanner from "@/components/profile/WalletBanner";
 import WalletConverter from "@/components/profile/WalletConverter";
 
@@ -1085,7 +1086,7 @@ export default function ProfilePage() {
                 points of recognition.
               </p>
               <form onSubmit={handleCompareSubmit} className="profile-compare-form">
-                <input
+                <WalletInput
                   className="profile-input"
                   value={compareWallet}
                   onChange={(e) => setCompareWallet(e.target.value)}

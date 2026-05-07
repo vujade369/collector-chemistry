@@ -3,6 +3,7 @@
 
 import { FormEvent, Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import WalletInput from "@/components/shared/WalletInput";
 import "./compare.css";
 
 type NFT = {
@@ -1265,7 +1266,7 @@ function ComparePageContent() {
             <div className="cc-inputs">
               <div className="cc-input-wrap">
                 <label className="cc-label" htmlFor="walletA">Collector one</label>
-                <input
+                <WalletInput
                   id="walletA"
                   className="cc-input"
                   placeholder="0x... or ENS"
@@ -1278,7 +1279,7 @@ function ComparePageContent() {
               </div>
               <div className="cc-input-wrap">
                 <label className="cc-label" htmlFor="walletB">Collector two</label>
-                <input
+                <WalletInput
                   id="walletB"
                   className="cc-input"
                   placeholder="0x... or ENS"

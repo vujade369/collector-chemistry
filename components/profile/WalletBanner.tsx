@@ -1,5 +1,7 @@
 "use client";
 
+import WalletInput from "@/components/shared/WalletInput";
+
 type Props = {
   wallets: string[];
   maxWallets?: number;
@@ -33,7 +35,7 @@ export default function WalletBanner({ wallets, maxWallets = 5, onAdd, onRemove 
             if (input) input.value = "";
           }}
         >
-          <input className="profile-input" name="wallet" placeholder="Wallet address or ENS" />
+          <WalletInput className="profile-input" name="wallet" placeholder="Wallet address or ENS" />
           <button type="submit" className="profile-btn-primary">Add</button>
         </form>
       )}
