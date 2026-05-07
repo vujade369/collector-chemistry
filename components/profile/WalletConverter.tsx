@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { useEffect, useRef, useState } from "react";
 
 type CollectionSearchResult = {
@@ -33,6 +34,8 @@ type ConverterResult = {
     | "estimate_failed";
 };
 
+type ConverterCountTier = "fractional" | "small" | "medium" | "large" | "huge";
+
 function formatError(error: ConverterResult["error"]): string {
   if (error === "invalid_wallet") return "Enter a valid Ethereum address or ENS name.";
   if (error === "wallet_resolution_failed") return "One of these wallets couldn’t be resolved. Check the ENS name or wallet address and try again.";
@@ -43,20 +46,36 @@ function formatError(error: ConverterResult["error"]): string {
   return "Couldn’t build an estimate right now.";
 }
 
-function formatHumanizedResultLine(count: number, targetCollectionName?: string | null): string {
-  const safeName = String(targetCollectionName || "this collection").trim() || "this collection";
-  const wholeCount = Math.floor(count);
-  const hasFraction = count - wholeCount >= 0.01;
+function getConverterCountTier(count: number): ConverterCountTier {
+  if (count < 1) return "fractional";
+  if (count < 6) return "small";
+  if (count < 25) return "medium";
+  if (count < 100) return "large";
+  return "huge";
+}
 
-  if (count < 1) {
-    return "Not quite one yet, but there’s signal.";
-  }
+function getConverterTierCopy(count: number): string {
+  if (count < 1) return "Almost enough to summon one.";
+  if (count < 6) return "Enough to start a little shelf.";
+  if (count < 25) return "Now it starts to look like a collection.";
+  if (count < 100) return "The shelf is no longer enough.";
+  if (count < 1000) return "That’s no longer a stack. That’s a room.";
+  return "That’s not a collection. That’s a census.";
+}
 
-  if (!hasFraction) {
-    return `Enough for ${wholeCount} ${wholeCount === 1 ? "piece" : "pieces"} from ${safeName}.`;
-  }
+function getConverterChipCap(tier: ConverterCountTier): number {
+  if (tier === "fractional" || tier === "small") return 5;
+  if (tier === "medium") return 8;
+  if (tier === "large") return 10;
+  return 12;
+}
 
-  return `Enough for ${wholeCount} ${wholeCount === 1 ? "piece" : "pieces"} from ${safeName}, plus a little change.`;
+function formatEth(value?: number | null): string | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return null;
+  if (value >= 100) return value.toFixed(0);
+  if (value >= 10) return value.toFixed(2).replace(/\.00$/, "");
+  if (value >= 1) return value.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
+  return value.toFixed(5).replace(/0+$/, "").replace(/\.$/, "");
 }
 
 function getCollectionBadgeLabel(item: CollectionSearchResult): string | null {
@@ -140,14 +159,21 @@ export default function WalletConverter({ wallet, wallets }: { wallet: string; w
 
   const displayCount = result?.count ?? 0;
   const displayCountLabel = displayCount >= 1 ? displayCount.toFixed(2).replace(/\.00$/, "") : displayCount.toFixed(2);
+  const countTier = getConverterCountTier(displayCount);
+  const tierCopy = getConverterTierCopy(displayCount);
   const wholeCount = Math.floor(displayCount);
   const fractionalRemainder = displayCount - wholeCount;
-  const visibleFullTiles = Math.min(wholeCount, 6);
-  const showPartialTile = fractionalRemainder > 0.01;
-  const hiddenTileCount = Math.max(0, wholeCount - visibleFullTiles);
+  const chipCap = getConverterChipCap(countTier);
+  const visualFullTileCount = displayCount > 0 && wholeCount === 0 ? 0 : Math.min(wholeCount, chipCap);
+  const showPartialTile = displayCount > 0 && countTier !== "medium" && countTier !== "large" && countTier !== "huge" && fractionalRemainder > 0.01;
+  const renderedChipCount = visualFullTileCount + (showPartialTile ? 1 : 0);
+  const hiddenTileCount = Math.max(0, wholeCount - visualFullTileCount);
   const partialPercent = Math.max(0, Math.min(100, Math.round(fractionalRemainder * 100)));
   const tileImage = result?.targetCollection?.imageUrl || "";
-  const humanizedResultLine = formatHumanizedResultLine(displayCount, result?.targetCollection?.name);
+  const offerValueLabel = formatEth(result?.detectedOfferValueETH);
+  const floorPriceLabel = formatEth(result?.targetCollection?.floorPriceETH);
+  const showEquation = Boolean(offerValueLabel && floorPriceLabel && result?.targetCollection?.name);
+  const proofLine = result ? `${result.offerCount} active offers · ${result.checkedNftCount} unique NFTs checked` : "";
 
   return (
     <section className="wallet-converter">
@@ -213,55 +239,55 @@ export default function WalletConverter({ wallet, wallets }: { wallet: string; w
         <div className="converter-result">
           {phase === "result" ? (
             <>
-              <div className={`converter-count${visible ? " visible" : ""}`} style={{ fontSize: "44px", lineHeight: 1.05, fontWeight: 600 }}>
+              <div className={`converter-count${visible ? " visible" : ""}`}>
                 ~{displayCountLabel} {result.targetCollection?.name}
               </div>
 
               {displayCount > 0 && (
                 <>
                   {tileImage ? (
-                    <div className="converter-tiles-wrap">
+                    <div className={`converter-visual converter-visual--${countTier}`} aria-hidden="true">
                       <div className="converter-tiles">
-                        {Array.from({ length: visibleFullTiles }).map((_, index) => (
-                          <img key={`full-${index}`} src={tileImage} alt={result.targetCollection?.name || "Collection"} className="converter-tile" />
+                        {Array.from({ length: visualFullTileCount }).map((_, index) => (
+                          <img
+                            key={`full-${index}`}
+                            src={tileImage}
+                            alt=""
+                            className="converter-tile"
+                            style={{ "--tile-index": index } as CSSProperties & Record<"--tile-index", number>}
+                          />
                         ))}
 
                         {showPartialTile && (
                           <div className="converter-tile converter-tile-partial">
-                            <img src={tileImage} alt={result.targetCollection?.name || "Collection"} className="converter-tile-base" />
+                            <img src={tileImage} alt="" className="converter-tile-base" />
                             <div className="converter-tile-color-fill" style={{ height: `${partialPercent}%` }}>
-                              <img src={tileImage} alt={result.targetCollection?.name || "Collection"} className="converter-tile-color" />
+                              <img src={tileImage} alt="" className="converter-tile-color" />
                             </div>
                           </div>
                         )}
                       </div>
 
-                      {hiddenTileCount > 0 && <span className="converter-tile-more">+{hiddenTileCount} more</span>}
+                      {hiddenTileCount > 0 && <span className="converter-tile-more">+{hiddenTileCount} beyond view</span>}
+                      {renderedChipCount === 0 && <span className="converter-tile-more">A partial piece, still taking shape.</span>}
                     </div>
                   ) : null}
-
-                  {displayCount < 0.1 ? <p className={`converter-caveat${visible ? " visible" : ""}`}>Not quite there yet</p> : null}
-                  {displayCount >= 0.1 && displayCount < 1 ? <p className={`converter-caveat${visible ? " visible" : ""}`}>~{Math.round(displayCount * 100)}% of one</p> : null}
-                  {displayCount >= 100 ? <p className={`converter-caveat${visible ? " visible" : ""}`}>You could fill a room.</p> : null}
                 </>
               )}
 
-              <p className={`converter-caveat${visible ? " visible" : ""}`}>{humanizedResultLine}</p>
+              <p className={`converter-tier-copy${visible ? " visible" : ""}`}>{tierCopy}</p>
+
+              {showEquation && (
+                <p className={`converter-equation${visible ? " visible" : ""}`}>
+                  {offerValueLabel} ETH in active offers ÷ {floorPriceLabel} ETH floor = ~{displayCountLabel} {result.targetCollection?.name}
+                </p>
+              )}
 
               <p className={`converter-caveat${visible ? " visible" : ""}`}>
-                A rough glimpse at what your current offers could become.
+                {proofLine}
               </p>
 
-              <p className={`converter-caveat${visible ? " visible" : ""}`}>
-                Based on the best active ETH/WETH offers currently available across your unique NFTs, divided by the current{" "}
-                {result.targetCollection?.name || "target collection"} floor.
-              </p>
-
-              <p className={`converter-caveat${visible ? " visible" : ""}`}>
-                {result.offerCount} NFTs currently have active offers. {result.checkedNftCount} unique NFTs checked.
-              </p>
-
-              <p className={`converter-caveat${visible ? " visible" : ""}`}>Estimate only. Offers, floors, fees, royalties, and liquidity can change.</p>
+              <p className={`converter-caveat${visible ? " visible" : ""}`}>Estimate only. Offers, floors, fees, royalties, and liquidity can move.</p>
             </>
           ) : (
             <p className="converter-zero">{errorMessage}</p>
