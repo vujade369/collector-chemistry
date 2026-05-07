@@ -21,10 +21,21 @@ type ConverterResult = {
   offerCount: number;
   checkedNftCount: number;
   candidateCount: number;
-  error: null | "invalid_input" | "missing_opensea" | "no_floor" | "no_wallet_offers" | "zero_result" | "estimate_failed";
+  error:
+    | null
+    | "invalid_input"
+    | "invalid_wallet"
+    | "wallet_resolution_failed"
+    | "missing_opensea"
+    | "no_floor"
+    | "no_wallet_offers"
+    | "zero_result"
+    | "estimate_failed";
 };
 
 function formatError(error: ConverterResult["error"]): string {
+  if (error === "invalid_wallet") return "Enter a valid Ethereum address or ENS name.";
+  if (error === "wallet_resolution_failed") return "One of these wallets couldn’t be resolved. Check the ENS name or wallet address and try again.";
   if (error === "no_floor") return "Couldn’t find a reliable floor for this collection.";
   if (error === "no_wallet_offers") return "No active wallet offers detected yet.";
   if (error === "missing_opensea") return "Marketplace data is unavailable right now.";
