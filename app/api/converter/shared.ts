@@ -1099,6 +1099,31 @@ function parseCollectionRows(payload: any): any[] {
   return [];
 }
 
+function isReadableCollectionSearchResult(item: ConverterCollectionSearchResult): boolean {
+  const name = String(item.name || "").trim();
+  const slug = String(item.slug || "").trim();
+  if (!name || !slug) return false;
+  if (isEthAddress(name) || isEthAddress(slug)) return false;
+  return true;
+}
+
+function getSafelistRankBoost(status?: string): number {
+  const safelist = String(status || "").trim().toLowerCase();
+  if (safelist === "verified" || safelist === "approved") return 2;
+  return 0;
+}
+
+function hasReliableCollectionFloor(item: ConverterCollectionSearchResult): boolean {
+  return typeof item.floorPriceETH === "number" && Number.isFinite(item.floorPriceETH) && item.floorPriceETH > 0;
+}
+
+function isLowTrustCollectionSearchResult(item: ConverterCollectionSearchResult): boolean {
+  const weakMatch = item.matchConfidence === "low";
+  const missingFloor = !hasReliableCollectionFloor(item);
+  const nonPositiveSafelist = item.verified !== true && getSafelistRankBoost(item.safelistStatus) === 0;
+  return weakMatch && missingFloor && nonPositiveSafelist;
+}
+
 function mapCollectionResult(row: any, query: string): ConverterCollectionSearchResult | null {
   const slug = String(row?.collection || row?.slug || "").trim();
   const name = String(row?.name || row?.title || "").trim();
@@ -1158,17 +1183,15 @@ export async function searchOpenSeaCollections(query: string): Promise<Converter
     bySlug.set(mapped.slug, mapped);
   }
 
-  const all = Array.from(bySlug.values());
+  const all = Array.from(bySlug.values()).filter(isReadableCollectionSearchResult);
 
   const ranked = all
     .map((item) => {
-      const safelist = (item.safelistStatus || "").toLowerCase();
-      const safelistBoost = safelist.includes("verified") || safelist.includes("approved") ? 2 : safelist.includes("requested") ? 1 : 0;
+      const safelistBoost = getSafelistRankBoost(item.safelistStatus);
       const confidenceBoost = item.matchConfidence === "high" ? 2 : item.matchConfidence === "medium" ? 1 : 0;
       const verifiedBoost = item.verified ? 2 : 0;
-      const looksLikeAddress = isEthAddress(item.slug) || isEthAddress(item.name);
       const exactish = normalizeForMatch(item.slug.replace(/-/g, "")) === compact || normalizeForMatch(item.name) === compact;
-      return { item, score: safelistBoost + confidenceBoost + verifiedBoost + (exactish ? 3 : 0) - (looksLikeAddress ? 3 : 0) };
+      return { item, score: safelistBoost + confidenceBoost + verifiedBoost + (exactish ? 3 : 0) };
     })
     .sort((a, b) => b.score - a.score || a.item.name.localeCompare(b.item.name))
     .map((entry) => entry.item)
@@ -1182,6 +1205,7 @@ export async function searchOpenSeaCollections(query: string): Promise<Converter
   );
 
   return floors
+    .filter((item) => !isLowTrustCollectionSearchResult(item))
     .sort((a, b) => {
       const aFloor = a.floorPriceETH && a.floorPriceETH > 0 ? 1 : 0;
       const bFloor = b.floorPriceETH && b.floorPriceETH > 0 ? 1 : 0;

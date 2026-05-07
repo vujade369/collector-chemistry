@@ -59,6 +59,15 @@ function formatHumanizedResultLine(count: number, targetCollectionName?: string 
   return `Enough for ${wholeCount} ${wholeCount === 1 ? "piece" : "pieces"} from ${safeName}, plus a little change.`;
 }
 
+function getCollectionBadgeLabel(item: CollectionSearchResult): string | null {
+  if (item.verified === true) return "Verified";
+
+  const safelistStatus = String(item.safelistStatus || "").trim().toLowerCase();
+  if (safelistStatus === "verified") return "Verified";
+  if (safelistStatus === "approved") return "Approved";
+  return null;
+}
+
 export default function WalletConverter({ wallet, wallets }: { wallet: string; wallets?: string[] }) {
   const [phase, setPhase] = useState<"idle" | "searching" | "loading" | "result" | "error">("idle");
   const [query, setQuery] = useState("");
@@ -160,28 +169,30 @@ export default function WalletConverter({ wallet, wallets }: { wallet: string; w
           {query.trim().length > 1 && (
             <ul className="converter-dropdown">
               {searchResults.length > 0 ? (
-                searchResults.map((item) => (
-                  <li key={item.slug} onClick={() => handleSelect(item)}>
-                    <div className="converter-row-left">
-                      <div className="converter-thumb-wrap">
-                        {item.imageUrl ? (
-                          <img src={item.imageUrl} alt={item.name} className="converter-thumb" />
-                        ) : (
-                          <span className="converter-thumb-fallback">✦</span>
-                        )}
-                      </div>
+                searchResults.map((item) => {
+                  const badgeLabel = getCollectionBadgeLabel(item);
 
-                      <div>
-                        <span className="converter-result-name">{item.name}</span>
-                        <div className="converter-result-meta">
-                          {(item.verified || item.safelistStatus) && (
-                            <span className="converter-result-badge">{item.verified ? "Verified" : item.safelistStatus}</span>
+                  return (
+                    <li key={item.slug} onClick={() => handleSelect(item)}>
+                      <div className="converter-row-left">
+                        <div className="converter-thumb-wrap">
+                          {item.imageUrl ? (
+                            <img src={item.imageUrl} alt={item.name} className="converter-thumb" />
+                          ) : (
+                            <span className="converter-thumb-fallback">✦</span>
                           )}
                         </div>
+
+                        <div>
+                          <span className="converter-result-name">{item.name}</span>
+                          <div className="converter-result-meta">
+                            {badgeLabel && <span className="converter-result-badge">{badgeLabel}</span>}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </li>
-                ))
+                    </li>
+                  );
+                })
               ) : (
                 <li>
                   <span className="converter-result-name">No collections found. Try a different name.</span>
