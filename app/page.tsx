@@ -2,7 +2,7 @@
 
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import WalletInput from "@/components/shared/WalletInput";
+import WalletTypeaheadInput from "@/components/shared/WalletTypeaheadInput";
 
 type WalletResolveResponse =
   | { ok: true; address: string; message?: string }
@@ -126,12 +126,12 @@ export default function HomePage() {
           onSubmit={handleSubmit}
         >
           <div style={{ position: "relative", maxWidth: "480px" }}>
-            <WalletInput
+            <WalletTypeaheadInput
               placeholder="Paste a wallet or ENS name"
               className="input"
               value={walletInput}
-              onChange={(event) => {
-                setWalletInput(event.target.value);
+              onValueChange={(nextValue) => {
+                setWalletInput(nextValue);
                 if (resolveError) setResolveError("");
               }}
               onKeyDown={handleKeyDown}

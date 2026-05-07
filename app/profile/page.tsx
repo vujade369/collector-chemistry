@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import "./profile.css";
-import WalletInput from "@/components/shared/WalletInput";
+import WalletTypeaheadInput from "@/components/shared/WalletTypeaheadInput";
 import WalletBanner from "@/components/profile/WalletBanner";
 import WalletConverter from "@/components/profile/WalletConverter";
 
@@ -1148,11 +1148,11 @@ export default function ProfilePage() {
                 points of recognition.
               </p>
               <form onSubmit={handleCompareSubmit} className="profile-compare-form">
-                <WalletInput
+                <WalletTypeaheadInput
                   className="profile-input"
                   value={compareWallet}
-                  onChange={(e) => {
-                    setCompareWallet(e.target.value);
+                  onValueChange={(nextValue) => {
+                    setCompareWallet(nextValue);
                     if (compareResolveError) setCompareResolveError("");
                   }}
                   placeholder="Second wallet address or ENS"

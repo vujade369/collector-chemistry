@@ -3,7 +3,7 @@
 
 import { FormEvent, Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import WalletInput from "@/components/shared/WalletInput";
+import WalletTypeaheadInput from "@/components/shared/WalletTypeaheadInput";
 import "./compare.css";
 
 type NFT = {
@@ -1285,13 +1285,13 @@ function ComparePageContent() {
             <div className="cc-inputs">
               <div className="cc-input-wrap">
                 <label className="cc-label" htmlFor="walletA">Collector one</label>
-                <WalletInput
+                <WalletTypeaheadInput
                   id="walletA"
                   className="cc-input"
                   placeholder="0x... or ENS"
                   value={walletA}
-                  onChange={(e) => {
-                    setWalletA(e.target.value);
+                  onValueChange={(nextValue) => {
+                    setWalletA(nextValue);
                     if (error) setError("");
                   }}
                   autoCapitalize="off"
@@ -1301,13 +1301,13 @@ function ComparePageContent() {
               </div>
               <div className="cc-input-wrap">
                 <label className="cc-label" htmlFor="walletB">Collector two</label>
-                <WalletInput
+                <WalletTypeaheadInput
                   id="walletB"
                   className="cc-input"
                   placeholder="0x... or ENS"
                   value={walletB}
-                  onChange={(e) => {
-                    setWalletB(e.target.value);
+                  onValueChange={(nextValue) => {
+                    setWalletB(nextValue);
                     if (error) setError("");
                   }}
                   autoCapitalize="off"

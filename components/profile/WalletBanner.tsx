@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import WalletInput from "@/components/shared/WalletInput";
+import WalletTypeaheadInput from "@/components/shared/WalletTypeaheadInput";
 
 type WalletResolveResponse =
   | { ok: true; address: string; message?: string }
@@ -30,6 +30,7 @@ export default function WalletBanner({ wallets, maxWallets = 5, onAdd, onRemove 
   const canAdd = wallets.length < maxWallets;
   const [resolveError, setResolveError] = useState("");
   const [resolving, setResolving] = useState(false);
+  const [walletInput, setWalletInput] = useState("");
 
   return (
     <section className="wallet-banner">
@@ -41,9 +42,7 @@ export default function WalletBanner({ wallets, maxWallets = 5, onAdd, onRemove 
           className="wallet-banner-form"
           onSubmit={async (e) => {
             e.preventDefault();
-            const form = e.currentTarget;
-            const input = form.elements.namedItem("wallet") as HTMLInputElement | null;
-            const value = String(input?.value || "").trim();
+            const value = walletInput.trim();
             if (!value) return;
 
             setResolveError("");
@@ -57,7 +56,7 @@ export default function WalletBanner({ wallets, maxWallets = 5, onAdd, onRemove 
               }
 
               onAdd(resolved.address);
-              if (input) input.value = "";
+              setWalletInput("");
             } catch {
               setResolveError("Couldn’t resolve that wallet.");
             } finally {
@@ -65,11 +64,13 @@ export default function WalletBanner({ wallets, maxWallets = 5, onAdd, onRemove 
             }
           }}
         >
-          <WalletInput
+          <WalletTypeaheadInput
             className="profile-input"
             name="wallet"
+            value={walletInput}
             placeholder="Wallet address or ENS"
-            onChange={() => {
+            onValueChange={(nextValue) => {
+              setWalletInput(nextValue);
               if (resolveError) setResolveError("");
             }}
           />

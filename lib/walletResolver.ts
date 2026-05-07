@@ -34,6 +34,16 @@ export type WalletResolveFailure = {
 
 export type WalletResolveResult = WalletResolveSuccess | WalletResolveFailure;
 
+export type WalletSuggestion = {
+  address: string;
+  displayName?: string;
+  openseaUsername?: string;
+  ensName?: string;
+  avatarUrl?: string;
+  openseaUrl?: string;
+  source: "exact_resolve" | "opensea_search";
+};
+
 type OpenSeaAccountResolveResponse = {
   address?: string | null;
   account?: {
@@ -93,6 +103,18 @@ function cleanIdentityValue(value: unknown) {
   return trimmed || undefined;
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+function readString(value: unknown) {
+  return cleanIdentityValue(value);
+}
+
+function getNestedRecord(source: Record<string, unknown>, key: string) {
+  return asRecord(source[key]);
+}
+
 function pickIdentity(data?: OpenSeaAccountResolveResponse | OpenSeaAccountProfileResponse | null): OpenSeaIdentity {
   if (!data) return {};
 
@@ -116,6 +138,41 @@ function pickIdentity(data?: OpenSeaAccountResolveResponse | OpenSeaAccountProfi
   return { openseaUsername, displayName, avatarUrl };
 }
 
+function pickIdentityFromUnknown(value: unknown): OpenSeaIdentity {
+  const row = asRecord(value);
+  const account = getNestedRecord(row, "account");
+  const user = getNestedRecord(row, "user");
+
+  const openseaUsername =
+    readString(row.username) ||
+    readString(account.username) ||
+    readString(user.username);
+
+  const displayName =
+    readString(row.name) ||
+    readString(account.name) ||
+    readString(row.display_name) ||
+    readString(row.displayName) ||
+    readString(account.display_name) ||
+    readString(account.displayName) ||
+    readString(row.username) ||
+    readString(account.username) ||
+    readString(user.name) ||
+    readString(user.username);
+
+  const avatarUrl =
+    readString(row.profile_image_url) ||
+    readString(row.profileImageUrl) ||
+    readString(row.image_url) ||
+    readString(row.imageUrl) ||
+    readString(row.avatar_url) ||
+    readString(row.avatarUrl) ||
+    readString(account.profile_image_url) ||
+    readString(account.profileImageUrl);
+
+  return { openseaUsername, displayName, avatarUrl };
+}
+
 async function fetchOpenSeaJson<T>(path: string): Promise<T | null> {
   if (!OPENSEA_API_KEY) return null;
 
@@ -133,6 +190,16 @@ async function fetchOpenSeaJson<T>(path: string): Promise<T | null> {
   } catch {
     return null;
   }
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
+  let timeoutHandle: ReturnType<typeof setTimeout>;
+  const timeoutPromise = new Promise<T>((resolve) => {
+    timeoutHandle = setTimeout(() => resolve(fallback), timeoutMs);
+  });
+  const result = await Promise.race([promise, timeoutPromise]);
+  clearTimeout(timeoutHandle!);
+  return result;
 }
 
 function parseOpenSeaUrl(value: string): ParsedWalletInput | null {
@@ -251,6 +318,118 @@ async function fetchOpenSeaIdentity(address: string) {
     `/accounts/${encodeURIComponent(address)}`
   );
   return pickIdentity(data);
+}
+
+function toWalletSuggestion(
+  input: {
+    address?: string;
+    ensName?: string;
+    openseaUrl?: string;
+    identity?: OpenSeaIdentity;
+  },
+  source: WalletSuggestion["source"]
+): WalletSuggestion | null {
+  const address = cleanIdentityValue(input.address);
+  if (!address || !isEthAddress(address)) return null;
+
+  return {
+    address,
+    ensName: input.ensName,
+    displayName: input.identity?.displayName,
+    openseaUsername: input.identity?.openseaUsername,
+    avatarUrl: input.identity?.avatarUrl,
+    openseaUrl: input.openseaUrl || `https://opensea.io/${address}`,
+    source,
+  };
+}
+
+function parseOpenSeaSearchRows(payload: unknown): unknown[] {
+  const record = asRecord(payload);
+  const candidates = [
+    record.accounts,
+    record.results,
+    record.data,
+    record.items,
+  ];
+
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) return candidate;
+  }
+
+  return [];
+}
+
+function mapOpenSeaAccountSearchRow(row: unknown): WalletSuggestion | null {
+  const record = asRecord(row);
+  const account = getNestedRecord(record, "account");
+  const address =
+    readString(record.address) ||
+    readString(account.address) ||
+    readString(record.wallet_address) ||
+    readString(record.walletAddress);
+
+  return toWalletSuggestion(
+    {
+      address,
+      identity: pickIdentityFromUnknown(row),
+      openseaUrl: address ? `https://opensea.io/${address}` : undefined,
+    },
+    "opensea_search"
+  );
+}
+
+async function fetchOpenSeaAccountSearch(query: string): Promise<WalletSuggestion[]> {
+  const endpoints = [
+    `/search?query=${encodeURIComponent(query)}&types=account&limit=8`,
+    `/search/accounts?query=${encodeURIComponent(query)}&limit=8`,
+  ];
+
+  const suggestions: WalletSuggestion[] = [];
+
+  for (const path of endpoints) {
+    const payload = await withTimeout(fetchOpenSeaJson<unknown>(path), 1200, null);
+    for (const row of parseOpenSeaSearchRows(payload)) {
+      const suggestion = mapOpenSeaAccountSearchRow(row);
+      if (suggestion) suggestions.push(suggestion);
+    }
+    if (suggestions.length > 0) break;
+  }
+
+  return suggestions;
+}
+
+export async function suggestWalletInputs(query: string, limit = 5): Promise<WalletSuggestion[]> {
+  const q = query.trim();
+  if (q.length < 3 || !OPENSEA_API_KEY) return [];
+
+  const byAddress = new Map<string, WalletSuggestion>();
+
+  const exact = await withTimeout(resolveWalletInput(q), 1400, null);
+  if (exact?.ok) {
+    const suggestion = toWalletSuggestion(
+      {
+        address: exact.address,
+        ensName: exact.ensName,
+        openseaUrl: exact.openseaUrl,
+        identity: {
+          displayName: exact.displayName,
+          openseaUsername: exact.openseaUsername,
+          avatarUrl: exact.avatarUrl,
+        },
+      },
+      "exact_resolve"
+    );
+    if (suggestion) byAddress.set(suggestion.address.toLowerCase(), suggestion);
+  }
+
+  const searchResults = await fetchOpenSeaAccountSearch(q);
+  for (const suggestion of searchResults) {
+    const key = suggestion.address.toLowerCase();
+    if (!byAddress.has(key)) byAddress.set(key, suggestion);
+    if (byAddress.size >= limit) break;
+  }
+
+  return Array.from(byAddress.values()).slice(0, limit);
 }
 
 export async function resolveWalletInput(input: string): Promise<WalletResolveResult> {
