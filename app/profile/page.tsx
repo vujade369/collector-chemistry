@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import "./profile.css";
@@ -250,6 +250,8 @@ export default function ProfilePage() {
   const [resolvingCompare, setResolvingCompare] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState<string>("");
+  const inFlightProfileQueryRef = useRef<string | null>(null);
+  const profileRequestIdRef = useRef(0);
 
   const loadingProcessLines = [
   "Finding the shape of the collection.",
@@ -270,25 +272,41 @@ export default function ProfilePage() {
 
   useEffect(() => {
     async function load() {
+      const profileQuery = initialWalletsFromQuery.join(",");
+
       if (
         !walletFromQuery ||
         initialWalletsFromQuery.length === 0 ||
         !initialWalletsFromQuery.some(isValidInput)
       ) {
+        profileRequestIdRef.current += 1;
+        inFlightProfileQueryRef.current = null;
         setError("Nothing found for this wallet.");
         setResult(null);
         return;
       }
 
+      if (inFlightProfileQueryRef.current === profileQuery) {
+        return;
+      }
+
+      profileRequestIdRef.current += 1;
+      const requestId = profileRequestIdRef.current;
+      inFlightProfileQueryRef.current = profileQuery;
       setLoading(true);
       setError("");
       setResult(null);
 
       try {
         const res = await fetch(
-          `/api/profile?wallet=${encodeURIComponent(initialWalletsFromQuery.join(","))}`,
+          `/api/profile?wallet=${encodeURIComponent(profileQuery)}`,
         );
         const json = (await res.json()) as ProfileResponse | { error?: string };
+        const isCurrent =
+          profileRequestIdRef.current === requestId &&
+          inFlightProfileQueryRef.current === profileQuery;
+
+        if (!isCurrent) return;
 
         if (!res.ok || !("profile" in json) || !json.profile) {
           setError("Nothing found for this wallet.");
@@ -298,10 +316,22 @@ export default function ProfilePage() {
 
         setResult(json as ProfileResponse);
       } catch {
+        if (
+          profileRequestIdRef.current !== requestId ||
+          inFlightProfileQueryRef.current !== profileQuery
+        ) {
+          return;
+        }
         setError("Nothing found for this wallet.");
         setResult(null);
       } finally {
-        setLoading(false);
+        if (
+          profileRequestIdRef.current === requestId &&
+          inFlightProfileQueryRef.current === profileQuery
+        ) {
+          inFlightProfileQueryRef.current = null;
+          setLoading(false);
+        }
       }
     }
 

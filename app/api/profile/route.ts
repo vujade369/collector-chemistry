@@ -316,10 +316,20 @@ async function fetchCollectionCategoryWithSample(slug: string, samples: Category
 
   const endpoint = `${OPENSEA_BASE_URL}/collections/${slug}`;
   try {
-    const res = await fetch(endpoint, {
-      cache: "no-store",
-      headers: { accept: "application/json", "X-API-KEY": OPENSEA_API_KEY },
-    });
+    const res = await withTimeout(
+      fetch(endpoint, {
+        cache: "no-store",
+        headers: { accept: "application/json", "X-API-KEY": OPENSEA_API_KEY },
+      }),
+      5000,
+      null as Response | null
+    );
+    if (!res) {
+      if (samples.length < 5) {
+        samples.push({ slug, endpoint, rawResponse: "request_timed_out", category: null, success: false });
+      }
+      return null;
+    }
     const rawText = await res.text();
     const rawPreview = sanitizeRawResponse(rawText);
 
@@ -1359,109 +1369,162 @@ export async function GET(req: Request) {
     const categoryEnrichmentMs = Date.now() - enrichStartMs;
 
     const profileStartMs = Date.now();
+    let profileCoreBuildMs = 0;
+    let walletSignalResolveMs = 0;
+    let firstMintMs = 0;
+    let profileIdentityMs = 0;
+    let marketAttentionMs = 0;
+    let latestArrivalMs = 0;
+    let acquisitionBreakdownMs = 0;
+    let topArtistsMs = 0;
+    let categoryGroupsMs = 0;
+    let collectionDisplayIndexMs = 0;
+    let topCollectionsDisplayMs = 0;
+
+    const profileCoreBuildStartMs = Date.now();
     const profile = buildWalletProfile(enrichedNFTs);
+    profileCoreBuildMs = Date.now() - profileCoreBuildStartMs;
 
     // Resolve all ENS names to 0x addresses once, shared across all signal tasks
+    const walletSignalResolveStartMs = Date.now();
     const resolvedWalletsForSignals = await Promise.all(
       validWallets.map(async (w) => {
         const resolved = await resolveWalletToAddress(w);
         return resolved || w;
       })
     );
+    walletSignalResolveMs = Date.now() - walletSignalResolveStartMs;
     const primaryResolvedAddress = resolvedWalletsForSignals[0] || wallet;
 
     // Kick off all signal tasks in parallel using the pre-resolved addresses
-    const earliestMintTask = Promise.all(
-      resolvedWalletsForSignals.map((resolvedAddress) =>
-        fetchFirstMint(resolvedAddress)
-      )
-    ).then((results) =>
-      results
-        .filter(
-          (item): item is NonNullable<typeof item> =>
-            Boolean(item?.timestamp)
-        )
-        .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())[0] || null
-    );
-
-    const primaryIdentityTask = fetchOpenSeaProfileIdentity(primaryResolvedAddress);
-
-        // Check all wallets for active offers, use MCP first then REST fallback
-    const marketAttentionTask = withTimeout(
-      Promise.all(
-        resolvedWalletsForSignals.map(async (resolvedAddress) => {
-          const mcpWinner = await fetchTopOfferViaOpenSeaMcp(resolvedAddress);
-          if (mcpWinner) return mcpWinner;
-
-          const normalizedResolvedAddress = normalizeAddress(resolvedAddress);
-
-          const matchingWalletNFTs =
-            validWallets.length === 1
-              ? enrichedNFTs
-              : enrichedNFTs.filter((nft) => {
-                  const sourceWallet = normalizeAddress(
-                    String(
-                      (nft as WalletProfileNFT & { sourceWallet?: string })
-                        .sourceWallet || ""
-                    )
-                  );
-
-                  return sourceWallet === normalizedResolvedAddress;
-                });
-
-          const everyNftMissingSourceWallet = enrichedNFTs.every((nft) => {
-            const sourceWallet = String(
-              (nft as WalletProfileNFT & { sourceWallet?: string }).sourceWallet ||
-                ""
-            ).trim();
-
-            return !sourceWallet;
-          });
-
-          const walletNFTs =
-            validWallets.length > 1 &&
-            matchingWalletNFTs.length === 0 &&
-            everyNftMissingSourceWallet
-              ? enrichedNFTs
-              : matchingWalletNFTs;
-
-          return fetchMarketAttention(walletNFTs, resolvedAddress);
-        })
-      ).then((results) => {
-        const offers = results.filter(
-          (item): item is MarketAttention => Boolean(item)
+    const earliestMintTask = (async () => {
+      const signalStartMs = Date.now();
+      try {
+        return await Promise.all(
+          resolvedWalletsForSignals.map((resolvedAddress) =>
+            fetchFirstMint(resolvedAddress)
+          )
+        ).then((results) =>
+          results
+            .filter(
+              (item): item is NonNullable<typeof item> =>
+                Boolean(item?.timestamp)
+            )
+            .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())[0] || null
         );
+      } finally {
+        firstMintMs = Date.now() - signalStartMs;
+      }
+    })();
 
-        if (!offers.length) return null;
+    const primaryIdentityTask = (async () => {
+      const signalStartMs = Date.now();
+      try {
+        return await fetchOpenSeaProfileIdentity(primaryResolvedAddress);
+      } finally {
+        profileIdentityMs = Date.now() - signalStartMs;
+      }
+    })();
 
-        const parseOfferAmount = (value: string): number => {
-          const numeric = Number(
-            String(value || "")
-              .replace(/,/g, "")
-              .replace(/\s*(ETH|WETH)\s*$/i, "")
-              .trim()
-          );
+    // Check all wallets for active offers, use MCP first then REST fallback
+    const marketAttentionTask = (async () => {
+      const signalStartMs = Date.now();
+      try {
+        return await withTimeout(
+          Promise.all(
+            resolvedWalletsForSignals.map(async (resolvedAddress) => {
+              const mcpWinner = await fetchTopOfferViaOpenSeaMcp(resolvedAddress);
+              if (mcpWinner) return mcpWinner;
 
-          return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
-        };
+              const normalizedResolvedAddress = normalizeAddress(resolvedAddress);
 
-        offers.sort(
-          (a, b) =>
-            parseOfferAmount(b.ethAmountLabel) -
-            parseOfferAmount(a.ethAmountLabel)
+              const matchingWalletNFTs =
+                validWallets.length === 1
+                  ? enrichedNFTs
+                  : enrichedNFTs.filter((nft) => {
+                      const sourceWallet = normalizeAddress(
+                        String(
+                          (nft as WalletProfileNFT & { sourceWallet?: string })
+                            .sourceWallet || ""
+                        )
+                      );
+
+                      return sourceWallet === normalizedResolvedAddress;
+                    });
+
+              const everyNftMissingSourceWallet = enrichedNFTs.every((nft) => {
+                const sourceWallet = String(
+                  (nft as WalletProfileNFT & { sourceWallet?: string }).sourceWallet ||
+                    ""
+                ).trim();
+
+                return !sourceWallet;
+              });
+
+              const walletNFTs =
+                validWallets.length > 1 &&
+                matchingWalletNFTs.length === 0 &&
+                everyNftMissingSourceWallet
+                  ? enrichedNFTs
+                  : matchingWalletNFTs;
+
+              return fetchMarketAttention(walletNFTs, resolvedAddress);
+            })
+          ).then((results) => {
+            const offers = results.filter(
+              (item): item is MarketAttention => Boolean(item)
+            );
+
+            if (!offers.length) return null;
+
+            const parseOfferAmount = (value: string): number => {
+              const numeric = Number(
+                String(value || "")
+                  .replace(/,/g, "")
+                  .replace(/\s*(ETH|WETH)\s*$/i, "")
+                  .trim()
+              );
+
+              return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
+            };
+
+            offers.sort(
+              (a, b) =>
+                parseOfferAmount(b.ethAmountLabel) -
+                parseOfferAmount(a.ethAmountLabel)
+            );
+
+            return offers[0] || null;
+          }),
+          30000,
+          null as MarketAttention | null
         );
+      } finally {
+        marketAttentionMs = Date.now() - signalStartMs;
+      }
+    })();
 
-        return offers[0] || null;
-      }),
-      30000,
-      null as MarketAttention | null
-    );
+    const latestArrivalTask = (async () => {
+      const signalStartMs = Date.now();
+      try {
+        return await fetchLatestArrivalSignal(resolvedWalletsForSignals, ALCHEMY_API_KEY || "");
+      } finally {
+        latestArrivalMs = Date.now() - signalStartMs;
+      }
+    })();
 
-    const latestArrivalTask = fetchLatestArrivalSignal(resolvedWalletsForSignals, ALCHEMY_API_KEY || "");
+    const acquisitionBreakdownTask = (async () => {
+      const signalStartMs = Date.now();
+      try {
+        return await fetchAcquisitionBreakdown(wallet);
+      } finally {
+        acquisitionBreakdownMs = Date.now() - signalStartMs;
+      }
+    })();
 
     const [firstMint, acquisitionBreakdown, profileIdentity, marketAttention, latestArrival] = await Promise.all([
       earliestMintTask,
-      fetchAcquisitionBreakdown(wallet),
+      acquisitionBreakdownTask,
       primaryIdentityTask,
       marketAttentionTask,
       latestArrivalTask,
@@ -1469,7 +1532,9 @@ export async function GET(req: Request) {
 
     const firstMintLabel = buildFirstMintLabel(firstMint?.timestamp);
     const highestCurrentOffer = toProfileSignalFromMarketAttention(marketAttention);
+    const topArtistsStartMs = Date.now();
     const topArtists = buildTopArtists(enrichedNFTs);
+    topArtistsMs = Date.now() - topArtistsStartMs;
     const profileWithFirstMint = firstMint
       ? {
           ...profile,
@@ -1484,13 +1549,19 @@ export async function GET(req: Request) {
           },
         }
       : profile;
+    const categoryGroupsStartMs = Date.now();
     const categoryGroups = buildCategoryGroups(enrichedNFTs);
+    categoryGroupsMs = Date.now() - categoryGroupsStartMs;
+    const collectionDisplayIndexStartMs = Date.now();
     const displayIndex = buildCollectionDisplayIndex(enrichedNFTs, categoryGroups, profileWithFirstMint);
+    collectionDisplayIndexMs = Date.now() - collectionDisplayIndexStartMs;
+    const topCollectionsDisplayStartMs = Date.now();
     const topCollections = await enrichTopCollectionsDisplay({
       topCollections: profileWithFirstMint.topCollections,
       displayIndex,
       cap: 3,
     });
+    topCollectionsDisplayMs = Date.now() - topCollectionsDisplayStartMs;
     const enrichedProfile = {
       ...profileWithFirstMint,
       highestCurrentOffer,
@@ -1533,7 +1604,23 @@ export async function GET(req: Request) {
       categoryEnrichmentTimedOut: debug.categoryEnrichmentTimedOut,
       categorySourceBreakdown: enrichedProfile.categorySourceBreakdown,
       openseaCategorySamples: debug.openseaCategorySamples,
-      timing: { fetchNFTsMs, categoryEnrichmentMs, profileBuildMs, totalMs },
+      timing: {
+        fetchNFTsMs,
+        categoryEnrichmentMs,
+        profileBuildMs,
+        totalMs,
+        profileCoreBuildMs,
+        walletSignalResolveMs,
+        firstMintMs,
+        acquisitionBreakdownMs,
+        profileIdentityMs,
+        marketAttentionMs,
+        latestArrivalMs,
+        topArtistsMs,
+        categoryGroupsMs,
+        collectionDisplayIndexMs,
+        topCollectionsDisplayMs,
+      },
       diagnostics: {
         walletInput,
         resolvedWallet: wallet,
