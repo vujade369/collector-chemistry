@@ -10,6 +10,13 @@ import {
 
 const OPENSEA_API_KEY = process.env.OPENSEA_API_KEY;
 
+type WalletResolutionRow = {
+  input: string;
+  resolvedAddress?: string;
+  status: "resolved" | "failed";
+  type: "address" | "ens" | "invalid";
+};
+
 function buildCrossWalletDuplicateDebug(
   walletRows: Array<{
     wallet: string;
@@ -119,7 +126,26 @@ export async function GET(req: Request) {
     });
   }
 
-  if (!walletInputs.every((w) => isEthAddress(w) || isEns(w))) {
+  const walletResolutionRows = await Promise.all(
+    walletInputs.map(async (input): Promise<WalletResolutionRow> => {
+      if (isEthAddress(input)) {
+        return { input, resolvedAddress: input, status: "resolved", type: "address" };
+      }
+
+      if (isEns(input)) {
+        const resolvedAddress = await resolveEnsViaMcp(input);
+        return resolvedAddress
+          ? { input, resolvedAddress, status: "resolved", type: "ens" }
+          : { input, status: "failed", type: "ens" };
+      }
+
+      return { input, status: "failed", type: "invalid" };
+    })
+  );
+
+  const failedResolutionRows = walletResolutionRows.filter((row) => row.status === "failed");
+
+  if (failedResolutionRows.length) {
     return NextResponse.json({
       targetCollection: null,
       count: 0,
@@ -128,19 +154,14 @@ export async function GET(req: Request) {
       offerCount: 0,
       checkedNftCount: 0,
       candidateCount: 0,
-      error: "invalid_input",
+      error: walletInputs.length > 1 ? "wallet_resolution_failed" : "invalid_wallet",
+      walletResolutionRows: includeDebug ? walletResolutionRows : undefined,
     });
   }
 
-  const resolvedWallets = (
-    await Promise.all(
-      walletInputs.map(async (input) => {
-        if (isEthAddress(input)) return input;
-        if (isEns(input)) return resolveEnsViaMcp(input);
-        return null;
-      })
-    )
-  ).filter((w): w is string => Boolean(w));
+  const resolvedWallets = walletResolutionRows
+    .map((row) => row.resolvedAddress)
+    .filter((wallet): wallet is string => Boolean(wallet));
 
   if (!resolvedWallets.length) {
     return NextResponse.json({
@@ -152,6 +173,7 @@ export async function GET(req: Request) {
       checkedNftCount: 0,
       candidateCount: 0,
       error: "no_wallet_offers",
+      walletResolutionRows: includeDebug ? walletResolutionRows : undefined,
     });
   }
 
@@ -222,7 +244,17 @@ export async function GET(req: Request) {
   }
 
   if (estimate.error === "missing_opensea") {
-    return NextResponse.json({ targetCollection: null, count: 0, estimateQuality: "low", detectedOfferValueETH: 0, offerCount: 0, checkedNftCount: 0, candidateCount: 0, error: "missing_opensea" });
+    return NextResponse.json({
+      targetCollection: null,
+      count: 0,
+      estimateQuality: "low",
+      detectedOfferValueETH: 0,
+      offerCount: 0,
+      checkedNftCount: 0,
+      candidateCount: 0,
+      error: "missing_opensea",
+      walletResolutionRows: includeDebug ? walletResolutionRows : undefined,
+    });
   }
 
   const multiWalletDebug = estimate.debug as
@@ -255,10 +287,21 @@ export async function GET(req: Request) {
         candidateCount: estimate.candidateCount,
         error: "no_wallet_offers",
         debug: includeDebug ? estimate.debug : undefined,
+        walletResolutionRows: includeDebug ? walletResolutionRows : undefined,
         ...multiWalletDebugFields,
       });
     }
-    return NextResponse.json({ targetCollection: null, count: 0, estimateQuality: "low", detectedOfferValueETH: 0, offerCount: 0, checkedNftCount: 0, candidateCount: 0, error: "estimate_failed" });
+    return NextResponse.json({
+      targetCollection: null,
+      count: 0,
+      estimateQuality: "low",
+      detectedOfferValueETH: 0,
+      offerCount: 0,
+      checkedNftCount: 0,
+      candidateCount: 0,
+      error: "estimate_failed",
+      walletResolutionRows: includeDebug ? walletResolutionRows : undefined,
+    });
   }
 
   const metadata = await fetchOpenSeaJson<{ name?: string; image_url?: string; imageUrl?: string }>(`/collections/${encodeURIComponent(slug)}`, {});
@@ -274,6 +317,7 @@ export async function GET(req: Request) {
       candidateCount: estimate.candidateCount,
       error: "no_floor",
       debug: includeDebug ? estimate.debug : undefined,
+      walletResolutionRows: includeDebug ? walletResolutionRows : undefined,
       ...multiWalletDebugFields,
     });
   }
@@ -289,6 +333,7 @@ export async function GET(req: Request) {
       candidateCount: estimate.candidateCount,
       error: "no_wallet_offers",
       debug: includeDebug ? estimate.debug : undefined,
+      walletResolutionRows: includeDebug ? walletResolutionRows : undefined,
       ...multiWalletDebugFields,
     });
   }
@@ -308,6 +353,7 @@ export async function GET(req: Request) {
     candidateCount: estimate.candidateCount,
     error,
     debug: includeDebug ? estimate.debug : undefined,
+    walletResolutionRows: includeDebug ? walletResolutionRows : undefined,
     ...multiWalletDebugFields,
   });
 }
