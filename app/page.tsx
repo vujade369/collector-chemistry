@@ -4,16 +4,21 @@ import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import WalletInput from "@/components/shared/WalletInput";
 
-function isLikelyValidInput(value: string) {
-  const trimmed = value.trim();
-  const isEthAddress = /^0x[a-fA-F0-9]{40}$/.test(trimmed);
-  const isEns = /^[a-zA-Z0-9-]+\.eth$/.test(trimmed);
-  return isEthAddress || isEns;
+type WalletResolveResponse =
+  | { ok: true; address: string; message?: string }
+  | { ok: false; message?: string };
+
+async function resolveWalletIdentity(value: string): Promise<WalletResolveResponse> {
+  const res = await fetch(`/api/wallet/resolve?q=${encodeURIComponent(value)}`);
+  const json = (await res.json()) as WalletResolveResponse;
+  return res.ok && json.ok ? json : { ok: false, message: json.message };
 }
 
 export default function HomePage() {
   const router = useRouter();
   const [walletInput, setWalletInput] = useState("");
+  const [resolveError, setResolveError] = useState("");
+  const [resolving, setResolving] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
@@ -21,22 +26,37 @@ export default function HomePage() {
   }, []);
 
   const trimmedInput = useMemo(() => walletInput.trim(), [walletInput]);
-  const isValid = useMemo(() => isLikelyValidInput(trimmedInput), [trimmedInput]);
+  const canSubmit = trimmedInput.length > 0 && !resolving;
 
-  const submitWallet = () => {
-    if (!isValid) return;
-    router.push(`/profile?wallet=${encodeURIComponent(trimmedInput)}`);
+  const submitWallet = async () => {
+    if (!canSubmit) return;
+    setResolveError("");
+    setResolving(true);
+
+    try {
+      const resolved = await resolveWalletIdentity(trimmedInput);
+      if (!resolved.ok) {
+        setResolveError(resolved.message || "Couldn’t resolve that wallet.");
+        return;
+      }
+
+      router.push(`/profile?wallet=${encodeURIComponent(resolved.address)}`);
+    } catch {
+      setResolveError("Couldn’t resolve that wallet.");
+    } finally {
+      setResolving(false);
+    }
   };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    submitWallet();
+    void submitWallet();
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter") return;
     event.preventDefault();
-    submitWallet();
+    void submitWallet();
   };
 
   return (
@@ -110,14 +130,17 @@ export default function HomePage() {
               placeholder="Paste a wallet or ENS name"
               className="input"
               value={walletInput}
-              onChange={(event) => setWalletInput(event.target.value)}
+              onChange={(event) => {
+                setWalletInput(event.target.value);
+                if (resolveError) setResolveError("");
+              }}
               onKeyDown={handleKeyDown}
               style={{ paddingRight: "130px" }}
             />
             <button
               type="submit"
               className="btn-accent"
-              disabled={!isValid}
+              disabled={!canSubmit}
               style={{
                 position: "absolute",
                 right: "8px",
@@ -129,6 +152,20 @@ export default function HomePage() {
             </button>
           </div>
         </form>
+
+        {resolveError && (
+          <p
+            className={`fade-item ${isVisible ? "visible" : ""}`}
+            style={{
+              transitionDelay: "250ms",
+              marginTop: "12px",
+              fontSize: "12px",
+              color: "var(--text-dimmer)",
+            }}
+          >
+            {resolveError}
+          </p>
+        )}
 
         <p
           className={`fade-item ${isVisible ? "visible" : ""}`}

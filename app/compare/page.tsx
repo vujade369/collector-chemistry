@@ -164,6 +164,16 @@ type InterpretRequest = {
   exactCount: number;
 };
 
+type WalletResolveResponse =
+  | { ok: true; address: string; message?: string }
+  | { ok: false; message?: string };
+
+async function resolveWalletIdentity(value: string): Promise<WalletResolveResponse> {
+  const res = await fetch(`/api/wallet/resolve?q=${encodeURIComponent(value)}`);
+  const json = (await res.json()) as WalletResolveResponse;
+  return res.ok && json.ok ? json : { ok: false, message: json.message };
+}
+
 function shortenAddress(value: string) {
   if (!value) return "";
   if (value.length < 14) return value;
@@ -338,13 +348,6 @@ function hexToRgb(hex: string) {
 function toRgba(hex: string, alpha: number) {
   const { r, g, b } = hexToRgb(hex);
   return `rgba(${r}, ${g}, ${b}, ${Math.max(0, Math.min(alpha, 1))})`;
-}
-
-function isLikelyValidInput(value: string) {
-  const trimmed = value.trim();
-  const isEthAddress = /^0x[a-fA-F0-9]{40}$/.test(trimmed);
-  const isEns = /^[a-zA-Z0-9-]+\.eth$/.test(trimmed);
-  return isEthAddress || isEns;
 }
 
 function getCollectorDisplayName(
@@ -1046,7 +1049,7 @@ function ComparePageContent() {
   useEffect(() => {
     const a = searchParams.get("a") || searchParams.get("walletA") || "";
     const b = searchParams.get("b") || searchParams.get("walletB") || "";
-    if (a && b && isLikelyValidInput(a) && isLikelyValidInput(b)) {
+    if (a && b) {
       setWalletA(a);
       setWalletB(b);
       setTimeout(() => { runCompareWith(a, b); }, 0);
@@ -1219,11 +1222,27 @@ function ComparePageContent() {
       setError("Enter two wallet addresses or ENS names to compare.");
       return;
     }
-    if (!isLikelyValidInput(walletA) || !isLikelyValidInput(walletB)) {
-      setError("Enter a valid Ethereum address or ENS name.");
-      return;
+
+    setLoading(true);
+    setError("");
+
+    try {
+      const [resolvedA, resolvedB] = await Promise.all([
+        resolveWalletIdentity(walletA.trim()),
+        resolveWalletIdentity(walletB.trim()),
+      ]);
+
+      if (!resolvedA.ok || !resolvedB.ok) {
+        setError(resolvedA.message || resolvedB.message || "Couldn’t resolve that wallet.");
+        return;
+      }
+
+      await runCompareWith(resolvedA.address, resolvedB.address);
+    } catch {
+      setError("Couldn’t resolve that wallet.");
+    } finally {
+      setLoading(false);
     }
-    await runCompareWith(walletA.trim(), walletB.trim());
   }
 
   function resetAll() {
@@ -1240,7 +1259,7 @@ function ComparePageContent() {
     setIsArtistsExpanded(false);
   }
 
-  const canCompare = isLikelyValidInput(walletA) && isLikelyValidInput(walletB);
+  const canCompare = walletA.trim().length > 0 && walletB.trim().length > 0;
   const collectorNameA = getCollectorDisplayName(data?.walletA?.profile, submittedA, submittedA);
   const collectorNameB = getCollectorDisplayName(data?.walletB?.profile, submittedB, submittedB);
   const collectorSecondaryA = getCollectorSecondaryAddress(collectorNameA, submittedA);
@@ -1271,7 +1290,10 @@ function ComparePageContent() {
                   className="cc-input"
                   placeholder="0x... or ENS"
                   value={walletA}
-                  onChange={(e) => setWalletA(e.target.value)}
+                  onChange={(e) => {
+                    setWalletA(e.target.value);
+                    if (error) setError("");
+                  }}
                   autoCapitalize="off"
                   autoCorrect="off"
                   spellCheck={false}
@@ -1284,7 +1306,10 @@ function ComparePageContent() {
                   className="cc-input"
                   placeholder="0x... or ENS"
                   value={walletB}
-                  onChange={(e) => setWalletB(e.target.value)}
+                  onChange={(e) => {
+                    setWalletB(e.target.value);
+                    if (error) setError("");
+                  }}
                   autoCapitalize="off"
                   autoCorrect="off"
                   spellCheck={false}

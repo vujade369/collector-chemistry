@@ -128,7 +128,17 @@ type ProfileResponse = {
 
 type TasteSlice = { label: string; value: number; key: string };
 
+type WalletResolveResponse =
+  | { ok: true; address: string; message?: string }
+  | { ok: false; message?: string };
+
 // ─── Utilities ────────────────────────────────────────────────────────────────
+
+async function resolveWalletIdentity(value: string): Promise<WalletResolveResponse> {
+  const res = await fetch(`/api/wallet/resolve?q=${encodeURIComponent(value)}`);
+  const json = (await res.json()) as WalletResolveResponse;
+  return res.ok && json.ok ? json : { ok: false, message: json.message };
+}
 
 function isValidInput(value: string): boolean {
   const trimmed = value.trim();
@@ -236,6 +246,8 @@ export default function ProfilePage() {
   const [error, setError] = useState("");
   const [result, setResult] = useState<ProfileResponse | null>(null);
   const [compareWallet, setCompareWallet] = useState("");
+  const [compareResolveError, setCompareResolveError] = useState("");
+  const [resolvingCompare, setResolvingCompare] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState<string>("");
 
@@ -350,7 +362,7 @@ export default function ProfilePage() {
 
   const topCollections = (profile?.topCollections || []).slice(0, 5);
   const collectionCount = profile?.totalCollections || profile?.topCollections?.length || 0;
-  const canCompare = isValidInput(compareWallet);
+  const canCompare = compareWallet.trim().length > 0 && !resolvingCompare;
 
   const behavioralReads = useMemo(
     () => (profile?.behavioralReads || []).filter(Boolean).slice(0, 3),
@@ -485,12 +497,32 @@ export default function ProfilePage() {
     updateWalletQuery(next);
   }
 
-  function handleCompareSubmit(e: FormEvent) {
+  async function handleCompareSubmit(e: FormEvent) {
     e.preventDefault();
     if (!canCompare) return;
-    router.push(
-      `/compare?a=${encodeURIComponent(walletFromQuery)}&b=${encodeURIComponent(compareWallet.trim())}`,
-    );
+
+    setCompareResolveError("");
+    setResolvingCompare(true);
+
+    try {
+      const [walletA, walletB] = await Promise.all([
+        resolveWalletIdentity(resolvedWallet),
+        resolveWalletIdentity(compareWallet.trim()),
+      ]);
+
+      if (!walletA.ok || !walletB.ok) {
+        setCompareResolveError(walletB.message || walletA.message || "Couldn’t resolve that wallet.");
+        return;
+      }
+
+      router.push(
+        `/compare?a=${encodeURIComponent(walletA.address)}&b=${encodeURIComponent(walletB.address)}`,
+      );
+    } catch {
+      setCompareResolveError("Couldn’t resolve that wallet.");
+    } finally {
+      setResolvingCompare(false);
+    }
   }
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -1089,7 +1121,10 @@ export default function ProfilePage() {
                 <WalletInput
                   className="profile-input"
                   value={compareWallet}
-                  onChange={(e) => setCompareWallet(e.target.value)}
+                  onChange={(e) => {
+                    setCompareWallet(e.target.value);
+                    if (compareResolveError) setCompareResolveError("");
+                  }}
                   placeholder="Second wallet address or ENS"
                 />
                 <button
@@ -1100,6 +1135,7 @@ export default function ProfilePage() {
                   Compare Wallet
                 </button>
               </form>
+              {compareResolveError && <p className="profile-error">{compareResolveError}</p>}
               <Link
                 href={`/profile?wallet=${encodeURIComponent(resolvedWallet)}`}
                 className="profile-inline-link"
