@@ -213,12 +213,12 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
   gaming: [
     "game",
     "gaming",
+    "playable",
     "quest",
-    "play",
     "player",
-    "metaverse",
-    "virtual world",
-    "xp",
+    "in-game",
+    "rpg",
+    "battle pass",
   ],
   utility: [
     "utility",
@@ -261,6 +261,15 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
   ],
   sports: ["sports", "athlete", "team", "league", "rookie"],
   virtual_worlds: ["virtual worlds", "virtual world", "metaverse", "land"],
+  domains: [
+    "ens",
+    "ethereum name service",
+    "unstoppable domains",
+    ".eth",
+    ".nft",
+    "domain",
+    "domains",
+  ],
 };
 
 const COMMON_CATEGORIES = ["pfp", "generative", "fine_art", "meme", "utility"] as const;
@@ -288,7 +297,7 @@ const TRAIT_DENSITY_SIGNALS: Array<{
   {
     category: "gaming",
     threshold: 2,
-    keys: ["level", "class", "power", "attack", "defense", "element", "weapon", "armor"],
+    keys: ["game", "gaming", "playable", "player", "quest", "in-game", "rpg", "battle pass"],
   },
 ];
 
@@ -308,13 +317,14 @@ export function normalizeOpenSeaCategory(category?: string) {
     pfp: "pfp",
     gaming: "gaming",
     music: "music",
-    photography: "photography",
+    photography: "fine_art",
     utility: "utility",
     memberships: "utility",
-    "domain-names": "utility",
+    "domain-names": "domains",
     collectibles: "collectibles",
     sports: "sports",
     "virtual-worlds": "virtual_worlds",
+    domains: "domains",
   };
 
   return map[normalized] || "";
@@ -394,7 +404,7 @@ function includesAnyText(value: string, terms: string[]) {
 }
 
 function hasFineArtProtection(classifierText: string) {
-  const knownArtCues = ["krista kim", "mendezmendez", "xsullo", "signature series"];
+  const knownArtCues = ["krista kim", "mendezmendez", "xsullo", "nutdenza", "signature series"];
   if (includesAnyText(classifierText, knownArtCues)) return true;
 
   const strongArtCues = [
@@ -431,6 +441,16 @@ function hasDomainCue(rawClassifierText: string, classifierText: string) {
     /\bens\b/.test(raw) ||
     /\.(eth|nft)(\s|$|[^\w])/i.test(raw)
   );
+}
+
+function hasKnownPfpCollectionCue(classifierText: string) {
+  return includesAnyText(classifierText, [
+    "unethical cupids",
+    "onironin",
+    "oni ronin",
+    "women and weapons",
+    "ezu",
+  ]);
 }
 
 function hasPfpIdentityCue(classifierText: string) {
@@ -507,7 +527,11 @@ export function classifyCategoryWithSource(nft: WalletProfileNFT): {
   }
 
   if (hasDomainCue(rawClassifierText, classifierText)) {
-    return { category: "utility", source: "keyword" };
+    return { category: "domains", source: "keyword" };
+  }
+
+  if (hasKnownPfpCollectionCue(classifierText)) {
+    return { category: "pfp", source: "keyword" };
   }
 
   const traitKeys = collectTraitKeys(nft);

@@ -1480,10 +1480,13 @@ function groupByArtist(nfts: NFT[]) {
 
 const CATEGORY_DISPLAY_LABELS: Record<string, string> = {
   generative: "Generative Art",
-  fine_art: "Fine Art",
+  fine_art: "Art",
+  art: "Art",
   animation: "3D / Animation",
   pfp: "PFP",
-  utility: "Utility",
+  utility: "Access",
+  access: "Access",
+  domains: "Domains",
   music: "Music",
   photography: "Photography",
   meme: "Meme",
@@ -1977,11 +1980,11 @@ function computeArchetype(
   if (diversity >= 5 && worldFormatCount >= 2) return "World Citizen";
 
   if (
-    (primary === "Fine Art" || primary === "Generative Art") &&
+    (primary === "Art" || primary === "Generative Art") &&
     primaryPct >= 30
   ) return "Artist Follower";
 
-  if (primary === "Fine Art" || primary === "Generative Art") return "Curator";
+  if (primary === "Art" || primary === "Generative Art") return "Curator";
 
   if (primary === "PFP" || primary === "Meme") return "Scene Player";
 

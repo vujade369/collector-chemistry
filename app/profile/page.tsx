@@ -192,7 +192,21 @@ function formatCollectorSince(timestamp?: string): string {
 }
 
 function formatCategoryLabel(value: string): string {
-  return value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+  const key = value.toLowerCase().replace(/\s+/g, "_");
+  const labels: Record<string, string> = {
+    pfp: "PFP",
+    fine_art: "Art",
+    art: "Art",
+    generative: "Generative Art",
+    meme: "Meme",
+    utility: "Access",
+    access: "Access",
+    domains: "Domains",
+    gaming: "Gaming",
+    collectibles: "Collectibles",
+    other: "Other",
+  };
+  return labels[key] || value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function getCategoryAccent(categoryKey: string): string {
@@ -203,12 +217,34 @@ function getCategoryAccent(categoryKey: string): string {
     generative: "#9575ff",
     fine_art: "#ff8c42",
     utility: "#39d353",
+    access: "#39d353",
+    domains: "#00e5cc",
     music: "#00e5cc",
     photography: "#ffcc00",
     gaming: "#a78bfa",
     other: "#444",
   };
   return mapping[key] || "#555";
+}
+
+const CATEGORY_FILTER_ORDER = [
+  "pfp",
+  "fine_art",
+  "art",
+  "generative",
+  "meme",
+  "utility",
+  "access",
+  "domains",
+  "gaming",
+  "collectibles",
+  "other",
+];
+
+function getCategoryOrder(categoryKey: string) {
+  const key = categoryKey.toLowerCase().replace(/\s+/g, "_");
+  const index = CATEGORY_FILTER_ORDER.indexOf(key);
+  return index === -1 ? CATEGORY_FILTER_ORDER.length : index;
 }
 
 // ─── Taste Signature ──────────────────────────────────────────────────────────
@@ -422,13 +458,19 @@ export default function ProfilePage() {
   const categoryGroups = result?.categoryGroups || {};
 
   const categoryExplorerItems = useMemo(() => {
-    return tasteSlices.slice(0, 6).map((slice) => {
-      const group =
-        categoryGroups[slice.key] ||
-        categoryGroups[slice.key.toLowerCase()] ||
-        null;
-      return { key: slice.key, label: slice.label, value: slice.value, group };
-    });
+    return tasteSlices
+      .map((slice) => {
+        const group =
+          categoryGroups[slice.key] ||
+          categoryGroups[slice.key.toLowerCase()] ||
+          null;
+        return { key: slice.key, label: slice.label, value: slice.value, group };
+      })
+      .sort((a, b) => {
+        const orderDelta = getCategoryOrder(a.key) - getCategoryOrder(b.key);
+        if (orderDelta !== 0) return orderDelta;
+        return b.value - a.value;
+      });
   }, [tasteSlices, categoryGroups]);
 
   useEffect(() => {
