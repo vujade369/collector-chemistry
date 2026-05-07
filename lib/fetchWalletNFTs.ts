@@ -230,7 +230,7 @@ export async function fetchWalletNFTsWithDebug<T extends WalletOwnerNFT = Wallet
   } while (pageKey);
   debug.alchemyFetchMs = Date.now() - alchemyStartMs;
   debug.totalFetchedNFTs = allNfts.length;
-  debug.alchemyBreakReason = pageKey ? null : "no_valid_page_key";
+  debug.alchemyBreakReason = "no_valid_page_key";
 
   const ensResolveStartMs = Date.now();
   const resolvedAddress = await resolveEnsToAddress(owner);
