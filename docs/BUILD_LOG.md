@@ -17,6 +17,14 @@
 
 ## Recent Decisions
 
+### VS Code + Codex workflow
+
+- Codex is now the default build partner for scoped VS Code implementation sessions.
+- Each session should start with the task goal, allowed files, files not to touch, definition of done, and verification commands.
+- Codex should identify the product question, inspect files fresh, and make the smallest useful change.
+- Workflow documentation sessions must stay docs-only and avoid app behavior changes.
+- AGENTS.md is the repo-local source of truth for Codex behavior and verification expectations.
+
 ### Product framing
 
 - Collector Chemistry is about taste, resonance, overlap, curiosity, and cultural signal.
