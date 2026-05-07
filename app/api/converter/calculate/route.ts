@@ -1,20 +1,17 @@
 import { NextResponse } from "next/server";
+import { resolveWalletInput } from "@/lib/walletResolver";
 import {
   buildWalletOfferEstimate,
   fetchCollectionFloorPriceETH,
   fetchOpenSeaJson,
   fetchWalletTotalOfferViaMcp,
-  isEns,
-  isEthAddress,
 } from "../shared";
-
-const OPENSEA_API_KEY = process.env.OPENSEA_API_KEY;
 
 type WalletResolutionRow = {
   input: string;
   resolvedAddress?: string;
   status: "resolved" | "failed";
-  type: "address" | "ens" | "invalid";
+  type: "address" | "ens" | "opensea_url" | "opensea_username" | "invalid";
 };
 
 function buildCrossWalletDuplicateDebug(
@@ -60,46 +57,35 @@ function buildCrossWalletDuplicateDebug(
   };
 }
 
-async function resolveEnsViaMcp(ensName: string): Promise<string | null> {
-  if (!OPENSEA_API_KEY) return null;
+function mapFailedResolutionType(input: string): WalletResolutionRow["type"] {
+  const trimmed = input.trim();
+  if (/^[a-zA-Z0-9-]+\.eth$/i.test(trimmed)) return "ens";
 
   try {
-    const [{ Client }, { StreamableHTTPClientTransport }] = await Promise.all([
-      import("@modelcontextprotocol/sdk/client/index.js"),
-      import("@modelcontextprotocol/sdk/client/streamableHttp.js"),
-    ]);
+    const parsed = new URL(trimmed);
+    const host = parsed.hostname.toLowerCase();
+    if (host === "opensea.io" || host === "www.opensea.io") return "opensea_url";
+  } catch {}
 
-    const client = new Client({ name: "collector-chemistry-converter-ens", version: "1.0.0" });
-    const transport = new StreamableHTTPClientTransport(new URL("https://mcp.opensea.io/mcp"), {
-      requestInit: {
-        headers: { "X-API-KEY": OPENSEA_API_KEY },
-      },
-    });
+  return "invalid";
+}
 
-    try {
-      await client.connect(transport);
-      const toolResult = await client.callTool({
-        name: "account_lookup",
-        arguments: { query: ensName },
-      });
-      const textPayload = Array.isArray(toolResult?.content)
-        ? toolResult.content.find((part) => part?.type === "text")?.text
-        : null;
-      if (!textPayload) return null;
-
-      const parsed = JSON.parse(textPayload) as {
-        address?: string;
-        account?: { address?: string };
-        data?: { address?: string; account?: { address?: string } };
-      };
-      const address = String(parsed?.address || parsed?.account?.address || parsed?.data?.address || parsed?.data?.account?.address || "").trim();
-      return isEthAddress(address) ? address : null;
-    } finally {
-      await client.close().catch(() => undefined);
-    }
-  } catch {
-    return null;
+async function resolveConverterWalletInput(input: string): Promise<WalletResolutionRow> {
+  const result = await resolveWalletInput(input);
+  if (result.ok) {
+    return {
+      input,
+      resolvedAddress: result.address,
+      status: "resolved",
+      type: result.type,
+    };
   }
+
+  return {
+    input,
+    status: "failed",
+    type: mapFailedResolutionType(input),
+  };
 }
 
 export async function GET(req: Request) {
@@ -127,20 +113,7 @@ export async function GET(req: Request) {
   }
 
   const walletResolutionRows = await Promise.all(
-    walletInputs.map(async (input): Promise<WalletResolutionRow> => {
-      if (isEthAddress(input)) {
-        return { input, resolvedAddress: input, status: "resolved", type: "address" };
-      }
-
-      if (isEns(input)) {
-        const resolvedAddress = await resolveEnsViaMcp(input);
-        return resolvedAddress
-          ? { input, resolvedAddress, status: "resolved", type: "ens" }
-          : { input, status: "failed", type: "ens" };
-      }
-
-      return { input, status: "failed", type: "invalid" };
-    })
+    walletInputs.map(resolveConverterWalletInput)
   );
 
   const failedResolutionRows = walletResolutionRows.filter((row) => row.status === "failed");
