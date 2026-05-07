@@ -340,3 +340,36 @@ Codex should not:
 - refactor unrelated code
 - hide uncertainty
 - over-apply the constellation metaphor
+
+---
+
+## Ethical AI guardrails
+
+Read `docs/ETHICAL_AI_BUILDING.md` before changing any AI-assisted feature, interpretation prompt, scoring logic, ranking logic, comparison logic, AI-generated language, or user-facing claim derived from wallet data.
+
+Before implementing, answer:
+
+- What human judgment or interpretation does this affect?
+- What evidence supports the claim?
+- Who could be misread, excluded, flattened, or harmed?
+- What uncertainty needs to be visible?
+- Is AI necessary here, or would deterministic logic be safer?
+- What proof should appear near the claim?
+
+Do not:
+
+- Present model interpretation as objective fact.
+- Infer sensitive identity traits from wallet behavior.
+- Rank collectors by worth, taste, status, intelligence, wealth, seriousness, or cultural value.
+- Hide uncertainty when data is incomplete.
+- Add opaque scores without explaining what they are based on.
+- Optimize for engagement at the cost of dignity, accuracy, or user agency.
+
+Prefer:
+
+- Evidence-backed interpretation.
+- Human-readable uncertainty.
+- User correction or retry where reasonable.
+- Debuggable data paths.
+- Descriptive language over judgmental language.
+- Small, safe, testable changes.
