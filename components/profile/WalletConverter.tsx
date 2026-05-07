@@ -82,6 +82,8 @@ export default function WalletConverter({ wallet, wallets }: { wallet: string; w
   const [visible, setVisible] = useState(false);
   const walletEstimatePromiseRef = useRef<Promise<WalletOfferEstimate | null> | null>(null);
   const walletEstimateRequestRef = useRef<{ walletParam: string; promise: Promise<WalletOfferEstimate> } | null>(null);
+  const sectionRef = useRef<HTMLElement>(null);
+  const [shouldFetch, setShouldFetch] = useState(false);
 
   const walletParam = wallets && wallets.length > 1 ? wallets.join(",") : wallet;
 
@@ -170,6 +172,18 @@ export default function WalletConverter({ wallet, wallets }: { wallet: string; w
   }
 
   useEffect(() => {
+    if (shouldFetch) return;
+    const el = sectionRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) setShouldFetch(true); },
+      { rootMargin: "400px 0px" }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [shouldFetch]);
+
+  useEffect(() => {
     if (!walletParam) {
       setWalletEstimate(null);
       setWalletEstimatePhase("idle");
@@ -177,6 +191,8 @@ export default function WalletConverter({ wallet, wallets }: { wallet: string; w
       walletEstimatePromiseRef.current = null;
       return;
     }
+
+    if (!shouldFetch) return;
 
     let cancelled = false;
     let fetchPromise: Promise<WalletOfferEstimate>;
@@ -243,7 +259,7 @@ export default function WalletConverter({ wallet, wallets }: { wallet: string; w
     return () => {
       cancelled = true;
     };
-  }, [walletParam]);
+  }, [walletParam, shouldFetch]);
 
   useEffect(() => {
     if (phase === "result") {
@@ -305,7 +321,7 @@ export default function WalletConverter({ wallet, wallets }: { wallet: string; w
     : "";
 
   return (
-    <section className="wallet-converter">
+    <section className="wallet-converter" ref={sectionRef}>
       <div className="converter-intro">
         <h2 className="converter-headline">Trade the constellation.</h2>
         <p className="converter-subline">Pick a collection. See what your wallet could turn into.</p>
