@@ -47,3 +47,6 @@ vault/.obsidian/workspace-mobile.json
 # Obsidian plugins and local config
 vault/.obsidian/plugins/
 vault/.obsidian/community-plugins.json
+
+# Local Obsidian vault
+vault/
