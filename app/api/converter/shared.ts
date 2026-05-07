@@ -1,4 +1,5 @@
 import { fetchWalletNFTs } from "@/lib/fetchWalletNFTs";
+import { resolveWalletInput } from "@/lib/walletResolver";
 
 const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY;
 const OPENSEA_API_KEY = process.env.OPENSEA_API_KEY;
@@ -128,6 +129,37 @@ export type WalletOfferEstimateResult = {
   };
 };
 
+export type ConverterWalletResolutionRow = {
+  input: string;
+  resolvedAddress?: string;
+  status: "resolved" | "failed";
+  type: "address" | "ens" | "opensea_url" | "opensea_username" | "invalid";
+};
+
+export type ConverterWalletOfferError =
+  | null
+  | "invalid_input"
+  | "invalid_wallet"
+  | "wallet_resolution_failed"
+  | "missing_opensea"
+  | "no_wallet_offers"
+  | "estimate_failed";
+
+export type ConverterWalletOfferPrecomputeResult = {
+  detectedOfferValueETH: number;
+  offerCount: number;
+  checkedNftCount: number;
+  candidateCount: number;
+  estimateQuality: EstimateQuality;
+  error: ConverterWalletOfferError;
+  walletResolutionRows?: ConverterWalletResolutionRow[];
+  walletRows?: unknown[];
+  crossWalletDuplicateKeysCount?: number;
+  sampleCrossWalletDuplicateKeys?: unknown[];
+  crossWalletDuplicateWarnings?: unknown[];
+  debug?: unknown;
+};
+
 export type ConverterCollectionSearchResult = {
   slug: string;
   name: string;
@@ -151,6 +183,80 @@ export function isEthAddress(value: string) {
 
 export function isEns(value: string) {
   return /^[a-zA-Z0-9-]+\.eth$/.test(value.trim());
+}
+
+function buildCrossWalletDuplicateDebug(
+  walletRows: Array<{
+    wallet: string;
+    debugItems?: Array<{ nftKey: string; tokenStandard?: string }>;
+  }>
+) {
+  const byKey = new Map<string, Array<{ wallet: string; tokenStandard?: string }>>();
+
+  for (const row of walletRows) {
+    const walletKeys = new Set<string>();
+    for (const item of row.debugItems || []) {
+      if (!item.nftKey || walletKeys.has(item.nftKey)) continue;
+      walletKeys.add(item.nftKey);
+      const existing = byKey.get(item.nftKey) || [];
+      existing.push({ wallet: row.wallet, tokenStandard: item.tokenStandard });
+      byKey.set(item.nftKey, existing);
+    }
+  }
+
+  const duplicateRows = Array.from(byKey.entries()).filter(([, rows]) => new Set(rows.map((row) => row.wallet)).size > 1);
+  const erc721LikeRows = duplicateRows.filter(([, rows]) =>
+    rows.some((row) => String(row.tokenStandard || "").toUpperCase().replace(/[^A-Z0-9]/g, "") === "ERC721")
+  );
+
+  return {
+    crossWalletDuplicateKeysCount: duplicateRows.length,
+    sampleCrossWalletDuplicateKeys: duplicateRows.slice(0, 10).map(([nftKey, rows]) => ({
+      nftKey,
+      wallets: Array.from(new Set(rows.map((row) => row.wallet))),
+      tokenStandards: Array.from(new Set(rows.map((row) => row.tokenStandard).filter(Boolean))),
+    })),
+    crossWalletDuplicateWarnings: erc721LikeRows.length
+      ? [
+          {
+            type: "erc721_like_key_seen_in_multiple_wallets",
+            message: "The same ERC-721-like key appeared in multiple wallets. Totals were not adjusted.",
+            count: erc721LikeRows.length,
+          },
+        ]
+      : [],
+  };
+}
+
+function mapFailedResolutionType(input: string): ConverterWalletResolutionRow["type"] {
+  const trimmed = input.trim();
+  if (/^[a-zA-Z0-9-]+\.eth$/i.test(trimmed)) return "ens";
+
+  try {
+    const parsed = new URL(trimmed);
+    const host = parsed.hostname.toLowerCase();
+    if (host === "opensea.io" || host === "www.opensea.io") return "opensea_url";
+  } catch {}
+
+  return "invalid";
+}
+
+async function resolveConverterWalletInput(input: string): Promise<ConverterWalletResolutionRow> {
+  const result = await resolveWalletInput(input);
+  if (result.ok) {
+    return {
+      input,
+      resolvedAddress: result.address,
+      status: "resolved",
+      type: result.type,
+    };
+  }
+
+  return {
+    input,
+    status: "failed",
+    type: mapFailedResolutionType(input),
+  };
 }
 
 export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
@@ -1089,6 +1195,174 @@ export async function buildWalletOfferEstimate(wallet: string, includeDebug = fa
       error: "estimate_failed",
     };
   }
+}
+
+export async function buildConverterWalletOfferPrecompute(
+  walletParam: string,
+  includeDebug = false
+): Promise<ConverterWalletOfferPrecomputeResult> {
+  const walletInputs = String(walletParam || "")
+    .split(",")
+    .map((w) => w.trim())
+    .filter(Boolean);
+
+  if (!walletInputs.length || walletInputs.length > 3) {
+    return {
+      detectedOfferValueETH: 0,
+      offerCount: 0,
+      checkedNftCount: 0,
+      candidateCount: 0,
+      estimateQuality: "low",
+      error: "invalid_input",
+    };
+  }
+
+  const walletResolutionRows = await Promise.all(walletInputs.map(resolveConverterWalletInput));
+  const failedResolutionRows = walletResolutionRows.filter((row) => row.status === "failed");
+
+  if (failedResolutionRows.length) {
+    return {
+      detectedOfferValueETH: 0,
+      offerCount: 0,
+      checkedNftCount: 0,
+      candidateCount: 0,
+      estimateQuality: "low",
+      error: walletInputs.length > 1 ? "wallet_resolution_failed" : "invalid_wallet",
+      walletResolutionRows,
+    };
+  }
+
+  const resolvedWallets = walletResolutionRows
+    .map((row) => row.resolvedAddress)
+    .filter((wallet): wallet is string => Boolean(wallet));
+
+  if (!resolvedWallets.length) {
+    return {
+      detectedOfferValueETH: 0,
+      offerCount: 0,
+      checkedNftCount: 0,
+      candidateCount: 0,
+      estimateQuality: "low",
+      error: "no_wallet_offers",
+      walletResolutionRows: includeDebug ? walletResolutionRows : undefined,
+    };
+  }
+
+  if (resolvedWallets.length === 1) {
+    const estimate = await buildWalletOfferEstimate(resolvedWallets[0], includeDebug);
+
+    if (estimate.error === "missing_opensea") {
+      return {
+        detectedOfferValueETH: 0,
+        offerCount: 0,
+        checkedNftCount: 0,
+        candidateCount: 0,
+        estimateQuality: "low",
+        error: "missing_opensea",
+        walletResolutionRows: includeDebug ? walletResolutionRows : undefined,
+      };
+    }
+
+    if (estimate.error === "no_wallet_offers") {
+      return {
+        detectedOfferValueETH: 0,
+        offerCount: 0,
+        checkedNftCount: estimate.checkedNftCount,
+        candidateCount: estimate.candidateCount,
+        estimateQuality: estimate.estimateQuality,
+        error: "no_wallet_offers",
+        walletResolutionRows: includeDebug ? walletResolutionRows : undefined,
+        debug: includeDebug ? estimate.debug : undefined,
+      };
+    }
+
+    if (estimate.error) {
+      return {
+        detectedOfferValueETH: 0,
+        offerCount: 0,
+        checkedNftCount: 0,
+        candidateCount: 0,
+        estimateQuality: "low",
+        error: "estimate_failed",
+        walletResolutionRows: includeDebug ? walletResolutionRows : undefined,
+      };
+    }
+
+    return {
+      detectedOfferValueETH: estimate.detectedOfferValueETH,
+      offerCount: estimate.offerCount,
+      checkedNftCount: estimate.checkedNftCount,
+      candidateCount: estimate.candidateCount,
+      estimateQuality: estimate.estimateQuality,
+      error: null,
+      walletResolutionRows: includeDebug ? walletResolutionRows : undefined,
+      debug: includeDebug ? estimate.debug : undefined,
+    };
+  }
+
+  const walletResults = await Promise.all(resolvedWallets.map((wallet) => fetchWalletTotalOfferViaMcp(wallet, includeDebug)));
+  const successes = walletResults.filter((r) => r.error === null || r.error === "no_offers");
+  const hasMissingOpenSea = walletResults.some((r) => r.error === "missing_opensea");
+
+  if (hasMissingOpenSea) {
+    return {
+      detectedOfferValueETH: 0,
+      offerCount: 0,
+      checkedNftCount: 0,
+      candidateCount: 0,
+      estimateQuality: "low",
+      error: "missing_opensea",
+      walletResolutionRows: includeDebug ? walletResolutionRows : undefined,
+    };
+  }
+
+  if (!successes.length) {
+    return {
+      detectedOfferValueETH: 0,
+      offerCount: 0,
+      checkedNftCount: 0,
+      candidateCount: 0,
+      estimateQuality: "low",
+      error: "no_wallet_offers",
+      walletResolutionRows: includeDebug ? walletResolutionRows : undefined,
+    };
+  }
+
+  const detectedOfferValueETH = successes.reduce((sum, row) => sum + row.totalOfferETH, 0);
+  const offerCount = successes.reduce((sum, row) => sum + row.offerCount, 0);
+  const checkedNftCount = successes.reduce((sum, row) => sum + row.itemCount, 0);
+  const debugWalletRows = resolvedWallets.map((wallet, index) => ({
+    wallet,
+    debugItems: walletResults[index]?.debugItems,
+  }));
+  const multiWalletDebug = includeDebug
+    ? {
+        ...buildCrossWalletDuplicateDebug(debugWalletRows),
+        walletRows: resolvedWallets.map((wallet, index) => ({
+          wallet,
+          totalOfferETH: walletResults[index]?.totalOfferETH ?? 0,
+          offerCount: walletResults[index]?.offerCount ?? 0,
+          itemCount: walletResults[index]?.itemCount ?? 0,
+          error: walletResults[index]?.error ?? "mcp_failed",
+          debug: walletResults[index]?.debug,
+        })),
+      }
+    : undefined;
+
+  return {
+    detectedOfferValueETH,
+    offerCount,
+    checkedNftCount,
+    candidateCount: checkedNftCount,
+    estimateQuality: offerCount >= 5 ? "high" : offerCount >= 2 ? "medium" : "low",
+    error: detectedOfferValueETH > 0 ? null : "no_wallet_offers",
+    walletResolutionRows: includeDebug ? walletResolutionRows : undefined,
+    walletRows: multiWalletDebug?.walletRows,
+    crossWalletDuplicateKeysCount: multiWalletDebug?.crossWalletDuplicateKeysCount,
+    sampleCrossWalletDuplicateKeys: multiWalletDebug?.sampleCrossWalletDuplicateKeys,
+    crossWalletDuplicateWarnings: multiWalletDebug?.crossWalletDuplicateWarnings,
+    debug: multiWalletDebug,
+  };
 }
 
 function parseCollectionRows(payload: any): any[] {
