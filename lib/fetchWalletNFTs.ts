@@ -195,6 +195,7 @@ function shouldAttemptOpenSeaFallback(params: {
   fetchedCount: number;
   pageCount: number;
 }) {
+  if (params.pageCount === 0) return true;
   return Boolean(params.pageKey && params.fetchedCount > 0 && params.pageCount > 0);
 }
 
