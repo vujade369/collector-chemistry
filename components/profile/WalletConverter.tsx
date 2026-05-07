@@ -81,6 +81,7 @@ export default function WalletConverter({ wallet, wallets }: { wallet: string; w
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [visible, setVisible] = useState(false);
   const walletEstimatePromiseRef = useRef<Promise<WalletOfferEstimate | null> | null>(null);
+  const walletEstimateRequestRef = useRef<{ walletParam: string; promise: Promise<WalletOfferEstimate> } | null>(null);
 
   const walletParam = wallets && wallets.length > 1 ? wallets.join(",") : wallet;
 
@@ -172,19 +173,52 @@ export default function WalletConverter({ wallet, wallets }: { wallet: string; w
     if (!walletParam) {
       setWalletEstimate(null);
       setWalletEstimatePhase("idle");
+      walletEstimateRequestRef.current = null;
       walletEstimatePromiseRef.current = null;
       return;
     }
 
     let cancelled = false;
-    setWalletEstimate(null);
-    setWalletEstimatePhase("loading");
+    let fetchPromise: Promise<WalletOfferEstimate>;
 
-    const promise = fetch(`/api/converter/wallet-offers?wallet=${encodeURIComponent(walletParam)}`)
-      .then(async (res) => {
+    const existing = walletEstimateRequestRef.current;
+    if (existing?.walletParam === walletParam) {
+      fetchPromise = existing.promise;
+    } else {
+      setWalletEstimate(null);
+      setWalletEstimatePhase("loading");
+
+      const newRequest: Promise<WalletOfferEstimate> = fetch(
+        `/api/converter/wallet-offers?wallet=${encodeURIComponent(walletParam)}`
+      ).then(async (res) => {
         if (!res.ok) throw new Error("wallet-offer-precompute-failed");
         return (await res.json()) as WalletOfferEstimate;
-      })
+      });
+
+      const entry = { walletParam, promise: newRequest };
+      walletEstimateRequestRef.current = entry;
+
+      walletEstimatePromiseRef.current = newRequest.catch(
+        (): WalletOfferEstimate => ({
+          detectedOfferValueETH: 0,
+          offerCount: 0,
+          checkedNftCount: 0,
+          candidateCount: 0,
+          estimateQuality: "low",
+          error: "estimate_failed",
+        })
+      );
+
+      void newRequest.finally(() => {
+        if (walletEstimateRequestRef.current === entry) {
+          walletEstimateRequestRef.current = null;
+        }
+      });
+
+      fetchPromise = newRequest;
+    }
+
+    fetchPromise
       .then((json) => {
         if (!cancelled) {
           setWalletEstimate(json);
@@ -193,24 +227,18 @@ export default function WalletConverter({ wallet, wallets }: { wallet: string; w
         return json;
       })
       .catch(() => {
-        const fallbackEstimate: WalletOfferEstimate = {
-          detectedOfferValueETH: 0,
-          offerCount: 0,
-          checkedNftCount: 0,
-          candidateCount: 0,
-          estimateQuality: "low",
-          error: "estimate_failed",
-        };
-
         if (!cancelled) {
-          setWalletEstimate(fallbackEstimate);
+          setWalletEstimate({
+            detectedOfferValueETH: 0,
+            offerCount: 0,
+            checkedNftCount: 0,
+            candidateCount: 0,
+            estimateQuality: "low",
+            error: "estimate_failed",
+          });
           setWalletEstimatePhase("error");
         }
-
-        return fallbackEstimate;
       });
-
-    walletEstimatePromiseRef.current = promise;
 
     return () => {
       cancelled = true;
