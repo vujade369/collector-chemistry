@@ -192,25 +192,30 @@ export async function GET(req: Request) {
       debugItems: walletResults[index]?.debugItems,
     }));
 
+    const anyTruncated = walletResults.some((r) => r.scanTruncated);
     estimate = {
       wallet: walletParam,
       detectedOfferValueETH,
       offerCount,
       checkedNftCount,
       candidateCount: checkedNftCount,
-      estimateQuality: offerCount >= 5 ? "high" : offerCount >= 2 ? "medium" : "low",
+      estimateQuality: anyTruncated ? (offerCount >= 2 ? "medium" : "low") : (offerCount >= 5 ? "high" : offerCount >= 2 ? "medium" : "low"),
       error: detectedOfferValueETH > 0 ? null : "no_wallet_offers",
       debug: includeDebug
         ? {
             ...buildCrossWalletDuplicateDebug(debugWalletRows),
-            walletRows: resolvedWallets.map((wallet, index) => ({
-              wallet,
-              totalOfferETH: walletResults[index]?.totalOfferETH ?? 0,
-              offerCount: walletResults[index]?.offerCount ?? 0,
-              itemCount: walletResults[index]?.itemCount ?? 0,
-              error: walletResults[index]?.error ?? "mcp_failed",
-              debug: walletResults[index]?.debug,
-            })),
+            walletRows: resolvedWallets.map((wallet, index) => {
+              const r = walletResults[index];
+              return {
+                wallet,
+                totalOfferETH: r?.totalOfferETH ?? 0,
+                offerCount: r?.offerCount ?? 0,
+                itemCount: r?.itemCount ?? 0,
+                error: r !== undefined ? r.error : "mcp_failed",
+                scanTruncated: r?.scanTruncated ?? false,
+                debug: r?.debug,
+              };
+            }),
           }
         : undefined,
     };
