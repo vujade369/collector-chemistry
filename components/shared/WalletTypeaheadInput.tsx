@@ -28,6 +28,7 @@ type Props = Omit<ComponentPropsWithoutRef<"input">, "value" | "onChange"> & {
   value: string;
   onValueChange: (value: string, event?: ChangeEvent<HTMLInputElement>) => void;
   onSuggestionSelect?: (suggestion: WalletSuggestion) => void;
+  onDropdownOpenChange?: (isOpen: boolean) => void;
 };
 
 function shortenAddress(value: string) {
@@ -66,15 +67,18 @@ export default function WalletTypeaheadInput({
   onFocus,
   onBlur,
   onKeyDown,
+  onDropdownOpenChange,
   autoComplete,
   ...inputProps
 }: Props) {
   const [suggestions, setSuggestions] = useState<WalletSuggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [lookupFailed, setLookupFailed] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const cacheRef = useRef(new Map<string, WalletSuggestion[]>());
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const requestIdRef = useRef(0);
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -83,8 +87,15 @@ export default function WalletTypeaheadInput({
   const showDropdown = isFocused && canSearch && (loading || hasSearched || suggestions.length > 0);
 
   useEffect(() => {
+    onDropdownOpenChange?.(showDropdown);
+  }, [onDropdownOpenChange, showDropdown]);
+
+  useEffect(() => {
     if (!canSearch) {
       requestIdRef.current += 1;
+      setSuggestions([]);
+      setHasSearched(false);
+      setLookupFailed(false);
       return;
     }
 
@@ -102,12 +113,14 @@ export default function WalletTypeaheadInput({
     const timer = setTimeout(async () => {
       setLoading(true);
       setHasSearched(false);
+      setLookupFailed(false);
       setHighlightedIndex(-1);
 
       try {
         const res = await fetch(`/api/wallet/suggest?q=${encodeURIComponent(query)}`, {
           signal: controller.signal,
         });
+        if (!res.ok) throw new Error("wallet-suggest-failed");
         const json = (await res.json()) as WalletSuggestResponse;
         const nextResults = Array.isArray(json.results) ? json.results : [];
         cacheRef.current.set(query, nextResults);
@@ -117,6 +130,7 @@ export default function WalletTypeaheadInput({
         if (requestIdRef.current !== requestId || controller.signal.aborted) return;
         cacheRef.current.set(query, []);
         setSuggestions([]);
+        setLookupFailed(true);
       } finally {
         if (requestIdRef.current === requestId && !controller.signal.aborted) {
           setLoading(false);
@@ -136,7 +150,10 @@ export default function WalletTypeaheadInput({
     onSuggestionSelect?.(suggestion);
     setSuggestions([]);
     setHasSearched(false);
+    setLookupFailed(false);
+    setIsFocused(false);
     setHighlightedIndex(-1);
+    inputRef.current?.blur();
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -180,10 +197,14 @@ export default function WalletTypeaheadInput({
     <div className="wallet-typeahead">
       <input
         {...inputProps}
+        ref={inputRef}
         autoComplete={autoComplete || "off"}
         className={className}
         value={value}
-        onChange={(event) => onValueChange(event.target.value, event)}
+        onChange={(event) => {
+          setLookupFailed(false);
+          onValueChange(event.target.value, event);
+        }}
         onFocus={(event) => {
           if (blurTimerRef.current) clearTimeout(blurTimerRef.current);
           setIsFocused(true);
@@ -199,7 +220,9 @@ export default function WalletTypeaheadInput({
       {showDropdown && (
         <div className="wallet-typeahead-dropdown" role="listbox">
           {loading ? (
-            <div className="wallet-typeahead-status">Looking...</div>
+            <div className="wallet-typeahead-status" aria-live="polite">
+              Looking for matching wallets…
+            </div>
           ) : suggestions.length > 0 ? (
             suggestions.map((suggestion, index) => (
               <button
@@ -227,9 +250,13 @@ export default function WalletTypeaheadInput({
                 </span>
               </button>
             ))
+          ) : lookupFailed ? (
+            <div className="wallet-typeahead-status" aria-live="polite">
+              Wallet lookup is quiet right now. You can still submit this.
+            </div>
           ) : (
-            <div className="wallet-typeahead-status">
-              No confirmed wallet found. You can still submit this.
+            <div className="wallet-typeahead-status" aria-live="polite">
+              No confirmed wallet yet. You can still submit this.
             </div>
           )}
         </div>

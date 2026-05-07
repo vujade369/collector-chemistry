@@ -629,6 +629,12 @@ export default function ProfilePage() {
                     {profile.collectorIdentityLabel}
                   </p>
                 )}
+                <WalletBanner
+                  wallets={result?.wallets || initialWalletsFromQuery}
+                  onAdd={addWallet}
+                  onRemove={removeWallet}
+                  variant="compact"
+                />
               </article>
 
               {firstMint?.openseaUrl ? (
@@ -1131,13 +1137,6 @@ export default function ProfilePage() {
                 </div>
               </section>
             )}
-
-            {/* ── Multi-wallet banner ── */}
-            <WalletBanner
-              wallets={result?.wallets || initialWalletsFromQuery}
-              onAdd={addWallet}
-              onRemove={removeWallet}
-            />
 
             {/* ── Compare CTA ── */}
             <section className="profile-panel profile-compare-cta">

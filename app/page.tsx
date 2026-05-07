@@ -20,6 +20,7 @@ export default function HomePage() {
   const [resolveError, setResolveError] = useState("");
   const [resolving, setResolving] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
+  const [walletDropdownOpen, setWalletDropdownOpen] = useState(false);
 
   useEffect(() => {
     setIsVisible(true);
@@ -135,6 +136,7 @@ export default function HomePage() {
                 if (resolveError) setResolveError("");
               }}
               onKeyDown={handleKeyDown}
+              onDropdownOpenChange={setWalletDropdownOpen}
               style={{ paddingRight: "130px" }}
             />
             <button
@@ -172,10 +174,12 @@ export default function HomePage() {
           style={{
             transitionDelay: "300ms",
             marginTop: "20px",
+            paddingTop: walletDropdownOpen ? "276px" : 0,
             fontSize: "11px",
             letterSpacing: "0.12em",
             textTransform: "uppercase",
             color: "var(--text-dimmer)",
+            transition: "padding-top 160ms ease",
           }}
         >
           Read-only · No wallet connection

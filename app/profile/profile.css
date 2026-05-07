@@ -113,6 +113,18 @@
 .profile-inline-link { color: #a8a49d; font-size: 12px; text-decoration: underline; }
 
 .wallet-banner { display: grid; gap: 10px; margin: 0; }
+.wallet-banner-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.wallet-banner-label { margin: 0; color: #777; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; }
+.wallet-banner-count { margin: 0; color: #555; font-size: 11px; white-space: nowrap; }
+.wallet-banner-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: start; }
+.wallet-pill-row { display: flex; flex-wrap: wrap; gap: 7px; }
+.wallet-pill { border: 0.5px solid #2a2a2a; border-radius: 999px; background: rgba(20,20,20,0.72); color: #a8a49d; cursor: pointer; font-size: 11px; line-height: 1; padding: 7px 10px; transition: border-color 150ms ease, color 150ms ease, background 150ms ease; }
+.wallet-pill:hover, .wallet-pill:focus-visible { border-color: #444; background: #171717; color: #f0ede6; }
+.wallet-banner--compact { margin-top: 16px; padding-top: 14px; border-top: 0.5px solid #222; }
+.wallet-banner--compact .wallet-banner-form { grid-template-columns: minmax(0, 1fr) auto; }
+.wallet-banner--compact .profile-input { padding: 10px 12px; font-size: 12px; }
+.wallet-banner--compact .profile-btn-primary { padding: 9px 14px; font-size: 12px; }
+.wallet-banner--compact .wallet-pill { color: rgba(216,213,206,0.62); }
 .wallet-converter { padding: 18px; border: 0.5px solid #262626; border-radius: 14px; background: #101010; }
 .converter-headline { margin: 0; font-size: 26px; font-weight: 300; letter-spacing: -0.025em; color: #f0ede6; }
 .converter-subline { margin: 6px 0 0; color: #a8a49d; font-size: 14px; }
@@ -184,6 +196,8 @@
 }
 
 @media (max-width: 520px) {
+  .wallet-banner-row { align-items: flex-start; flex-direction: column; gap: 4px; }
+  .wallet-banner-form, .wallet-banner--compact .wallet-banner-form { grid-template-columns: 1fr; }
   .converter-result { gap: 8px; }
   .converter-count { font-size: clamp(26px, 8.8vw, 34px); }
   .converter-visual { width: 100%; align-items: flex-end; gap: 8px; padding: 9px 10px 11px; }
