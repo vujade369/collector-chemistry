@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchAndMergeWalletNFTs, fetchWalletNFTs, WalletFetchError } from "@/lib/fetchWalletNFTs";
+import { fetchAndMergeWalletNFTsWithDebug, fetchWalletNFTsWithDebug, WalletFetchError } from "@/lib/fetchWalletNFTs";
 import {
   buildWalletProfile,
   classifyCategoryWithSource,
@@ -14,6 +14,7 @@ const OPENSEA_API_KEY = process.env.OPENSEA_API_KEY;
 const OPENSEA_BASE_URL = "https://api.opensea.io/api/v2";
 const DEFAULT_COLLECTION_CATEGORY_CAP = 25;
 const CATEGORY_ENRICHMENT_TIMEOUT_MS = 10000;
+const CATEGORY_ENRICHMENT_CONCURRENCY = 4;
 const OPENSEA_MAX_EVENT_PAGES = 6;
 const OPENSEA_EVENT_PAGE_LIMIT = 50;
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
@@ -86,6 +87,9 @@ type CategoryEnrichmentDebug = {
   collectionsWithoutSlug: number;
   collectionsCategoryCap: number;
   categoryEnrichmentTimedOut: boolean;
+  categoryEnrichmentConcurrency: number;
+  categoryRequestsStarted: number;
+  categoryRequestsCompleted: number;
   openseaCategorySamples: Array<{
     slug: string;
     endpoint: string;
@@ -385,17 +389,18 @@ async function enrichCollectionCategories(nfts: WalletProfileNFT[], categoryCap:
     collectionsWithoutSlug: 0,
     collectionsCategoryCap: categoryCap,
     categoryEnrichmentTimedOut: false,
+    categoryEnrichmentConcurrency: CATEGORY_ENRICHMENT_CONCURRENCY,
+    categoryRequestsStarted: 0,
+    categoryRequestsCompleted: 0,
     openseaCategorySamples: [],
   };
   const enrichStartMs = Date.now();
+  let nextCollectionIndex = 0;
 
-  for (const collection of topCollections) {
-    if (Date.now() - enrichStartMs >= CATEGORY_ENRICHMENT_TIMEOUT_MS) {
-      stats.categoryEnrichmentTimedOut = true;
-      break;
-    }
-
+  async function processCollection(collection: { nfts: WalletProfileNFT[]; count: number; name: string }) {
     stats.collectionsCheckedForCategory += 1;
+    stats.categoryRequestsStarted += 1;
+
     const sample = collection.nfts[0];
     const contractAddress = normalizeAddress(sample?.contract?.address);
     const normalizedName = normalizeText(collection.name);
@@ -465,6 +470,27 @@ async function enrichCollectionCategories(nfts: WalletProfileNFT[], categoryCap:
       }
     }
   }
+
+  async function runCategoryWorker() {
+    while (nextCollectionIndex < topCollections.length) {
+      if (Date.now() - enrichStartMs >= CATEGORY_ENRICHMENT_TIMEOUT_MS) {
+        stats.categoryEnrichmentTimedOut = true;
+        return;
+      }
+
+      const collection = topCollections[nextCollectionIndex];
+      nextCollectionIndex += 1;
+      await processCollection(collection);
+      stats.categoryRequestsCompleted += 1;
+    }
+  }
+
+  await Promise.all(
+    Array.from(
+      { length: Math.min(CATEGORY_ENRICHMENT_CONCURRENCY, topCollections.length) },
+      () => runCategoryWorker()
+    )
+  );
 
   return { enrichedNFTs: nfts, debug: stats };
 }
@@ -1357,9 +1383,15 @@ export async function GET(req: Request) {
     }
 
     const fetchStartMs = Date.now();
-    const { mergedNFTs, deduplicatedCount, failedWallets } = validWallets.length > 1
-      ? await fetchAndMergeWalletNFTs<WalletProfileNFT>(validWallets, ALCHEMY_API_KEY)
-      : { mergedNFTs: await fetchWalletNFTs<WalletProfileNFT>(wallet, ALCHEMY_API_KEY), deduplicatedCount: 0, failedWallets: [] as string[] };
+    const fetchResult = validWallets.length > 1
+      ? await fetchAndMergeWalletNFTsWithDebug<WalletProfileNFT>(validWallets, ALCHEMY_API_KEY)
+      : await fetchWalletNFTsWithDebug<WalletProfileNFT>(wallet, ALCHEMY_API_KEY).then(({ nfts, debug: fetchNFTsBreakdown }) => ({
+          mergedNFTs: nfts,
+          deduplicatedCount: 0,
+          failedWallets: [] as string[],
+          debug: fetchNFTsBreakdown,
+        }));
+    const { mergedNFTs, deduplicatedCount, failedWallets, debug: fetchNFTsBreakdown } = fetchResult;
     const nfts = mergedNFTs;
     const taste = buildTasteDNA(nfts);
     const fetchNFTsMs = Date.now() - fetchStartMs;
@@ -1602,6 +1634,9 @@ export async function GET(req: Request) {
       collectionsWithoutSlug: debug.collectionsWithoutSlug,
       collectionsCategoryCap: debug.collectionsCategoryCap,
       categoryEnrichmentTimedOut: debug.categoryEnrichmentTimedOut,
+      categoryEnrichmentConcurrency: debug.categoryEnrichmentConcurrency,
+      categoryRequestsStarted: debug.categoryRequestsStarted,
+      categoryRequestsCompleted: debug.categoryRequestsCompleted,
       categorySourceBreakdown: enrichedProfile.categorySourceBreakdown,
       openseaCategorySamples: debug.openseaCategorySamples,
       timing: {
@@ -1620,6 +1655,7 @@ export async function GET(req: Request) {
         categoryGroupsMs,
         collectionDisplayIndexMs,
         topCollectionsDisplayMs,
+        fetchNFTsBreakdown,
       },
       diagnostics: {
         walletInput,

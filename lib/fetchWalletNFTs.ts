@@ -51,10 +51,103 @@ export class WalletFetchError extends Error {
   }
 }
 
-export async function fetchWalletNFTs<T extends WalletOwnerNFT = WalletOwnerNFT>(
+export type WalletNFTFetchDebug = {
+  alchemyFetchMs: number;
+  openSeaVisibleFilterMs: number;
+  normalizationMs: number;
+  ensResolveMs: number;
+  alchemyPageCount: number;
+  alchemyBreakReason: string | null;
+  visibleTokenPageCount: number;
+  totalFetchedNFTs: number;
+  visibleTokenCount: number;
+  returnedNFTs: number;
+  openSeaVisibleFilterApplied: boolean;
+  openSeaVisibleFilterFallbackReason: string | null;
+  openSeaVisibleFilterCacheHit: boolean;
+  openSeaVisibleFilterCacheAgeMs: number | null;
+  openSeaVisibleFilterCacheTtlMs: number;
+};
+
+export type WalletNFTFetchResult<T extends WalletOwnerNFT = WalletOwnerNFT> = {
+  nfts: T[];
+  debug: WalletNFTFetchDebug;
+};
+
+export type WalletMergeFetchDebug = WalletNFTFetchDebug & {
+  wallets: Array<{
+    wallet: string;
+    ok: boolean;
+    debug?: WalletNFTFetchDebug;
+    error?: string;
+  }>;
+};
+
+function createFetchDebug(): WalletNFTFetchDebug {
+  return {
+    alchemyFetchMs: 0,
+    openSeaVisibleFilterMs: 0,
+    normalizationMs: 0,
+    ensResolveMs: 0,
+    alchemyPageCount: 0,
+    alchemyBreakReason: null,
+    visibleTokenPageCount: 0,
+    totalFetchedNFTs: 0,
+    visibleTokenCount: 0,
+    returnedNFTs: 0,
+    openSeaVisibleFilterApplied: false,
+    openSeaVisibleFilterFallbackReason: null,
+    openSeaVisibleFilterCacheHit: false,
+    openSeaVisibleFilterCacheAgeMs: null,
+    openSeaVisibleFilterCacheTtlMs: OPENSEA_VISIBLE_TOKEN_CACHE_TTL_MS,
+  };
+}
+
+function aggregateFetchDebug(debugs: WalletNFTFetchDebug[]): WalletNFTFetchDebug {
+  const aggregate = createFetchDebug();
+  for (const debug of debugs) {
+    aggregate.alchemyFetchMs = Math.max(aggregate.alchemyFetchMs, debug.alchemyFetchMs);
+    aggregate.openSeaVisibleFilterMs = Math.max(aggregate.openSeaVisibleFilterMs, debug.openSeaVisibleFilterMs);
+    aggregate.normalizationMs += debug.normalizationMs;
+    aggregate.ensResolveMs = Math.max(aggregate.ensResolveMs, debug.ensResolveMs);
+    aggregate.alchemyPageCount += debug.alchemyPageCount;
+    if (!aggregate.alchemyBreakReason && debug.alchemyBreakReason) {
+      aggregate.alchemyBreakReason = debug.alchemyBreakReason;
+    }
+    aggregate.visibleTokenPageCount += debug.visibleTokenPageCount;
+    aggregate.totalFetchedNFTs += debug.totalFetchedNFTs;
+    aggregate.visibleTokenCount += debug.visibleTokenCount;
+    aggregate.returnedNFTs += debug.returnedNFTs;
+    aggregate.openSeaVisibleFilterApplied =
+      aggregate.openSeaVisibleFilterApplied || debug.openSeaVisibleFilterApplied;
+    aggregate.openSeaVisibleFilterCacheHit =
+      aggregate.openSeaVisibleFilterCacheHit || debug.openSeaVisibleFilterCacheHit;
+    if (
+      aggregate.openSeaVisibleFilterCacheAgeMs === null &&
+      debug.openSeaVisibleFilterCacheAgeMs !== null
+    ) {
+      aggregate.openSeaVisibleFilterCacheAgeMs = debug.openSeaVisibleFilterCacheAgeMs;
+    }
+    if (!aggregate.openSeaVisibleFilterFallbackReason && debug.openSeaVisibleFilterFallbackReason) {
+      aggregate.openSeaVisibleFilterFallbackReason = debug.openSeaVisibleFilterFallbackReason;
+    }
+  }
+  return aggregate;
+}
+
+function getValidAlchemyPageKey(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.toLowerCase() === "null") return undefined;
+  return trimmed;
+}
+
+export async function fetchWalletNFTsWithDebug<T extends WalletOwnerNFT = WalletOwnerNFT>(
   owner: string,
   alchemyApiKey?: string
-): Promise<T[]> {
+): Promise<WalletNFTFetchResult<T>> {
+  const debug = createFetchDebug();
+
   if (!alchemyApiKey) {
     throw new WalletFetchError({
       message: "Missing ALCHEMY_API_KEY",
@@ -67,6 +160,7 @@ export async function fetchWalletNFTs<T extends WalletOwnerNFT = WalletOwnerNFT>
   const allNfts: T[] = [];
   let pageKey: string | undefined = undefined;
 
+  const alchemyStartMs = Date.now();
   do {
     const params = new URLSearchParams({
       owner,
@@ -131,18 +225,49 @@ export async function fetchWalletNFTs<T extends WalletOwnerNFT = WalletOwnerNFT>
     const pageNfts = (data.ownedNfts || []) as T[];
 
     allNfts.push(...pageNfts);
-    pageKey = data.pageKey;
+    debug.alchemyPageCount += 1;
+    pageKey = getValidAlchemyPageKey(data.pageKey);
   } while (pageKey);
+  debug.alchemyFetchMs = Date.now() - alchemyStartMs;
+  debug.totalFetchedNFTs = allNfts.length;
+  debug.alchemyBreakReason = pageKey ? null : "no_valid_page_key";
 
+  const ensResolveStartMs = Date.now();
   const resolvedAddress = await resolveEnsToAddress(owner);
-  const visibleKeys = await fetchOpenSeaVisibleTokenKeys(resolvedAddress);
-  if (!visibleKeys) return allNfts;
+  debug.ensResolveMs = Date.now() - ensResolveStartMs;
+  const visibleResult = await fetchOpenSeaVisibleTokenKeysWithDebug(resolvedAddress);
+  debug.openSeaVisibleFilterMs = visibleResult.elapsedMs;
+  debug.visibleTokenPageCount = visibleResult.pageCount;
+  debug.visibleTokenCount = visibleResult.keys?.size || 0;
+  debug.openSeaVisibleFilterFallbackReason = visibleResult.fallbackReason;
+  debug.openSeaVisibleFilterCacheHit = visibleResult.cacheHit;
+  debug.openSeaVisibleFilterCacheAgeMs = visibleResult.cacheAgeMs;
+  debug.openSeaVisibleFilterCacheTtlMs = visibleResult.cacheTtlMs;
 
-  return allNfts.filter((nft) => {
+  if (!visibleResult.keys) {
+    debug.returnedNFTs = allNfts.length;
+    return { nfts: allNfts, debug };
+  }
+
+  debug.openSeaVisibleFilterApplied = true;
+  const normalizationStartMs = Date.now();
+  const nfts = allNfts.filter((nft) => {
     const key = getNftKey(nft);
     if (!key) return true;
-    return visibleKeys.has(key);
+    return visibleResult.keys!.has(key);
   });
+  debug.normalizationMs = Date.now() - normalizationStartMs;
+  debug.returnedNFTs = nfts.length;
+
+  return { nfts, debug };
+}
+
+export async function fetchWalletNFTs<T extends WalletOwnerNFT = WalletOwnerNFT>(
+  owner: string,
+  alchemyApiKey?: string
+): Promise<T[]> {
+  const { nfts } = await fetchWalletNFTsWithDebug<T>(owner, alchemyApiKey);
+  return nfts;
 }
 
 function normalizeTokenIdForMerge(value: string) {
@@ -161,11 +286,20 @@ export async function fetchAndMergeWalletNFTs<T extends WalletOwnerNFT = WalletO
   wallets: string[],
   alchemyApiKey?: string
 ): Promise<{ mergedNFTs: Array<T & { sourceWallet?: string }>; deduplicatedCount: number; failedWallets: string[] }> {
+  const { mergedNFTs, deduplicatedCount, failedWallets } =
+    await fetchAndMergeWalletNFTsWithDebug<T>(wallets, alchemyApiKey);
+  return { mergedNFTs, deduplicatedCount, failedWallets };
+}
+
+export async function fetchAndMergeWalletNFTsWithDebug<T extends WalletOwnerNFT = WalletOwnerNFT>(
+  wallets: string[],
+  alchemyApiKey?: string
+): Promise<{ mergedNFTs: Array<T & { sourceWallet?: string }>; deduplicatedCount: number; failedWallets: string[]; debug: WalletMergeFetchDebug }> {
   const uniqueWallets = Array.from(new Set(wallets.map((w) => w.trim()).filter(Boolean)));
   const results = await Promise.allSettled(
     uniqueWallets.map(async (wallet) => ({
       wallet,
-      nfts: await fetchWalletNFTs<T>(wallet, alchemyApiKey),
+      result: await fetchWalletNFTsWithDebug<T>(wallet, alchemyApiKey),
     }))
   );
 
@@ -178,7 +312,8 @@ export async function fetchAndMergeWalletNFTs<T extends WalletOwnerNFT = WalletO
     if (result.status !== "fulfilled") {
       continue;
     }
-    const { wallet, nfts } = result.value;
+    const { wallet, result: fetchResult } = result.value;
+    const { nfts } = fetchResult;
     for (const nft of nfts) {
       const key = getMergeKey(nft);
       if (key && seen.has(key)) {
@@ -194,12 +329,54 @@ export async function fetchAndMergeWalletNFTs<T extends WalletOwnerNFT = WalletO
     if (result.status === "rejected") failedWallets.push(uniqueWallets[idx]);
   });
 
-  return { mergedNFTs, deduplicatedCount, failedWallets };
+  const walletDebug = results.map((result, idx) => {
+    if (result.status === "fulfilled") {
+      return {
+        wallet: result.value.wallet,
+        ok: true,
+        debug: result.value.result.debug,
+      };
+    }
+    const error = result.reason instanceof Error ? result.reason.message : "Wallet fetch failed";
+    return {
+      wallet: uniqueWallets[idx],
+      ok: false,
+      error,
+    };
+  });
+  const successfulDebug = walletDebug
+    .map((entry) => entry.debug)
+    .filter((entry): entry is WalletNFTFetchDebug => Boolean(entry));
+  const debug: WalletMergeFetchDebug = {
+    ...aggregateFetchDebug(successfulDebug),
+    returnedNFTs: mergedNFTs.length,
+    wallets: walletDebug,
+  };
+
+  return { mergedNFTs, deduplicatedCount, failedWallets, debug };
 }
 
 const OPENSEA_API_KEY = process.env.OPENSEA_API_KEY;
 const OPENSEA_BASE_URL = "https://api.opensea.io/api/v2";
 const OPENSEA_MAX_PAGES = 40;
+const OPENSEA_VISIBLE_TOKEN_CACHE_TTL_MS = 60_000;
+
+type OpenSeaVisibleTokenResult = {
+  keys: Set<string> | null;
+  pageCount: number;
+  elapsedMs: number;
+  fallbackReason: string | null;
+  cacheHit: boolean;
+  cacheAgeMs: number | null;
+  cacheTtlMs: number;
+};
+
+const openSeaVisibleTokenCache = new Map<string, {
+  keys: Set<string>;
+  pageCount: number;
+  createdAtMs: number;
+}>();
+const openSeaVisibleTokenInFlight = new Map<string, Promise<OpenSeaVisibleTokenResult>>();
 
 const OPENSEA_API_KEY_LOCAL = process.env.OPENSEA_API_KEY;
 const OPENSEA_BASE_URL_LOCAL = "https://api.opensea.io/api/v2";
@@ -279,10 +456,74 @@ function getOpenSeaNftKey(nft: OpenSeaAccountNFT) {
   return `${contract}:${tokenId}`;
 }
 
-async function fetchOpenSeaVisibleTokenKeys(owner: string): Promise<Set<string> | null> {
-  if (!OPENSEA_API_KEY) return null;
-  if (!isEthAddress(owner)) return null;
+async function fetchOpenSeaVisibleTokenKeysWithDebug(owner: string): Promise<OpenSeaVisibleTokenResult> {
+  const startedMs = Date.now();
+  const finish = (params: {
+    keys: Set<string> | null;
+    pageCount: number;
+    fallbackReason: string | null;
+    cacheHit?: boolean;
+    cacheAgeMs?: number | null;
+  }) => ({
+    ...params,
+    elapsedMs: Date.now() - startedMs,
+    cacheHit: params.cacheHit || false,
+    cacheAgeMs: params.cacheAgeMs ?? null,
+    cacheTtlMs: OPENSEA_VISIBLE_TOKEN_CACHE_TTL_MS,
+  });
 
+  if (!OPENSEA_API_KEY) {
+    return finish({ keys: null, pageCount: 0, fallbackReason: "missing_opensea_api_key" });
+  }
+  const openseaApiKey = OPENSEA_API_KEY;
+  if (!isEthAddress(owner)) {
+    return finish({ keys: null, pageCount: 0, fallbackReason: "non_eth_owner" });
+  }
+
+  const cacheKey = owner.trim().toLowerCase();
+  const cached = openSeaVisibleTokenCache.get(cacheKey);
+  if (cached) {
+    const cacheAgeMs = Date.now() - cached.createdAtMs;
+    if (cacheAgeMs < OPENSEA_VISIBLE_TOKEN_CACHE_TTL_MS) {
+      return finish({
+        keys: cached.keys,
+        pageCount: cached.pageCount,
+        fallbackReason: null,
+        cacheHit: true,
+        cacheAgeMs,
+      });
+    }
+    openSeaVisibleTokenCache.delete(cacheKey);
+  }
+
+  const inFlight = openSeaVisibleTokenInFlight.get(cacheKey);
+  if (inFlight) return inFlight;
+
+  const request = fetchOpenSeaVisibleTokenKeysUncached(cacheKey, startedMs, openseaApiKey).finally(() => {
+    openSeaVisibleTokenInFlight.delete(cacheKey);
+  });
+  openSeaVisibleTokenInFlight.set(cacheKey, request);
+  return request;
+}
+
+async function fetchOpenSeaVisibleTokenKeysUncached(
+  owner: string,
+  startedMs: number,
+  openseaApiKey: string
+): Promise<OpenSeaVisibleTokenResult> {
+  const finish = (params: {
+    keys: Set<string> | null;
+    pageCount: number;
+    fallbackReason: string | null;
+    cacheHit?: boolean;
+    cacheAgeMs?: number | null;
+  }) => ({
+    ...params,
+    elapsedMs: Date.now() - startedMs,
+    cacheHit: params.cacheHit || false,
+    cacheAgeMs: params.cacheAgeMs ?? null,
+    cacheTtlMs: OPENSEA_VISIBLE_TOKEN_CACHE_TTL_MS,
+  });
   const keys = new Set<string>();
   let next = "";
   let page = 0;
@@ -302,21 +543,23 @@ async function fetchOpenSeaVisibleTokenKeys(owner: string): Promise<Set<string> 
           cache: "no-store",
           headers: {
             accept: "application/json",
-            "x-api-key": OPENSEA_API_KEY,
+            "x-api-key": openseaApiKey,
           },
         }
       );
     } catch {
-      return null;
+      return finish({ keys: null, pageCount: page, fallbackReason: "request_failed" });
     }
 
-    if (!res.ok) return null;
+    if (!res.ok) {
+      return finish({ keys: null, pageCount: page, fallbackReason: `http_${res.status}` });
+    }
 
     let data: OpenSeaAccountNFTResponse;
     try {
       data = (await res.json()) as OpenSeaAccountNFTResponse;
     } catch {
-      return null;
+      return finish({ keys: null, pageCount: page, fallbackReason: "invalid_json" });
     }
 
     for (const nft of data.nfts || []) {
@@ -329,5 +572,15 @@ async function fetchOpenSeaVisibleTokenKeys(owner: string): Promise<Set<string> 
     if (!next) break;
   }
 
-  return keys;
+  openSeaVisibleTokenCache.set(owner, {
+    keys,
+    pageCount: page,
+    createdAtMs: Date.now(),
+  });
+  return finish({ keys, pageCount: page, fallbackReason: null });
+}
+
+async function fetchOpenSeaVisibleTokenKeys(owner: string): Promise<Set<string> | null> {
+  const result = await fetchOpenSeaVisibleTokenKeysWithDebug(owner);
+  return result.keys;
 }
