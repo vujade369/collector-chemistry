@@ -219,6 +219,14 @@ function normalizeAddress(value: string): string {
   return String(value || "").trim().toLowerCase();
 }
 
+function normalizeTokenStandard(value: unknown): string | undefined {
+  const normalized = String(value || "").trim().toLowerCase().replace(/[_\s]/g, "-");
+  if (!normalized) return undefined;
+  if (normalized === "erc721" || normalized === "erc-721") return "ERC-721";
+  if (normalized === "erc1155" || normalized === "erc-1155") return "ERC-1155";
+  return normalized.toUpperCase();
+}
+
 async function resolveSlugFromContract(contractAddress: string): Promise<string | null> {
   const normalized = normalizeAddress(contractAddress);
   if (!normalized) return null;
@@ -606,6 +614,10 @@ export async function fetchWalletTotalOfferViaMcp(
   offerCount: number;
   itemCount: number;
   error: null | "missing_opensea" | "mcp_failed" | "no_offers";
+  debugItems?: Array<{
+    nftKey: string;
+    tokenStandard?: string;
+  }>;
   debug?: {
     pageCount: number;
     duplicateItemCount: number;
@@ -682,6 +694,7 @@ export async function fetchWalletTotalOfferViaMcp(
         amount: number;
         symbol: string;
       }> = [];
+      const debugItems: Array<{ nftKey: string; tokenStandard?: string }> = [];
 
       const MAX_PAGES = 40;
       const PAGE_LIMIT = 50;
@@ -750,12 +763,22 @@ export async function fetchWalletTotalOfferViaMcp(
 
         for (const rawItem of items) {
           const item = rawItem as {
-            contract?: string;
+            contract?: string | {
+              address?: string;
+              contractAddress?: string;
+              contract_address?: string;
+              tokenStandard?: string;
+              token_standard?: string;
+              standard?: string;
+            };
             contractAddress?: string;
             contract_address?: string;
             tokenId?: string;
             identifier?: string;
             id?: string;
+            tokenStandard?: string;
+            token_standard?: string;
+            standard?: string;
             openseaUrl?: string;
             permalink?: string;
             collection?: { slug?: string };
@@ -768,10 +791,30 @@ export async function fetchWalletTotalOfferViaMcp(
             };
           };
 
+          const contract =
+            item.contract && typeof item.contract === "object"
+              ? item.contract
+              : null;
           const contractAddress = normalizeAddress(
-            String(item.contractAddress || item.contract_address || item.contract || "").trim()
+            String(
+              item.contractAddress ||
+                item.contract_address ||
+                contract?.address ||
+                contract?.contractAddress ||
+                contract?.contract_address ||
+                (typeof item.contract === "string" ? item.contract : "")
+            ).trim()
           );
-          const tokenId = String(item.tokenId || item.identifier || item.id || "").trim();
+          const tokenIdRaw = item.tokenId ?? item.identifier ?? item.id;
+          const tokenId = normalizeTokenIdForOpenSea(tokenIdRaw) || String(tokenIdRaw || "").trim();
+          const tokenStandard = normalizeTokenStandard(
+            item.tokenStandard ||
+              item.token_standard ||
+              item.standard ||
+              contract?.tokenStandard ||
+              contract?.token_standard ||
+              contract?.standard
+          );
           const collectionSlug = String(item.collection?.slug || item.collectionSlug || "").trim().toLowerCase();
           const fallbackId = String(item.openseaUrl || item.permalink || item.id || "").trim().toLowerCase();
 
@@ -790,6 +833,7 @@ export async function fetchWalletTotalOfferViaMcp(
           }
 
           seenNftKeys.add(nftKey);
+          if (includeDebug) debugItems.push({ nftKey, tokenStandard });
           pageUniqueCount += 1;
           itemCount += 1;
 
@@ -886,6 +930,7 @@ export async function fetchWalletTotalOfferViaMcp(
         offerCount,
         itemCount,
         error: totalOfferETH > 0 ? null : "no_offers",
+        debugItems: includeDebug ? debugItems : undefined,
         debug: includeDebug
           ? {
               pageCount,

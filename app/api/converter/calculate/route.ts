@@ -10,6 +10,49 @@ import {
 
 const OPENSEA_API_KEY = process.env.OPENSEA_API_KEY;
 
+function buildCrossWalletDuplicateDebug(
+  walletRows: Array<{
+    wallet: string;
+    debugItems?: Array<{ nftKey: string; tokenStandard?: string }>;
+  }>
+) {
+  const byKey = new Map<string, Array<{ wallet: string; tokenStandard?: string }>>();
+
+  for (const row of walletRows) {
+    const walletKeys = new Set<string>();
+    for (const item of row.debugItems || []) {
+      if (!item.nftKey || walletKeys.has(item.nftKey)) continue;
+      walletKeys.add(item.nftKey);
+      const existing = byKey.get(item.nftKey) || [];
+      existing.push({ wallet: row.wallet, tokenStandard: item.tokenStandard });
+      byKey.set(item.nftKey, existing);
+    }
+  }
+
+  const duplicateRows = Array.from(byKey.entries()).filter(([, rows]) => new Set(rows.map((row) => row.wallet)).size > 1);
+  const erc721LikeRows = duplicateRows.filter(([, rows]) =>
+    rows.some((row) => String(row.tokenStandard || "").toUpperCase().replace(/[^A-Z0-9]/g, "") === "ERC721")
+  );
+
+  return {
+    crossWalletDuplicateKeysCount: duplicateRows.length,
+    sampleCrossWalletDuplicateKeys: duplicateRows.slice(0, 10).map(([nftKey, rows]) => ({
+      nftKey,
+      wallets: Array.from(new Set(rows.map((row) => row.wallet))),
+      tokenStandards: Array.from(new Set(rows.map((row) => row.tokenStandard).filter(Boolean))),
+    })),
+    crossWalletDuplicateWarnings: erc721LikeRows.length
+      ? [
+          {
+            type: "erc721_like_key_seen_in_multiple_wallets",
+            message: "The same ERC-721-like key appeared in multiple wallets. Totals were not adjusted.",
+            count: erc721LikeRows.length,
+          },
+        ]
+      : [],
+  };
+}
+
 async function resolveEnsViaMcp(ensName: string): Promise<string | null> {
   if (!OPENSEA_API_KEY) return null;
 
@@ -149,6 +192,10 @@ export async function GET(req: Request) {
     const detectedOfferValueETH = successes.reduce((sum, row) => sum + row.totalOfferETH, 0);
     const offerCount = successes.reduce((sum, row) => sum + row.offerCount, 0);
     const checkedNftCount = successes.reduce((sum, row) => sum + row.itemCount, 0);
+    const debugWalletRows = resolvedWallets.map((wallet, index) => ({
+      wallet,
+      debugItems: walletResults[index]?.debugItems,
+    }));
 
     estimate = {
       wallet: walletParam,
@@ -160,6 +207,7 @@ export async function GET(req: Request) {
       error: detectedOfferValueETH > 0 ? null : "no_wallet_offers",
       debug: includeDebug
         ? {
+            ...buildCrossWalletDuplicateDebug(debugWalletRows),
             walletRows: resolvedWallets.map((wallet, index) => ({
               wallet,
               totalOfferETH: walletResults[index]?.totalOfferETH ?? 0,
@@ -177,9 +225,38 @@ export async function GET(req: Request) {
     return NextResponse.json({ targetCollection: null, count: 0, estimateQuality: "low", detectedOfferValueETH: 0, offerCount: 0, checkedNftCount: 0, candidateCount: 0, error: "missing_opensea" });
   }
 
+  const multiWalletDebug = estimate.debug as
+    | {
+        walletRows?: unknown[];
+        crossWalletDuplicateKeysCount?: number;
+        sampleCrossWalletDuplicateKeys?: unknown[];
+        crossWalletDuplicateWarnings?: unknown[];
+      }
+    | undefined;
+  const multiWalletDebugFields =
+    includeDebug && resolvedWallets.length > 1 && multiWalletDebug
+      ? {
+          walletRows: multiWalletDebug.walletRows || [],
+          crossWalletDuplicateKeysCount: multiWalletDebug.crossWalletDuplicateKeysCount ?? 0,
+          sampleCrossWalletDuplicateKeys: multiWalletDebug.sampleCrossWalletDuplicateKeys || [],
+          crossWalletDuplicateWarnings: multiWalletDebug.crossWalletDuplicateWarnings || [],
+        }
+      : {};
+
   if (estimate.error) {
     if (estimate.error === "no_wallet_offers") {
-      return NextResponse.json({ targetCollection: null, count: 0, estimateQuality: estimate.estimateQuality, detectedOfferValueETH: 0, offerCount: 0, checkedNftCount: estimate.checkedNftCount, candidateCount: estimate.candidateCount, error: "no_wallet_offers" });
+      return NextResponse.json({
+        targetCollection: null,
+        count: 0,
+        estimateQuality: estimate.estimateQuality,
+        detectedOfferValueETH: 0,
+        offerCount: 0,
+        checkedNftCount: estimate.checkedNftCount,
+        candidateCount: estimate.candidateCount,
+        error: "no_wallet_offers",
+        debug: includeDebug ? estimate.debug : undefined,
+        ...multiWalletDebugFields,
+      });
     }
     return NextResponse.json({ targetCollection: null, count: 0, estimateQuality: "low", detectedOfferValueETH: 0, offerCount: 0, checkedNftCount: 0, candidateCount: 0, error: "estimate_failed" });
   }
@@ -196,6 +273,8 @@ export async function GET(req: Request) {
       checkedNftCount: estimate.checkedNftCount,
       candidateCount: estimate.candidateCount,
       error: "no_floor",
+      debug: includeDebug ? estimate.debug : undefined,
+      ...multiWalletDebugFields,
     });
   }
 
@@ -210,6 +289,7 @@ export async function GET(req: Request) {
       candidateCount: estimate.candidateCount,
       error: "no_wallet_offers",
       debug: includeDebug ? estimate.debug : undefined,
+      ...multiWalletDebugFields,
     });
   }
 
@@ -228,5 +308,6 @@ export async function GET(req: Request) {
     candidateCount: estimate.candidateCount,
     error,
     debug: includeDebug ? estimate.debug : undefined,
+    ...multiWalletDebugFields,
   });
 }
