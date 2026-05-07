@@ -1,3 +1,11 @@
+type WalletProfileTrait = {
+  trait_type?: string;
+  traitType?: string;
+  type?: string;
+  name?: string;
+  value?: string | number;
+};
+
 export type WalletProfileNFT = {
   sourceWallet?: string;
   displayCollectionName?: string;
@@ -24,9 +32,8 @@ export type WalletProfileNFT = {
     collection_name?: string;
     category?: string;
     collection_category?: string;
-    attributes?: Array<{
-      value?: string | number;
-    }>;
+    attributes?: WalletProfileTrait[];
+    traits?: WalletProfileTrait[];
   };
   raw?: {
     metadata?: {
@@ -36,11 +43,11 @@ export type WalletProfileNFT = {
       collection_name?: string;
       category?: string;
       collection_category?: string;
-      attributes?: Array<{
-        value?: string | number;
-      }>;
+      attributes?: WalletProfileTrait[];
+      traits?: WalletProfileTrait[];
     };
   };
+  traits?: WalletProfileTrait[];
   title?: string;
   name?: string;
   tokenId?: string | number;
@@ -256,6 +263,33 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
 
 const COMMON_CATEGORIES = ["pfp", "generative", "fine_art", "meme", "utility"] as const;
 
+const TRAIT_DENSITY_SIGNALS: Array<{
+  category: string;
+  threshold: number;
+  keys: string[];
+}> = [
+  {
+    category: "pfp",
+    threshold: 3,
+    keys: ["background", "eyes", "mouth", "fur", "skin", "body", "clothes", "clothing", "accessory", "head", "hair"],
+  },
+  {
+    category: "generative",
+    threshold: 2,
+    keys: ["seed", "algorithm", "hash", "palette", "output", "composition", "variation"],
+  },
+  {
+    category: "fine_art",
+    threshold: 2,
+    keys: ["artist", "medium", "edition", "year", "series", "title"],
+  },
+  {
+    category: "gaming",
+    threshold: 2,
+    keys: ["level", "class", "power", "attack", "defense", "element", "weapon", "armor"],
+  },
+];
+
 export function normalizeText(value?: string) {
   return String(value || "")
     .toLowerCase()
@@ -286,19 +320,54 @@ export function normalizeOpenSeaCategory(category?: string) {
 
 function toAttributeArray(
   rawAttributes: unknown
-): Array<{ value?: string | number }> {
+): WalletProfileTrait[] {
   return Array.isArray(rawAttributes)
-    ? (rawAttributes as Array<{ value?: string | number }>)
+    ? (rawAttributes as WalletProfileTrait[])
     : [];
+}
+
+function getTraitText(rawTraits: unknown) {
+  const traits = toAttributeArray(rawTraits);
+  if (!traits.length) return "";
+  return traits
+    .flatMap((trait) => [
+      trait?.trait_type,
+      trait?.traitType,
+      trait?.type,
+      trait?.name,
+      trait?.value,
+    ])
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean)
+    .join(" ");
+}
+
+function getTraitKeys(rawTraits: unknown) {
+  return toAttributeArray(rawTraits)
+    .flatMap((trait) => [
+      trait?.trait_type,
+      trait?.traitType,
+      trait?.type,
+      trait?.name,
+    ])
+    .map((value) => normalizeText(String(value ?? "")))
+    .filter(Boolean);
+}
+
+function collectTraitKeys(nft: WalletProfileNFT) {
+  return [
+    ...getTraitKeys(nft.metadata?.attributes),
+    ...getTraitKeys(nft.metadata?.traits),
+    ...getTraitKeys(nft.raw?.metadata?.attributes),
+    ...getTraitKeys(nft.raw?.metadata?.traits),
+    ...getTraitKeys(nft.traits),
+  ];
 }
 
 function getAttributeText(rawAttributes: unknown) {
   const attributes = toAttributeArray(rawAttributes);
   if (!attributes.length) return "";
-  return attributes
-    .map((attribute) => String(attribute?.value ?? "").trim())
-    .filter(Boolean)
-    .join(" ");
+  return getTraitText(attributes);
 }
 
 export function resolveCollectionName(nft: WalletProfileNFT) {
@@ -347,6 +416,18 @@ export function classifyCategoryWithSource(nft: WalletProfileNFT): {
     }
   }
 
+  const traitKeys = collectTraitKeys(nft);
+  for (const signal of TRAIT_DENSITY_SIGNALS) {
+    const matchingKeys = new Set<string>();
+    for (const traitKey of traitKeys) {
+      const matchedKey = signal.keys.find((key) => traitKey === key || traitKey.includes(key));
+      if (matchedKey) matchingKeys.add(matchedKey);
+    }
+    if (matchingKeys.size >= signal.threshold) {
+      return { category: signal.category, source: "keyword" };
+    }
+  }
+
   const haystack = normalizeText(
     [
       nft.displayCollectionName,
@@ -355,9 +436,12 @@ export function classifyCategoryWithSource(nft: WalletProfileNFT): {
       nft.metadata?.name,
       nft.metadata?.description,
       getAttributeText(nft.metadata?.attributes),
+      getTraitText(nft.metadata?.traits),
       nft.raw?.metadata?.name,
       nft.raw?.metadata?.description,
       getAttributeText(nft.raw?.metadata?.attributes),
+      getTraitText(nft.raw?.metadata?.traits),
+      getTraitText(nft.traits),
       nft.title,
       nft.description,
     ]
