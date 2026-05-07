@@ -173,7 +173,7 @@ export default function WalletConverter({ wallet, wallets }: { wallet: string; w
   const offerValueLabel = formatEth(result?.detectedOfferValueETH);
   const floorPriceLabel = formatEth(result?.targetCollection?.floorPriceETH);
   const showEquation = Boolean(offerValueLabel && floorPriceLabel && result?.targetCollection?.name);
-  const proofLine = result ? `${result.offerCount} active offers · ${result.checkedNftCount} unique NFTs checked` : "";
+  const proofLine = result ? `Found ${result.offerCount} active offers across ${result.checkedNftCount} unique NFTs checked.` : "";
 
   return (
     <section className="wallet-converter">
