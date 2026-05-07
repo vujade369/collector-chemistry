@@ -1306,7 +1306,19 @@ export async function buildConverterWalletOfferPrecompute(
     };
   }
 
-  const walletResults = await Promise.all(resolvedWallets.map((wallet) => fetchWalletTotalOfferViaMcp(wallet, includeDebug)));
+  const inventoryTimeoutFallback = {
+    totalOfferETH: 0,
+    offerCount: 0,
+    itemCount: 0,
+    candidateCount: 0,
+    scanCapped: false,
+    error: "inventory_failed" as const,
+  };
+  const walletResults = await Promise.all(
+    resolvedWallets.map((wallet) =>
+      withTimeout(fetchWalletTotalOfferViaInventory(wallet, includeDebug), 60_000, inventoryTimeoutFallback)
+    )
+  );
   const successes = walletResults.filter((r) => r.error === null || r.error === "no_offers");
   const hasMissingOpenSea = walletResults.some((r) => r.error === "missing_opensea");
 
@@ -1337,14 +1349,11 @@ export async function buildConverterWalletOfferPrecompute(
   const detectedOfferValueETH = successes.reduce((sum, row) => sum + row.totalOfferETH, 0);
   const offerCount = successes.reduce((sum, row) => sum + row.offerCount, 0);
   const checkedNftCount = successes.reduce((sum, row) => sum + row.itemCount, 0);
-  const debugWalletRows = resolvedWallets.map((wallet, index) => ({
-    wallet,
-    debugItems: walletResults[index]?.debugItems,
-  }));
-  const anyTruncated = walletResults.some((r) => r.scanTruncated);
+  const candidateCount = successes.reduce((sum, row) => sum + row.candidateCount, 0);
+  const anyScanCapped = walletResults.some((r) => r.scanCapped);
   const multiWalletDebug = includeDebug
     ? {
-        ...buildCrossWalletDuplicateDebug(debugWalletRows),
+        ...buildCrossWalletDuplicateDebug(resolvedWallets.map((wallet) => ({ wallet }))),
         walletRows: resolvedWallets.map((wallet, index) => {
           const r = walletResults[index];
           return {
@@ -1352,8 +1361,9 @@ export async function buildConverterWalletOfferPrecompute(
             totalOfferETH: r?.totalOfferETH ?? 0,
             offerCount: r?.offerCount ?? 0,
             itemCount: r?.itemCount ?? 0,
-            error: r !== undefined ? r.error : "mcp_failed",
-            scanTruncated: r?.scanTruncated ?? false,
+            candidateCount: r?.candidateCount ?? 0,
+            scanCapped: r?.scanCapped ?? false,
+            error: r !== undefined ? r.error : "estimate_failed",
             debug: r?.debug,
           };
         }),
@@ -1364,8 +1374,8 @@ export async function buildConverterWalletOfferPrecompute(
     detectedOfferValueETH,
     offerCount,
     checkedNftCount,
-    candidateCount: checkedNftCount,
-    estimateQuality: anyTruncated ? (offerCount >= 2 ? "medium" : "low") : (offerCount >= 5 ? "high" : offerCount >= 2 ? "medium" : "low"),
+    candidateCount,
+    estimateQuality: anyScanCapped ? (offerCount >= 2 ? "medium" : "low") : (offerCount >= 5 ? "high" : offerCount >= 2 ? "medium" : "low"),
     error: detectedOfferValueETH > 0 ? null : "no_wallet_offers",
     walletResolutionRows: includeDebug ? walletResolutionRows : undefined,
     walletRows: multiWalletDebug?.walletRows,
