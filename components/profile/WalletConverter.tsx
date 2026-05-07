@@ -34,6 +34,10 @@ type ConverterResult = {
     | "estimate_failed";
 };
 
+type WalletOfferEstimate = Omit<ConverterResult, "targetCollection" | "count" | "error"> & {
+  error: Exclude<ConverterResult["error"], "no_floor" | "zero_result">;
+};
+
 type ConverterCountTier = "fractional" | "small" | "medium" | "large" | "huge";
 
 function formatError(error: ConverterResult["error"]): string {
@@ -89,14 +93,151 @@ function getCollectionBadgeLabel(item: CollectionSearchResult): string | null {
 
 export default function WalletConverter({ wallet, wallets }: { wallet: string; wallets?: string[] }) {
   const [phase, setPhase] = useState<"idle" | "searching" | "loading" | "result" | "error">("idle");
+  const [loadingMessage, setLoadingMessage] = useState("Building estimate...");
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<CollectionSearchResult[]>([]);
+  const [walletEstimate, setWalletEstimate] = useState<WalletOfferEstimate | null>(null);
+  const [walletEstimatePhase, setWalletEstimatePhase] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [result, setResult] = useState<ConverterResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [visible, setVisible] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const walletEstimatePromiseRef = useRef<Promise<WalletOfferEstimate | null> | null>(null);
 
   const walletParam = wallets && wallets.length > 1 ? wallets.join(",") : wallet;
+
+  function buildErrorResult(error: ConverterResult["error"], estimate?: WalletOfferEstimate | null): ConverterResult {
+    return {
+      targetCollection: null,
+      count: 0,
+      estimateQuality: estimate?.estimateQuality || "low",
+      detectedOfferValueETH: estimate?.detectedOfferValueETH || 0,
+      offerCount: estimate?.offerCount || 0,
+      checkedNftCount: estimate?.checkedNftCount || 0,
+      candidateCount: estimate?.candidateCount || 0,
+      error,
+    };
+  }
+
+  function buildLocalResult(collection: CollectionSearchResult, estimate: WalletOfferEstimate): ConverterResult {
+    const floorPriceETH = collection.floorPriceETH;
+
+    if (typeof floorPriceETH !== "number" || !Number.isFinite(floorPriceETH) || floorPriceETH <= 0) {
+      return buildErrorResult("no_floor", estimate);
+    }
+
+    if (estimate.error) {
+      return buildErrorResult(estimate.error, estimate);
+    }
+
+    if (estimate.detectedOfferValueETH <= 0) {
+      return {
+        targetCollection: {
+          slug: collection.slug,
+          name: collection.name,
+          imageUrl: collection.imageUrl ?? null,
+          floorPriceETH,
+          openseaUrl: collection.openseaUrl,
+        },
+        count: 0,
+        estimateQuality: estimate.estimateQuality,
+        detectedOfferValueETH: estimate.detectedOfferValueETH,
+        offerCount: estimate.offerCount,
+        checkedNftCount: estimate.checkedNftCount,
+        candidateCount: estimate.candidateCount,
+        error: "no_wallet_offers",
+      };
+    }
+
+    const rawCount = estimate.detectedOfferValueETH / floorPriceETH;
+    const roundedCount = Math.round(rawCount * 100) / 100;
+    const count = rawCount > 0 && roundedCount === 0 ? 0.01 : roundedCount;
+
+    return {
+      targetCollection: {
+        slug: collection.slug,
+        name: collection.name,
+        imageUrl: collection.imageUrl ?? null,
+        floorPriceETH,
+        openseaUrl: collection.openseaUrl,
+      },
+      count,
+      estimateQuality: estimate.estimateQuality,
+      detectedOfferValueETH: estimate.detectedOfferValueETH,
+      offerCount: estimate.offerCount,
+      checkedNftCount: estimate.checkedNftCount,
+      candidateCount: estimate.candidateCount,
+      error: rawCount < 0.01 ? "zero_result" : null,
+    };
+  }
+
+  function applyResult(nextResult: ConverterResult) {
+    setResult(nextResult);
+
+    if (nextResult.error) {
+      setErrorMessage(formatError(nextResult.error));
+      setPhase("error");
+      return;
+    }
+
+    setErrorMessage(null);
+    setPhase("result");
+  }
+
+  async function fetchCalculateFallback(collection: CollectionSearchResult) {
+    const res = await fetch(`/api/converter/calculate?wallet=${encodeURIComponent(walletParam)}&slug=${encodeURIComponent(collection.slug)}`);
+    const json = (await res.json()) as ConverterResult;
+    applyResult(json);
+  }
+
+  useEffect(() => {
+    if (!walletParam) {
+      setWalletEstimate(null);
+      setWalletEstimatePhase("idle");
+      walletEstimatePromiseRef.current = null;
+      return;
+    }
+
+    let cancelled = false;
+    setWalletEstimate(null);
+    setWalletEstimatePhase("loading");
+
+    const promise = fetch(`/api/converter/wallet-offers?wallet=${encodeURIComponent(walletParam)}`)
+      .then(async (res) => {
+        if (!res.ok) throw new Error("wallet-offer-precompute-failed");
+        return (await res.json()) as WalletOfferEstimate;
+      })
+      .then((json) => {
+        if (!cancelled) {
+          setWalletEstimate(json);
+          setWalletEstimatePhase(json.error ? "error" : "ready");
+        }
+        return json;
+      })
+      .catch(() => {
+        const fallbackEstimate: WalletOfferEstimate = {
+          detectedOfferValueETH: 0,
+          offerCount: 0,
+          checkedNftCount: 0,
+          candidateCount: 0,
+          estimateQuality: "low",
+          error: "estimate_failed",
+        };
+
+        if (!cancelled) {
+          setWalletEstimate(fallbackEstimate);
+          setWalletEstimatePhase("error");
+        }
+
+        return fallbackEstimate;
+      });
+
+    walletEstimatePromiseRef.current = promise;
+
+    return () => {
+      cancelled = true;
+    };
+  }, [walletParam]);
 
   useEffect(() => {
     if (!query.trim()) {
@@ -131,20 +272,18 @@ export default function WalletConverter({ wallet, wallets }: { wallet: string; w
 
   async function handleSelect(collection: CollectionSearchResult) {
     setPhase("loading");
+    setLoadingMessage(walletEstimatePhase === "loading" ? "Reading active offers..." : "Building estimate...");
 
-    const res = await fetch(`/api/converter/calculate?wallet=${encodeURIComponent(walletParam)}&slug=${encodeURIComponent(collection.slug)}`);
-    const json = (await res.json()) as ConverterResult;
+    const currentEstimate =
+      walletEstimate ||
+      (walletEstimatePhase === "loading" && walletEstimatePromiseRef.current ? await walletEstimatePromiseRef.current : null);
 
-    if (json.error) {
-      setErrorMessage(formatError(json.error));
-      setResult(json);
-      setPhase("error");
+    if (!currentEstimate) {
+      await fetchCalculateFallback(collection);
       return;
     }
 
-    setResult(json);
-    setErrorMessage(null);
-    setPhase("result");
+    applyResult(buildLocalResult(collection, currentEstimate));
   }
 
   function handleReset() {
@@ -231,7 +370,7 @@ export default function WalletConverter({ wallet, wallets }: { wallet: string; w
 
       {phase === "loading" && (
         <div className="converter-loading">
-          <span>Building estimate...</span>
+          <span>{loadingMessage}</span>
         </div>
       )}
 
