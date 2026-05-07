@@ -31,10 +31,22 @@
       "skillPath": "skills/ecosystem/allium/SKILL.md",
       "computedHash": "9e6620d60c463f7de46e47a241c9d7b6100d2b76afd635aa35c16946b2dd9c2f"
     },
+    "frontend-design": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "skillPath": "skills/frontend-design/SKILL.md",
+      "computedHash": "063a0e6448123cd359ad0044cc46b0e490cc7964d45ef4bb9fd842bd2ffbca67"
+    },
     "opensea": {
       "source": "ProjectOpenSea/opensea-skill",
       "sourceType": "github",
       "computedHash": "ca4dd65b83be95bc30c086e7458204055167b26c066d3affd3006eb80e3e8d61"
+    },
+    "web-design-guidelines": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/web-design-guidelines/SKILL.md",
+      "computedHash": "f3bc47f890f42a44db1007ab390709ec368e4b8c089baee6b0007182236ac474"
     }
   }
 }
