@@ -1108,7 +1108,10 @@ export default function ProfilePage() {
             </section>
 
             {/* ── Wallet Converter ── */}
-            <WalletConverter wallet={resolvedWallet} />
+            <WalletConverter
+              wallet={resolvedWallet}
+              wallets={result?.wallets || initialWalletsFromQuery}
+            />
           </>
         )}
       </div>
