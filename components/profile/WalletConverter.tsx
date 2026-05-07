@@ -1,18 +1,8 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { useEffect, useRef, useState } from "react";
-
-type CollectionSearchResult = {
-  slug: string;
-  name: string;
-  imageUrl?: string;
-  floorPriceETH?: number | null;
-  openseaUrl?: string;
-  verified?: boolean;
-  safelistStatus?: string;
-  matchConfidence?: "high" | "medium" | "low";
-};
+import { useCallback, useEffect, useRef, useState } from "react";
+import CollectionSearchInput, { type CollectionSearchResult } from "@/components/shared/CollectionSearchInput";
 
 type ConverterResult = {
   targetCollection: { slug: string; name: string; imageUrl?: string | null; floorPriceETH: number; openseaUrl?: string } | null;
@@ -82,26 +72,14 @@ function formatEth(value?: number | null): string | null {
   return value.toFixed(5).replace(/0+$/, "").replace(/\.$/, "");
 }
 
-function getCollectionBadgeLabel(item: CollectionSearchResult): string | null {
-  if (item.verified === true) return "Verified";
-
-  const safelistStatus = String(item.safelistStatus || "").trim().toLowerCase();
-  if (safelistStatus === "verified") return "Verified";
-  if (safelistStatus === "approved") return "Approved";
-  return null;
-}
-
 export default function WalletConverter({ wallet, wallets }: { wallet: string; wallets?: string[] }) {
   const [phase, setPhase] = useState<"idle" | "searching" | "loading" | "result" | "error">("idle");
   const [loadingMessage, setLoadingMessage] = useState("Building estimate...");
-  const [query, setQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<CollectionSearchResult[]>([]);
   const [walletEstimate, setWalletEstimate] = useState<WalletOfferEstimate | null>(null);
   const [walletEstimatePhase, setWalletEstimatePhase] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [result, setResult] = useState<ConverterResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [visible, setVisible] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const walletEstimatePromiseRef = useRef<Promise<WalletOfferEstimate | null> | null>(null);
 
   const walletParam = wallets && wallets.length > 1 ? wallets.join(",") : wallet;
@@ -240,28 +218,6 @@ export default function WalletConverter({ wallet, wallets }: { wallet: string; w
   }, [walletParam]);
 
   useEffect(() => {
-    if (!query.trim()) {
-      setSearchResults([]);
-      setPhase("idle");
-      return;
-    }
-
-    setPhase("searching");
-
-    if (timerRef.current) clearTimeout(timerRef.current);
-
-    timerRef.current = setTimeout(async () => {
-      const res = await fetch(`/api/converter/search?q=${encodeURIComponent(query)}`);
-      const json = await res.json();
-      setSearchResults(json.results || []);
-    }, 300);
-
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, [query]);
-
-  useEffect(() => {
     if (phase === "result") {
       const t = setTimeout(() => setVisible(true), 40);
       return () => clearTimeout(t);
@@ -289,10 +245,12 @@ export default function WalletConverter({ wallet, wallets }: { wallet: string; w
   function handleReset() {
     setResult(null);
     setErrorMessage(null);
-    setQuery("");
-    setSearchResults([]);
     setPhase("idle");
   }
+
+  const handleSearchPhaseChange = useCallback((nextPhase: "idle" | "searching") => {
+    setPhase(nextPhase);
+  }, []);
 
   if (!walletParam) return null;
 
@@ -326,50 +284,10 @@ export default function WalletConverter({ wallet, wallets }: { wallet: string; w
       </div>
 
       {(phase === "idle" || phase === "searching") && (
-        <div className="converter-search">
-          <input
-            type="text"
-            placeholder="Search a collection..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="converter-input"
-          />
-
-          {query.trim().length > 1 && (
-            <ul className="converter-dropdown">
-              {searchResults.length > 0 ? (
-                searchResults.map((item) => {
-                  const badgeLabel = getCollectionBadgeLabel(item);
-
-                  return (
-                    <li key={item.slug} onClick={() => handleSelect(item)}>
-                      <div className="converter-row-left">
-                        <div className="converter-thumb-wrap">
-                          {item.imageUrl ? (
-                            <img src={item.imageUrl} alt={item.name} className="converter-thumb" />
-                          ) : (
-                            <span className="converter-thumb-fallback">✦</span>
-                          )}
-                        </div>
-
-                        <div>
-                          <span className="converter-result-name">{item.name}</span>
-                          <div className="converter-result-meta">
-                            {badgeLabel && <span className="converter-result-badge">{badgeLabel}</span>}
-                          </div>
-                        </div>
-                      </div>
-                    </li>
-                  );
-                })
-              ) : (
-                <li>
-                  <span className="converter-result-name">No collections found. Try a different name.</span>
-                </li>
-              )}
-            </ul>
-          )}
-        </div>
+        <CollectionSearchInput
+          onSelect={handleSelect}
+          onSearchPhaseChange={handleSearchPhaseChange}
+        />
       )}
 
       {phase === "loading" && (
