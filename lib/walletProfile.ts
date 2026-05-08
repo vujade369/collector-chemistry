@@ -45,6 +45,11 @@ export type WalletProfileNFT = {
       collection_category?: string;
       attributes?: WalletProfileTrait[];
       traits?: WalletProfileTrait[];
+      animation_url?: string;
+      display_animation_url?: string;
+      image?: string;
+      image_url?: string;
+      display_image_url?: string;
     };
   };
   traits?: WalletProfileTrait[];
@@ -54,6 +59,7 @@ export type WalletProfileNFT = {
   image?: {
     cachedUrl?: string;
     thumbnailUrl?: string;
+    originalUrl?: string;
   };
   description?: string;
   acquiredAt?: {

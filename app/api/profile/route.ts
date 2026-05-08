@@ -543,9 +543,24 @@ function normalizeImageUrl(url?: string) {
   return url;
 }
 
+function extractNFTAnimationUrl(nft: WalletProfileNFT): string {
+  return normalizeImageUrl(
+    nft.raw?.metadata?.display_animation_url ||
+    nft.raw?.metadata?.animation_url ||
+    ""
+  );
+}
+
 function extractNFTImageUrl(nft: WalletProfileNFT) {
   return normalizeImageUrl(
-    nft.image?.cachedUrl || nft.image?.thumbnailUrl || nft.contract?.openSeaMetadata?.imageUrl || ""
+    nft.image?.cachedUrl ||
+    nft.image?.thumbnailUrl ||
+    nft.image?.originalUrl ||
+    nft.raw?.metadata?.display_image_url ||
+    nft.raw?.metadata?.image_url ||
+    nft.raw?.metadata?.image ||
+    nft.contract?.openSeaMetadata?.imageUrl ||
+    ""
   );
 }
 
@@ -566,7 +581,7 @@ function buildTasteDNA(nfts: WalletProfileNFT[]) {
 
 function buildCategoryGroups(nfts: WalletProfileNFT[]): Record<string, {
   totalCount: number;
-  previews: Array<{ title: string; tokenId?: string; collectionName: string; imageUrl: string; collectionSlug?: string; contractAddress?: string; openseaUrl?: string }>;
+  previews: Array<{ title: string; tokenId?: string; collectionName: string; imageUrl: string; animationUrl?: string; collectionSlug?: string; contractAddress?: string; openseaUrl?: string }>;
   collections: Array<{ name: string; count: number }>;
 }> {
   const grouped = new Map<string, WalletProfileNFT[]>();
@@ -587,6 +602,7 @@ function buildCategoryGroups(nfts: WalletProfileNFT[]): Record<string, {
     .map(([category, items]) => {
       const previews = items.slice(0, 4).map((nft) => {
         const collectionName = resolveCollectionName(nft);
+        const animationUrl = extractNFTAnimationUrl(nft) || undefined;
         const imageUrl = extractNFTImageUrl(nft) || nft.contract?.openSeaMetadata?.imageUrl || "";
         const collectionSlug = String(nft.displayCollectionSlug || "").trim().toLowerCase() || undefined;
         const contractAddress = String(nft.contract?.address || "").trim().toLowerCase() || undefined;
@@ -596,7 +612,7 @@ function buildCategoryGroups(nfts: WalletProfileNFT[]): Record<string, {
           : collectionSlug
             ? `https://opensea.io/collection/${collectionSlug}`
             : undefined;
-        return { title: nft.name || nft.title || collectionName, tokenId, collectionName, imageUrl, collectionSlug, contractAddress, openseaUrl };
+        return { title: nft.name || nft.title || collectionName, tokenId, collectionName, imageUrl, animationUrl, collectionSlug, contractAddress, openseaUrl };
       });
 
       const collectionCounts = new Map<string, number>();

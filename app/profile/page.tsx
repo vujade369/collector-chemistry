@@ -97,8 +97,10 @@ type ProfileIdentity = {
 
 type CategoryPreview = {
   title?: string;
+  tokenId?: string;
   collectionName?: string;
   imageUrl?: string;
+  animationUrl?: string;
   collectionSlug?: string;
   contractAddress?: string;
   openseaUrl?: string;
@@ -107,6 +109,7 @@ type CategoryPreview = {
 type CategoryGroup = {
   totalCount?: number;
   previews?: CategoryPreview[];
+  collections?: Array<{ name: string; count: number }>;
 };
 
 type ProfileResponse = {
@@ -177,6 +180,22 @@ function handleImageError(event: React.SyntheticEvent<HTMLImageElement>) {
   event.currentTarget.style.display = "none";
 }
 
+function NftMedia({ animationUrl, imageUrl, alt, className }: { animationUrl?: string; imageUrl?: string; alt: string; className: string }) {
+  const animation = normalizeImageUrl(animationUrl);
+  const image = normalizeImageUrl(imageUrl);
+  if (animation) {
+    return (
+      <video autoPlay loop muted playsInline className={className}>
+        <source src={animation} />
+      </video>
+    );
+  }
+  if (image) {
+    return <img src={image} alt={alt} className={className} onError={handleImageError} />;
+  }
+  return <span aria-hidden="true">✦</span>;
+}
+
 function formatMintDate(timestamp?: string): string {
   if (!timestamp) return "";
   const date = new Date(timestamp);
@@ -192,7 +211,7 @@ function formatCollectorSince(timestamp?: string): string {
 }
 
 function formatCategoryLabel(value: string): string {
-  const key = value.toLowerCase().replace(/\s+/g, "_");
+  const key = normalizeDisplayCategoryKey(value);
   const labels: Record<string, string> = {
     pfp: "PFP",
     fine_art: "Art",
@@ -209,8 +228,48 @@ function formatCategoryLabel(value: string): string {
   return labels[key] || value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function normalizeDisplayCategoryKey(value: string): string {
+  const key = value.toLowerCase().replace(/\s+/g, "_");
+  if (key === "photography" || key === "art") return "fine_art";
+  return key;
+}
+
+function mergeCategoryGroups(
+  groups: Record<string, CategoryGroup>,
+): Record<string, CategoryGroup> {
+  return Object.entries(groups).reduce<Record<string, CategoryGroup>>(
+    (merged, [category, group]) => {
+      const key = normalizeDisplayCategoryKey(category);
+      const existing = merged[key] || {};
+      const collectionCounts = new Map<string, number>();
+      [...(existing.collections || []), ...(group?.collections || [])].forEach((collection) => {
+        const name = String(collection.name || "").trim();
+        if (!name) return;
+        collectionCounts.set(name, (collectionCounts.get(name) || 0) + (collection.count || 0));
+      });
+      merged[key] = {
+        totalCount: (existing.totalCount || 0) + (group?.totalCount || 0),
+        previews: [...(existing.previews || []), ...(group?.previews || [])],
+        collections: [...collectionCounts.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .map(([name, count]) => ({ name, count })),
+      };
+      return merged;
+    },
+    {},
+  );
+}
+
+function formatCategoryContext(pieceCount: number, collections?: Array<{ name: string; count: number }>): string {
+  const pieceLabel = `${pieceCount} ${pieceCount === 1 ? "piece" : "pieces"}`;
+  const collectionCount = collections?.length || 0;
+  if (collectionCount === 0) return pieceLabel;
+  if (collectionCount >= 5) return `${pieceLabel} with 5+ named collections`;
+  return `${pieceLabel} across ${collectionCount} named ${collectionCount === 1 ? "collection" : "collections"}`;
+}
+
 function getCategoryAccent(categoryKey: string): string {
-  const key = categoryKey.toLowerCase().replace(/\s+/g, "_");
+  const key = normalizeDisplayCategoryKey(categoryKey);
   const mapping: Record<string, string> = {
     meme: "#ff3399",
     pfp: "#29b6f6",
@@ -230,11 +289,9 @@ function getCategoryAccent(categoryKey: string): string {
 const CATEGORY_FILTER_ORDER = [
   "pfp",
   "fine_art",
-  "art",
   "generative",
   "meme",
   "utility",
-  "access",
   "domains",
   "gaming",
   "collectibles",
@@ -242,7 +299,7 @@ const CATEGORY_FILTER_ORDER = [
 ];
 
 function getCategoryOrder(categoryKey: string) {
-  const key = categoryKey.toLowerCase().replace(/\s+/g, "_");
+  const key = normalizeDisplayCategoryKey(categoryKey);
   const index = CATEGORY_FILTER_ORDER.indexOf(key);
   return index === -1 ? CATEGORY_FILTER_ORDER.length : index;
 }
@@ -285,7 +342,6 @@ export default function ProfilePage() {
   const [compareResolveError, setCompareResolveError] = useState("");
   const [resolvingCompare, setResolvingCompare] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
-  const [selectedCategory, setSelectedCategory] = useState<string>("");
   const inFlightProfileQueryRef = useRef<string | null>(null);
   const profileRequestIdRef = useRef(0);
 
@@ -416,9 +472,19 @@ export default function ProfilePage() {
   const originCollectionName =
     firstMint?.collectionName || firstMint?.nft?.collectionName || "";
 
-  const categoryDistribution = (profile?.categoryDistribution || [])
-    .slice()
-    .sort((a, b) => b.percentage - a.percentage);
+  const categoryDistribution = useMemo(() => {
+    const merged = new Map<string, CategoryRow>();
+    for (const entry of profile?.categoryDistribution || []) {
+      const key = normalizeDisplayCategoryKey(entry.category);
+      const existing = merged.get(key);
+      merged.set(key, {
+        category: key,
+        count: (existing?.count || 0) + entry.count,
+        percentage: (existing?.percentage || 0) + entry.percentage,
+      });
+    }
+    return [...merged.values()].sort((a, b) => b.percentage - a.percentage);
+  }, [profile?.categoryDistribution]);
 
   const tasteSlices = categoryDistribution.map((entry) => ({
     label: formatCategoryLabel(entry.category),
@@ -455,36 +521,34 @@ export default function ProfilePage() {
     return map;
   }, [result?.categoryGroups]);
 
-  const categoryGroups = result?.categoryGroups || {};
+  const categoryGroups = useMemo(
+    () => mergeCategoryGroups(result?.categoryGroups || {}),
+    [result?.categoryGroups],
+  );
 
   const categoryExplorerItems = useMemo(() => {
-    return tasteSlices
-      .map((slice) => {
+    return categoryDistribution
+      .map((entry) => {
+        const key = normalizeDisplayCategoryKey(entry.category);
         const group =
-          categoryGroups[slice.key] ||
-          categoryGroups[slice.key.toLowerCase()] ||
+          categoryGroups[key] ||
           null;
-        return { key: slice.key, label: slice.label, value: slice.value, group };
+        const count = group?.totalCount || entry.count;
+        return {
+          key,
+          label: formatCategoryLabel(key),
+          value: entry.percentage,
+          count,
+          group,
+        };
       })
+      .filter((item) => item.count > 0)
       .sort((a, b) => {
         const orderDelta = getCategoryOrder(a.key) - getCategoryOrder(b.key);
         if (orderDelta !== 0) return orderDelta;
         return b.value - a.value;
       });
-  }, [tasteSlices, categoryGroups]);
-
-  useEffect(() => {
-    if (!categoryExplorerItems.length) return;
-    const withPreviews = categoryExplorerItems.find(
-      (item) => (item.group?.previews || []).length > 0,
-    );
-    const defaultKey = withPreviews?.key || categoryExplorerItems[0]?.key || "";
-    setSelectedCategory((prev) =>
-      prev && categoryExplorerItems.some((item) => item.key === prev)
-        ? prev
-        : defaultKey,
-    );
-  }, [categoryExplorerItems]);
+  }, [categoryDistribution, categoryGroups]);
 
   const mintedStats = result?.acquisitionBreakdown;
   const mintedPercent = Number.isFinite(mintedStats?.mintPercent)
@@ -520,11 +584,6 @@ export default function ProfilePage() {
   const latestArrival = profile?.latestArrival || null;
   const highestOfferImage = normalizeImageUrl(highestOffer?.imageUrl || "");
   const latestArrivalImage = normalizeImageUrl(latestArrival?.imageUrl || "");
-
-  const selectedCategoryGroup =
-    categoryExplorerItems.find((item) => item.key === selectedCategory)?.group ||
-    null;
-  const selectedPreviews = (selectedCategoryGroup?.previews || []).slice(0, 6);
 
   // ── Signal visibility guards ──────────────────────────────────────────────────
   const showFirstMintSignal = Boolean(firstMint);
@@ -943,15 +1002,13 @@ export default function ProfilePage() {
                 <TasteSignature slices={tasteSlices} />
                 <div className="taste-map-legend">
                   {categoryExplorerItems.map((slice) => (
-                    <button
+                    <div
                       key={slice.key}
-                      type="button"
-                      className={`taste-map-legend-row taste-map-legend-row--interactive ${selectedCategory === slice.key ? "is-active" : ""}`}
-                      onClick={() => setSelectedCategory(slice.key)}
+                      className="taste-map-legend-row"
                     >
                       <span>{slice.label}</span>
                       <span>{Math.round(slice.value)}%</span>
-                    </button>
+                    </div>
                   ))}
                 </div>
               </article>
@@ -998,69 +1055,76 @@ export default function ProfilePage() {
             {/* ── Category Explorer (full width) ── */}
             {categoryExplorerItems.length > 0 && (
               <section className="profile-panel">
-                <p className="profile-section-label">Explore the Worlds</p>
-                <div className="category-tab-row">
-                  {categoryExplorerItems.map((slice) => (
-                    <button
-                      key={slice.key}
-                      type="button"
-                      className={`category-tab-btn${selectedCategory === slice.key ? " is-active" : ""}`}
-                      onClick={() => setSelectedCategory(slice.key)}
-                    >
-                      {slice.label}
-                    </button>
-                  ))}
-                </div>
-                  {selectedPreviews.length > 0 ? (
-                  <div className="category-preview-grid">
-                    {selectedPreviews.map((preview, idx) => {
-                      const previewImage = normalizeImageUrl(preview.imageUrl);
-                      const previewLink =
-                        preview.openseaUrl ||
-                        (preview.collectionSlug
-                          ? `https://opensea.io/collection/${preview.collectionSlug}`
-                          : preview.contractAddress
-                            ? `https://opensea.io/assets/ethereum/${preview.contractAddress}`
-                            : "");
-                      return (
-                        <article
-                          key={`${preview.collectionName || "preview"}-${idx}`}
-                          className="category-preview-card"
-                        >
-                          <div className="category-preview-media">
-                            {previewImage ? (
-                              <img
-                                src={previewImage}
-                                alt={preview.collectionName || "Category preview"}
-                                className="category-preview-img"
-                                onError={handleImageError}
-                              />
-                            ) : (
-                              <span aria-hidden="true">✦</span>
-                            )}
-                          </div>
-                          <p className="category-preview-title">
-                            {preview.collectionName || "Untitled collection"}
+                <p className="profile-section-label">Your Collection</p>
+                <div className="category-catalog">
+                  {categoryExplorerItems.map((slice) => {
+                    const previews = (slice.group?.previews || []).slice(0, 3);
+                    return (
+                      <article className="category-catalog-section" key={slice.key}>
+                        <div className="category-catalog-head">
+                          <h3 className="category-catalog-title">{slice.label}</h3>
+                          <p className="category-catalog-context">
+                            {formatCategoryContext(slice.count, slice.group?.collections)}
                           </p>
-                          {previewLink && (
-                            <a
-                              href={previewLink}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="profile-external-link"
-                            >
-                              View Collection ↗
-                            </a>
-                          )}
-                        </article>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="category-preview-empty">
-                    No preview NFTs available for this category.
-                  </p>
-                )}
+                        </div>
+                        {previews.length > 0 ? (
+                          <div className="category-catalog-grid">
+                            {previews.map((preview, idx) => {
+                              const previewLink =
+                                preview.openseaUrl ||
+                                (preview.collectionSlug
+                                  ? `https://opensea.io/collection/${preview.collectionSlug}`
+                                  : preview.contractAddress
+                                    ? `https://opensea.io/assets/ethereum/${preview.contractAddress}`
+                                    : "");
+                              const previewLinkLabel =
+                                preview.tokenId && preview.contractAddress
+                                  ? "View NFT ↗"
+                                  : "View Collection ↗";
+                              return (
+                                <article
+                                  key={`${preview.collectionName || "preview"}-${preview.tokenId || idx}`}
+                                  className="category-preview-card"
+                                >
+                                  <div className="category-preview-media">
+                                    <NftMedia
+                                      animationUrl={preview.animationUrl}
+                                      imageUrl={preview.imageUrl}
+                                      alt={preview.title || preview.collectionName || "Category preview"}
+                                      className="category-preview-img"
+                                    />
+                                  </div>
+                                  <p className="category-preview-title">
+                                    {preview.title || preview.collectionName || "Untitled NFT"}
+                                  </p>
+                                  {preview.collectionName && (
+                                    <p className="category-preview-collection">
+                                      {preview.collectionName}
+                                    </p>
+                                  )}
+                                  {previewLink && (
+                                    <a
+                                      href={previewLink}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="profile-external-link"
+                                    >
+                                      {previewLinkLabel}
+                                    </a>
+                                  )}
+                                </article>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <p className="category-preview-empty">
+                            No preview NFTs available for this category.
+                          </p>
+                        )}
+                      </article>
+                    );
+                  })}
+                </div>
               </section>
             )}
 
