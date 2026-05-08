@@ -530,6 +530,14 @@ export default function ProfilePage() {
   const topCollections = (profile?.topCollections || []).slice(0, 5);
   const collectionCount = profile?.totalCollections || profile?.topCollections?.length || 0;
   const canCompare = compareWallet.trim().length > 0 && !resolvingCompare;
+  const identityArchetypeLabel =
+    profile?.collectorIdentityLabel || profile?.focusLabel || "Collector";
+  const identitySecondaryLine = useMemo(() => {
+    const username = String(result?.profileIdentity?.username || "").trim();
+    const shortWallet = shortenAddress(resolvedWallet);
+    if (username && username !== headerDisplayName) return username;
+    return shortWallet === headerDisplayName ? "" : shortWallet;
+  }, [headerDisplayName, resolvedWallet, result?.profileIdentity?.username]);
 
   const behavioralReads = useMemo(
     () => (profile?.behavioralReads || []).filter(Boolean).slice(0, 3),
@@ -742,37 +750,50 @@ export default function ProfilePage() {
           <>
             {/* ── Hero ── */}
             <section className="profile-hero-composed">
-              <article className="profile-panel profile-hero-avatar-card">
-                {headerAvatarUrl ? (
-                  <img
-                    src={headerAvatarUrl}
-                    alt={`${headerDisplayName} wallet profile`}
-                    className="profile-hero-image"
-                    onError={handleImageError}
-                  />
-                ) : (
-                  <div
-                    className="profile-hero-image profile-hero-placeholder"
-                    aria-label="Wallet image fallback"
-                  >
-                    {headerDisplayName.slice(0, 1).toUpperCase()}
-                  </div>
-                )}
-              </article>
+              <article className="profile-panel profile-identity-block">
+                <div className="profile-identity-avatar-wrap">
+                  {headerAvatarUrl ? (
+                    <img
+                      src={headerAvatarUrl}
+                      alt={`${headerDisplayName} wallet profile`}
+                      className="profile-hero-image"
+                      onError={handleImageError}
+                    />
+                  ) : (
+                    <div
+                      className="profile-hero-image profile-hero-placeholder"
+                      aria-label="Wallet image fallback"
+                    >
+                      {headerDisplayName.slice(0, 1).toUpperCase()}
+                    </div>
+                  )}
+                </div>
 
-              <article className="profile-panel profile-hero-left">
-                <p className="profile-eyebrow">Your Constellation</p>
-                <h1 className="profile-display-name">{headerDisplayName}</h1>
-                <p className="profile-address">{shortenAddress(resolvedWallet)}</p>
-                <p className="profile-eyebrow" style={{ marginTop: 8 }}>
-                  Pattern
-                </p>
-                <p className="profile-class-label">{profile.focusLabel || "Collector"}</p>
-                {profile.collectorIdentityLabel && (
-                  <p className="profile-collector-identity-line">
-                    {profile.collectorIdentityLabel}
-                  </p>
-                )}
+                <div className="profile-identity-copy">
+                  <p className="profile-eyebrow">Profile Identity</p>
+                  <div className="profile-identity-name-row">
+                    <h1 className="profile-display-name">{headerDisplayName}</h1>
+                    <span className="profile-archetype-badge">{identityArchetypeLabel}</span>
+                  </div>
+                  {identitySecondaryLine && (
+                    <p className="profile-address">{identitySecondaryLine}</p>
+                  )}
+                  {profile.patternLine && (
+                    <p className="profile-identity-summary">{profile.patternLine}</p>
+                  )}
+
+                  <div className="profile-identity-stats" aria-label="Profile proof stats">
+                    <div className="profile-identity-stat profile-identity-stat--holdings">
+                      <p className="profile-identity-stat-value">{profile.totalNFTs || 0}</p>
+                      <p className="profile-section-label">Pieces Kept</p>
+                    </div>
+                    <div className="profile-identity-stat profile-identity-stat--collections">
+                      <p className="profile-identity-stat-value">{collectionCount}</p>
+                      <p className="profile-section-label">Collections</p>
+                    </div>
+                  </div>
+                </div>
+
                 <WalletBanner
                   wallets={result?.wallets || initialWalletsFromQuery}
                   onAdd={addWallet}
@@ -844,24 +865,6 @@ export default function ProfilePage() {
                   </div>
                 </div>
               )}
-            </section>
-
-            {/* ── Stats ── */}
-            <section className="profile-stats-grid">
-              <article className="profile-panel profile-stat-card profile-stat-card--holdings">
-                <p className="profile-stat-value">{profile.totalNFTs || 0}</p>
-                <p className="profile-section-label">Pieces Kept</p>
-              </article>
-              <article className="profile-panel profile-stat-card profile-stat-card--collections">
-                <p className="profile-stat-value">{collectionCount}</p>
-                <p className="profile-section-label">Collections</p>
-              </article>
-              <article className="profile-panel profile-stat-card profile-stat-card--since">
-                <p className="profile-stat-value">
-                  {formatCollectorSince(firstMint?.timestamp)}
-                </p>
-                <p className="profile-section-label">Collector Since</p>
-              </article>
             </section>
 
             {/* ── The Read ── */}
