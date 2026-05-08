@@ -588,7 +588,7 @@ function buildCategoryGroups(nfts: WalletProfileNFT[]): Record<string, {
 
   for (const nft of nfts) {
     const category = classifyCategoryWithSource(nft).category;
-    if (category === "Other") continue;
+    if (category === "other") continue;
     const bucket = grouped.get(category);
     if (bucket) {
       bucket.push(nft);
