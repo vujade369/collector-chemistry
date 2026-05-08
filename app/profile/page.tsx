@@ -129,6 +129,12 @@ type ProfileResponse = {
   };
 };
 
+type PreviewNFT = {
+  imageUrl: string;
+  name: string;
+  collectionName: string;
+};
+
 type TasteSlice = { label: string; value: number; key: string };
 
 type WalletResolveResponse =
@@ -348,6 +354,7 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<ProfileResponse | null>(null);
+  const [previewImages, setPreviewImages] = useState<PreviewNFT[]>([]);
   const [compareWallet, setCompareWallet] = useState("");
   const [compareResolveError, setCompareResolveError] = useState("");
   const [resolvingCompare, setResolvingCompare] = useState(false);
@@ -385,6 +392,7 @@ export default function ProfilePage() {
         inFlightProfileQueryRef.current = null;
         setError("Nothing found for this wallet.");
         setResult(null);
+        setPreviewImages([]);
         return;
       }
 
@@ -398,6 +406,19 @@ export default function ProfilePage() {
       setLoading(true);
       setError("");
       setResult(null);
+      setPreviewImages([]);
+
+      void fetch(`/api/profile/preview?wallet=${encodeURIComponent(profileQuery)}`)
+        .then(async (previewRes) => {
+          if (!previewRes.ok) return;
+          const data = (await previewRes.json()) as { images?: PreviewNFT[] };
+          const isCurrent =
+            profileRequestIdRef.current === requestId &&
+            inFlightProfileQueryRef.current === profileQuery;
+          if (!isCurrent) return;
+          setPreviewImages((data.images || []).slice(0, 12));
+        })
+        .catch(() => {});
 
       try {
         const res = await fetch(
@@ -433,6 +454,7 @@ export default function ProfilePage() {
         ) {
           inFlightProfileQueryRef.current = null;
           setLoading(false);
+          setPreviewImages([]);
         }
       }
     }
@@ -675,6 +697,23 @@ export default function ProfilePage() {
         {/* Loading */}
 {loading && (
   <section className="profile-loading-panel">
+    {previewImages.length > 0 && (
+      <div className="loading-preview-field" aria-hidden="true">
+        {previewImages.slice(0, 12).map((preview, idx) => (
+          <img
+            key={`${preview.imageUrl}-${idx}`}
+            src={preview.imageUrl}
+            alt=""
+            className="loading-preview-thumb"
+            loading="lazy"
+            decoding="async"
+            onError={(event) => {
+              event.currentTarget.style.display = "none";
+            }}
+          />
+        ))}
+      </div>
+    )}
     <div className="loading-ring" aria-hidden="true" />
     <h2>Reading your wallet</h2>
     <p className="profile-loading-process">
