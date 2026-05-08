@@ -355,29 +355,28 @@ export default function ProfilePage() {
   const [error, setError] = useState("");
   const [result, setResult] = useState<ProfileResponse | null>(null);
   const [previewImages, setPreviewImages] = useState<PreviewNFT[]>([]);
+  const [activePreviewIndex, setActivePreviewIndex] = useState(0);
   const [compareWallet, setCompareWallet] = useState("");
   const [compareResolveError, setCompareResolveError] = useState("");
   const [resolvingCompare, setResolvingCompare] = useState(false);
-  const [loadingStep, setLoadingStep] = useState(0);
   const inFlightProfileQueryRef = useRef<string | null>(null);
   const profileRequestIdRef = useRef(0);
 
-  const loadingProcessLines = [
-  "Finding the shape of the collection.",
-  "Looking for the gravity point.",
-  "Building the read.",
-];
-
   useEffect(() => {
-  if (!loading) return;
+    if (!loading || previewImages.length <= 1) return;
 
-  const timer = setInterval(
-    () => setLoadingStep((prev) => (prev + 1) % loadingProcessLines.length),
-    1800,
-  );
+    const timer = setInterval(() => {
+      setActivePreviewIndex((prev) => {
+        if (prev >= previewImages.length - 1) {
+          clearInterval(timer);
+          return prev;
+        }
+        return prev + 1;
+      });
+    }, 1800);
 
-  return () => clearInterval(timer);
-}, [loading, loadingProcessLines.length]);
+    return () => clearInterval(timer);
+  }, [loading, previewImages.length]);
 
   useEffect(() => {
     async function load() {
@@ -393,6 +392,7 @@ export default function ProfilePage() {
         setError("Nothing found for this wallet.");
         setResult(null);
         setPreviewImages([]);
+        setActivePreviewIndex(0);
         return;
       }
 
@@ -407,6 +407,7 @@ export default function ProfilePage() {
       setError("");
       setResult(null);
       setPreviewImages([]);
+      setActivePreviewIndex(0);
 
       void fetch(`/api/profile/preview?wallet=${encodeURIComponent(profileQuery)}`)
         .then(async (previewRes) => {
@@ -416,6 +417,7 @@ export default function ProfilePage() {
             profileRequestIdRef.current === requestId &&
             inFlightProfileQueryRef.current === profileQuery;
           if (!isCurrent) return;
+          setActivePreviewIndex(0);
           setPreviewImages((data.images || []).slice(0, 12));
         })
         .catch(() => {});
@@ -455,6 +457,7 @@ export default function ProfilePage() {
           inFlightProfileQueryRef.current = null;
           setLoading(false);
           setPreviewImages([]);
+          setActivePreviewIndex(0);
         }
       }
     }
@@ -698,13 +701,13 @@ export default function ProfilePage() {
 {loading && (
   <section className="profile-loading-panel">
     {previewImages.length > 0 && (
-      <div className="loading-preview-field" aria-hidden="true">
+      <div className="loading-preview-stage" aria-hidden="true">
         {previewImages.slice(0, 12).map((preview, idx) => (
           <img
             key={`${preview.imageUrl}-${idx}`}
             src={preview.imageUrl}
             alt=""
-            className="loading-preview-thumb"
+            className={`loading-preview-image${idx === activePreviewIndex ? " is-active" : ""}`}
             loading="lazy"
             decoding="async"
             onError={(event) => {
@@ -714,16 +717,7 @@ export default function ProfilePage() {
         ))}
       </div>
     )}
-    <div className="loading-ring" aria-hidden="true" />
-    <h2>Reading your wallet</h2>
-    <p className="profile-loading-process">
-      {loadingProcessLines[loadingStep % loadingProcessLines.length]}
-    </p>
-    <div className="loading-bars" aria-hidden="true">
-      <span />
-      <span />
-      <span />
-    </div>
+    {previewImages.length === 0 && <div className="loading-ring" aria-hidden="true" />}
   </section>
 )}
 
