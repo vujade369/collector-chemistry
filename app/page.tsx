@@ -135,6 +135,9 @@ export default function HomePage() {
                 setWalletInput(nextValue);
                 if (resolveError) setResolveError("");
               }}
+              onSuggestionSelect={(suggestion) => {
+                router.push(`/profile?wallet=${encodeURIComponent(suggestion.address)}`);
+              }}
               onKeyDown={handleKeyDown}
               onDropdownOpenChange={setWalletDropdownOpen}
               style={{ paddingRight: "130px" }}
