@@ -392,3 +392,67 @@ The product should remain:
 - respectful
 - specific
 - grounded in public collecting behavior
+
+---
+
+## 2026-05-07 Session
+
+### Summary
+
+- Fixed animated / GIF NFT rendering in profile preview cards.
+- Removed the market-attention offer lookup from the blocking profile response path.
+- Diagnosed and fixed OpenSea category enrichment producing zero category source signal.
+- Made category enrichment and latest-arrival signal bounded so the profile response no longer waits on 10s+ optional enrichment work.
+- Preserved the Signal Piece / Market Attention feature for a later lazy implementation.
+
+### Files changed
+
+- `app/api/profile/route.ts`
+  - Removed `marketAttentionTask` from the main profile `Promise.all` chain.
+  - Set market attention to `null` in the initial profile response.
+  - Added a bounded category enrichment response budget.
+  - Bounded latest-arrival lookup so it can return `null` instead of blocking profile load.
+- `lib/walletProfile.ts`
+  - Fixed double normalization of already-normalized OpenSea category values.
+- Profile media component files from the GIF fix
+  - Fixed the animated media fallback path so GIF / animation URLs render instead of falling back incorrectly.
+
+### Key findings
+
+- OpenSea category enrichment was spending about 11 seconds but producing `categorySourceBreakdown.opensea: 0`.
+- Root cause: `enrichCollectionCategories` wrote normalized internal values such as `fine_art` into `displayCollectionCategory`, but `classifyCategoryWithSource` passed that value through `normalizeOpenSeaCategory()` again.
+- `normalizeOpenSeaCategory("fine_art")` returns an empty string, while `normalizeOpenSeaCategory("art")` returns `fine_art`.
+- Market attention was the first large bottleneck: MCP plus OpenSea inventory fallback plus per-NFT offer checks could block profile responses for 15-20 seconds.
+- After market attention was removed from the blocking path, category enrichment and latest arrival became the dominant costs.
+- Latest arrival was hitting a 5s OpenSea events timeout and is better treated as an optional signal piece.
+- GIF rendering root cause: animation media data from Alchemy was not typed / checked consistently, so animated assets could fall through the wrong image fallback path.
+
+### Performance
+
+- Before the session, `vuja-de.eth` profile responses could take about 28 seconds.
+- After removing blocking market attention, fixing category normalization, and bounding optional enrichment, warmed profile responses are about 5-7 seconds.
+- Latest verified warmed response:
+  - HTTP `200`
+  - `5.397520s`
+  - `categorySourceBreakdown.opensea: 12`
+  - `marketAttentionMs: 0`
+- A cold/cache-miss profile load still measured about 7.3 seconds because wallet fetching and OpenSea visibility filtering can dominate.
+
+### Commits
+
+1. `41c51fd` — `fix animated and GIF NFT rendering in profile preview cards`
+2. `bb43e84` — `fix Other category filter capitalization in buildCategoryGroups`
+3. `0289bef` — `fix double normalization of OpenSea category in classifyCategoryWithSource`
+4. `283e456` — `make category enrichment and latest arrival non-blocking in profile response`
+
+### Still pending
+
+- Step 3B: build `lib/marketAttention.ts` with the two-pass capped OpenSea offer scan.
+- Step 3C: add lazy `/api/profile/market-attention` route.
+- Step 3D: wire the profile page to fetch Market Attention after the main profile response.
+
+### Known follow-ups
+
+- Alchemy animation object is still under-typed and not checked deeply enough.
+- Cold profile load can still be around 7 seconds due to wallet fetching and OpenSea visibility filtering.
+- Market attention currently returns `null` in the main profile response until the lazy implementation is added.
