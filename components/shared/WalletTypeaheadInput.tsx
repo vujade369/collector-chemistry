@@ -232,8 +232,10 @@ export default function WalletTypeaheadInput({
                   highlightedIndex === index ? " is-active" : ""
                 }`}
                 onMouseEnter={() => setHighlightedIndex(index)}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => selectSuggestion(suggestion)}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  selectSuggestion(suggestion);
+                }}
                 role="option"
                 aria-selected={highlightedIndex === index}
               >
