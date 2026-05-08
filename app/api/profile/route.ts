@@ -1073,6 +1073,21 @@ async function fetchMarketAttention(
 
       if (!candidates.length) return null;
 
+      // Cap to 15 candidates, prioritizing NFTs from top collections by count in this wallet
+      if (candidates.length > 15) {
+        const slugCounts = new Map<string, number>();
+        for (const c of candidates) slugCounts.set(c.slug, (slugCounts.get(c.slug) || 0) + 1);
+        const topSlugs = [...slugCounts.entries()].sort((a, b) => b[1] - a[1]).map(([s]) => s);
+        const seen = new Set<string>();
+        const capped: typeof candidates = [];
+        for (const slug of topSlugs) {
+          if (capped.length >= 15) break;
+          const hit = candidates.find((c) => c.slug === slug && !seen.has(`${c.slug}:${c.tokenId}`));
+          if (hit) { capped.push(hit); seen.add(`${hit.slug}:${hit.tokenId}`); }
+        }
+        candidates = capped;
+      }
+
       const responses = await Promise.all(
         candidates.map(async ({ slug, tokenId, name, imageUrl, openseaUrl, contractAddress }) => {
         const data = await fetchOpenSeaJson<{
@@ -1412,10 +1427,6 @@ export async function GET(req: Request) {
     const taste = buildTasteDNA(nfts);
     const fetchNFTsMs = Date.now() - fetchStartMs;
 
-    const enrichStartMs = Date.now();
-    const { enrichedNFTs, debug } = await enrichCollectionCategories(nfts, categoryCap);
-    const categoryEnrichmentMs = Date.now() - enrichStartMs;
-
     const profileStartMs = Date.now();
     let profileCoreBuildMs = 0;
     let walletSignalResolveMs = 0;
@@ -1429,11 +1440,11 @@ export async function GET(req: Request) {
     let collectionDisplayIndexMs = 0;
     let topCollectionsDisplayMs = 0;
 
-    const profileCoreBuildStartMs = Date.now();
-    const profile = buildWalletProfile(enrichedNFTs);
-    profileCoreBuildMs = Date.now() - profileCoreBuildStartMs;
+    // Start enrichment without awaiting — ENS resolution runs in parallel with it
+    const enrichStartMs = Date.now();
+    const enrichPromise = enrichCollectionCategories(nfts, categoryCap);
 
-    // Resolve all ENS names to 0x addresses once, shared across all signal tasks
+    // Resolve ENS names in parallel with enrichment
     const walletSignalResolveStartMs = Date.now();
     const resolvedWalletsForSignals = await Promise.all(
       validWallets.map(async (w) => {
@@ -1444,7 +1455,7 @@ export async function GET(req: Request) {
     walletSignalResolveMs = Date.now() - walletSignalResolveStartMs;
     const primaryResolvedAddress = resolvedWalletsForSignals[0] || wallet;
 
-    // Kick off all signal tasks in parallel using the pre-resolved addresses
+    // Start tasks that don't need enrichedNFTs — run in parallel with remaining enrichment
     const earliestMintTask = (async () => {
       const signalStartMs = Date.now();
       try {
@@ -1473,6 +1484,32 @@ export async function GET(req: Request) {
         profileIdentityMs = Date.now() - signalStartMs;
       }
     })();
+
+    const latestArrivalTask = (async () => {
+      const signalStartMs = Date.now();
+      try {
+        return await fetchLatestArrivalSignal(resolvedWalletsForSignals, ALCHEMY_API_KEY || "");
+      } finally {
+        latestArrivalMs = Date.now() - signalStartMs;
+      }
+    })();
+
+    const acquisitionBreakdownTask = (async () => {
+      const signalStartMs = Date.now();
+      try {
+        return await fetchAcquisitionBreakdown(wallet);
+      } finally {
+        acquisitionBreakdownMs = Date.now() - signalStartMs;
+      }
+    })();
+
+    // Wait for enrichment, then build profile and start market attention (needs enrichedNFTs)
+    const { enrichedNFTs, debug } = await enrichPromise;
+    const categoryEnrichmentMs = Date.now() - enrichStartMs;
+
+    const profileCoreBuildStartMs = Date.now();
+    const profile = buildWalletProfile(enrichedNFTs);
+    profileCoreBuildMs = Date.now() - profileCoreBuildStartMs;
 
     // Check all wallets for active offers, use MCP first then REST fallback
     const marketAttentionTask = (async () => {
@@ -1549,24 +1586,6 @@ export async function GET(req: Request) {
         );
       } finally {
         marketAttentionMs = Date.now() - signalStartMs;
-      }
-    })();
-
-    const latestArrivalTask = (async () => {
-      const signalStartMs = Date.now();
-      try {
-        return await fetchLatestArrivalSignal(resolvedWalletsForSignals, ALCHEMY_API_KEY || "");
-      } finally {
-        latestArrivalMs = Date.now() - signalStartMs;
-      }
-    })();
-
-    const acquisitionBreakdownTask = (async () => {
-      const signalStartMs = Date.now();
-      try {
-        return await fetchAcquisitionBreakdown(wallet);
-      } finally {
-        acquisitionBreakdownMs = Date.now() - signalStartMs;
       }
     })();
 
