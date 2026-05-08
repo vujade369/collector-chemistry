@@ -183,6 +183,7 @@ export default function HomePage() {
             textTransform: "uppercase",
             color: "var(--text-dimmer)",
             transition: "padding-top 160ms ease",
+            pointerEvents: "none",
           }}
         >
           Read-only · No wallet connection
