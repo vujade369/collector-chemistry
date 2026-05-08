@@ -262,13 +262,8 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
   sports: ["sports", "athlete", "team", "league", "rookie"],
   virtual_worlds: ["virtual worlds", "virtual world", "metaverse", "land"],
   domains: [
-    "ens",
     "ethereum name service",
     "unstoppable domains",
-    ".eth",
-    ".nft",
-    "domain",
-    "domains",
   ],
 };
 
@@ -429,18 +424,45 @@ function hasFineArtProtection(classifierText: string) {
   return classifierText.includes("series") && includesAnyText(classifierText, seriesArtPairingCues);
 }
 
-function hasDomainCue(rawClassifierText: string, classifierText: string) {
-  const raw = String(rawClassifierText || "").toLowerCase();
-  return (
-    includesAnyText(classifierText, [
-      "ethereum name service",
-      "unstoppable domains",
-      "domain",
-      "domains",
-    ]) ||
-    /\bens\b/.test(raw) ||
-    /\.(eth|nft)(\s|$|[^\w])/i.test(raw)
+function hasDomainCue(nft: WalletProfileNFT) {
+  // Only check collection-level identity fields — not descriptions, traits, or token names.
+  const collectionText = normalizeText(
+    [
+      nft.displayCollectionName,
+      nft.displayCollectionSlug,
+      nft.contractMetadata?.name,
+      nft.contract?.name,
+      typeof nft.collection === "object" ? nft.collection?.name : nft.collection,
+      nft.metadata?.collection_name,
+      nft.metadata?.collection,
+      nft.raw?.metadata?.collection_name,
+      nft.raw?.metadata?.collection,
+    ]
+      .filter(Boolean)
+      .join(" ")
   );
+
+  if (
+    includesAnyText(collectionText, [
+      "ethereum name service",
+      "ethereum-name-service",
+      "unstoppable domains",
+      "unstoppable-domains",
+      "unstoppabledomains",
+    ]) ||
+    /\bens\b/.test(collectionText)
+  ) {
+    return true;
+  }
+
+  // Token names ending in a recognized domain TLD count as domains.
+  const tokenName = String(
+    nft.name || nft.title || nft.metadata?.name || nft.raw?.metadata?.name || ""
+  )
+    .toLowerCase()
+    .trim();
+
+  return /\.(eth|nft|crypto|wallet|x)(\s|$)/i.test(tokenName);
 }
 
 function hasKnownPfpCollectionCue(classifierText: string) {
@@ -450,6 +472,7 @@ function hasKnownPfpCollectionCue(classifierText: string) {
     "oni ronin",
     "women and weapons",
     "ezu",
+    "scumbag",
   ]);
 }
 
@@ -526,7 +549,7 @@ export function classifyCategoryWithSource(nft: WalletProfileNFT): {
     return { category: "fine_art", source: "keyword" };
   }
 
-  if (hasDomainCue(rawClassifierText, classifierText)) {
+  if (hasDomainCue(nft)) {
     return { category: "domains", source: "keyword" };
   }
 
