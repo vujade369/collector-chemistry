@@ -59,9 +59,6 @@
 .taste-map-center-value { margin: 0; color: #f0ede6; font-size: 20px; }
 .taste-map-legend { width: 100%; display: grid; gap: 8px; }
 .taste-map-legend-row { display: grid; grid-template-columns: 1fr auto; font-size: 12px; color: #a8a49d; border-bottom: 0.5px solid #1e1e1e; padding-bottom: 8px; }
-.taste-map-legend-row--interactive { width: 100%; background: transparent; border-left: 2px solid transparent; border-right: none; border-top: none; color: #a8a49d; cursor: pointer; padding-top: 6px; text-align: left; }
-.taste-map-legend-row--interactive:hover { color: #d8d5ce; border-left-color: rgba(255,51,153,0.45); }
-.taste-map-legend-row--interactive.is-active { color: #f0ede6; border-left-color: #ff3399; }
 .taste-bars { display: grid; gap: 10px; }
 .taste-bar-row { display: grid; grid-template-columns: 100px 1fr 36px; gap: 8px; align-items: center; }
 .taste-bar-name, .taste-bar-pct { font-size: 12px; color: #a8a49d; }
@@ -173,11 +170,19 @@
 .converter-reset { margin-top: 4px; border: none; background: transparent; color: #888; font-size: 12px; text-align: left; padding: 0; cursor: pointer; }
 
 .category-explorer { margin-top: 14px; border-top: 0.5px solid #232323; padding-top: 12px; display: grid; gap: 10px; }
+.category-catalog { display: grid; gap: 18px; }
+.category-catalog-section { display: grid; gap: 12px; padding-top: 17px; border-top: 0.5px solid #232323; }
+.category-catalog-section:first-child { padding-top: 0; border-top: 0; }
+.category-catalog-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: baseline; }
+.category-catalog-title { margin: 0; font-size: 18px; line-height: 1.15; font-weight: 300; letter-spacing: 0; color: #f0ede6; }
+.category-catalog-context { margin: 0; color: #666; font-size: 11px; line-height: 1.4; text-align: right; }
+.category-catalog-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .category-preview-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .category-preview-card { border: 0.5px solid #242424; border-radius: 10px; padding: 8px; background: #0f0f0f; display: grid; gap: 8px; }
 .category-preview-media { width: 100%; aspect-ratio: 1; border-radius: 8px; border: 0.5px solid #262626; background: #141414; overflow: hidden; display: grid; place-items: center; color: #666; }
 .category-preview-img { width: 100%; height: 100%; object-fit: cover; }
 .category-preview-title { margin: 0; font-size: 11px; color: #d8d5ce; }
+.category-preview-collection { margin: -5px 0 0; font-size: 10.5px; color: #666; overflow-wrap: anywhere; }
 .category-preview-empty { margin: 0; font-size: 11px; color: #666; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -192,7 +197,7 @@
   .profile-stats-grid { grid-template-columns: repeat(3, 1fr); }
   .profile-key-signals { grid-template-columns: 1fr; }
   .profile-compare-form { grid-template-columns: 1fr; }
-  .category-preview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .category-preview-grid, .category-catalog-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 520px) {
@@ -206,6 +211,8 @@
   .converter-visual--huge .converter-tile { width: 30px; height: 30px; margin-left: -11px; }
   .converter-tile-more { min-width: 0; }
   .converter-equation { font-size: 10px; }
+  .category-catalog-head { grid-template-columns: 1fr; gap: 4px; }
+  .category-catalog-context { text-align: left; }
 }
 
 .profile-behavioral-tags { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -218,10 +225,6 @@
 .profile-tag-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .profile-tag { padding: 4px 11px; border-radius: 20px; border: 0.5px solid #2e2e2e; background: #141414; color: #c8c5be; font-size: 11px; letter-spacing: 0.01em; }
 .profile-pattern-quote { margin: 0; font-size: 28px; line-height: 1.18; letter-spacing: -0.025em; font-weight: 300; color: #f0ede6; max-width: 18ch; }
-
-.category-tab-row { display: flex; flex-wrap: wrap; gap: 8px; }
-.category-tab-btn { background: #141414; border: 0.5px solid #2e2e2e; color: #666; padding: 5px 12px; border-radius: 20px; font-size: 11px; cursor: pointer; }
-.category-tab-btn.is-active { background: #1a0d12; border-color: rgba(255,51,153,0.4); color: #ff3399; }
 
 .profile-wallet-chip-zone { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; margin-bottom: 4px; }
 .profile-wallet-chip { display: inline-flex; align-items: center; background: #141414; border: 0.5px solid #2e2e2e; border-radius: 999px; padding: 5px 12px; font-size: 12px; color: #a8a49d; cursor: default; }
