@@ -530,7 +530,7 @@ export function classifyCategoryWithSource(nft: WalletProfileNFT): {
   category: string;
   source: CategorySource;
 } {
-  const fromOpenSea = normalizeOpenSeaCategory(nft.displayCollectionCategory);
+  const fromOpenSea = nft.displayCollectionCategory ?? "";
   if (fromOpenSea) {
     return { category: fromOpenSea, source: "opensea" };
   }
