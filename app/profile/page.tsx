@@ -86,6 +86,7 @@ type WalletProfile = {
   openseaUsername?: string;
   avatarUrl?: string;
   openseaUrl?: string;
+  acquisitionDNA?: AcquisitionDNA;
 };
 
 type ProfileIdentity = {
@@ -127,6 +128,16 @@ type ProfileResponse = {
     mintPercent?: number;
     acquiredPercent?: number;
   };
+};
+
+type AcquisitionDNA = {
+  totalSampled?: number;
+  totalMatched?: number;
+  totalUnmatched?: number;
+  minted: { count: number; percent: number };
+  received: { count: number; percent: number };
+  unknown: { count: number; percent: number };
+  scope?: string;
 };
 
 type PreviewNFT = {
@@ -224,6 +235,13 @@ function formatCollectorSince(timestamp?: string): string {
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return "Unknown";
   return date.toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
+}
+
+function getEntryPatternRead(percent: number): string {
+  if (percent >= 50) return "You tend to show up before the crowd.";
+  if (percent >= 25) return "You mix early discovery with selective collecting.";
+  if (percent >= 10) return "You have some early-entry signals, but most of the wallet was built after mint.";
+  return "This wallet reads like a curator's eye, not an early mover.";
 }
 
 function formatCategoryLabel(value: string): string {
@@ -658,6 +676,8 @@ export default function ProfilePage() {
       ? Math.max(0, 100 - mintedPercent)
       : null;
 
+  const acquisitionDNA = profile?.acquisitionDNA ?? null;
+
   const topCollectionsWithImages = useMemo(
     () =>
       topCollections.map((collection) => {
@@ -921,6 +941,34 @@ export default function ProfilePage() {
                 </div>
               )}
             </section>
+
+            {/* ── Entry Pattern ── */}
+            {acquisitionDNA?.minted != null && Number.isFinite(acquisitionDNA.minted.percent) && (
+              <article className="profile-panel profile-entry-pattern">
+                <div className="entry-pattern-ring-col">
+                  <svg viewBox="0 0 64 64" className="entry-pattern-svg" aria-hidden="true">
+                    <circle cx="32" cy="32" r="24" fill="none" stroke="#1e1e1e" strokeWidth="2.5" />
+                    <circle
+                      cx="32" cy="32" r="24" fill="none"
+                      stroke="#9575ff"
+                      strokeWidth="2.5"
+                      strokeDasharray={`${((acquisitionDNA.minted.percent / 100) * (2 * Math.PI * 24)).toFixed(2)} 999`}
+                      strokeLinecap="round"
+                      transform="rotate(-90 32 32)"
+                    />
+                  </svg>
+                </div>
+                <div className="entry-pattern-body">
+                  <p className="profile-eyebrow">Entry Pattern</p>
+                  <p className="entry-pattern-main">{Math.round(acquisitionDNA.minted.percent)}% minted directly</p>
+                  <p className="entry-pattern-proof">{acquisitionDNA.minted.count} Ethereum mints matched to this wallet</p>
+                  {acquisitionDNA.unknown.percent >= 30 && (
+                    <p className="entry-pattern-caveat">Based on the mint history we could match.</p>
+                  )}
+                  <p className="entry-pattern-read">{getEntryPatternRead(acquisitionDNA.minted.percent)}</p>
+                </div>
+              </article>
+            )}
 
             {/* ── The Read ── */}
             {hasInterpretation && (
