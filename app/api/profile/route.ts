@@ -14,6 +14,7 @@ const OPENSEA_API_KEY = process.env.OPENSEA_API_KEY;
 const OPENSEA_BASE_URL = "https://api.opensea.io/api/v2";
 const DEFAULT_COLLECTION_CATEGORY_CAP = 25;
 const CATEGORY_ENRICHMENT_TIMEOUT_MS = 10000;
+const CATEGORY_ENRICHMENT_RESPONSE_BUDGET_MS = 2800;
 const CATEGORY_ENRICHMENT_CONCURRENCY = 4;
 const OPENSEA_MAX_EVENT_PAGES = 6;
 const OPENSEA_EVENT_PAGE_LIMIT = 50;
@@ -98,6 +99,20 @@ type CategoryEnrichmentDebug = {
     success: boolean;
   }>;
 };
+
+function createCategoryEnrichmentDebug(categoryCap: number): CategoryEnrichmentDebug {
+  return {
+    collectionsCheckedForCategory: 0,
+    collectionsWithCategory: 0,
+    collectionsWithoutSlug: 0,
+    collectionsCategoryCap: categoryCap,
+    categoryEnrichmentTimedOut: false,
+    categoryEnrichmentConcurrency: CATEGORY_ENRICHMENT_CONCURRENCY,
+    categoryRequestsStarted: 0,
+    categoryRequestsCompleted: 0,
+    openseaCategorySamples: [],
+  };
+}
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
   let timeoutHandle: ReturnType<typeof setTimeout>;
@@ -315,7 +330,11 @@ function sanitizeRawResponse(raw: string) {
   return raw.slice(0, 500).replace(/\s+/g, " ").trim();
 }
 
-async function fetchCollectionCategoryWithSample(slug: string, samples: CategoryEnrichmentDebug["openseaCategorySamples"]) {
+async function fetchCollectionCategoryWithSample(
+  slug: string,
+  samples: CategoryEnrichmentDebug["openseaCategorySamples"],
+  timeoutMs = 5000
+) {
   if (!OPENSEA_API_KEY || !slug) return null;
 
   const endpoint = `${OPENSEA_BASE_URL}/collections/${slug}`;
@@ -325,7 +344,7 @@ async function fetchCollectionCategoryWithSample(slug: string, samples: Category
         cache: "no-store",
         headers: { accept: "application/json", "X-API-KEY": OPENSEA_API_KEY },
       }),
-      5000,
+      timeoutMs,
       null as Response | null
     );
     if (!res) {
@@ -365,7 +384,12 @@ function normalizeAddress(value?: string) {
   return String(value || "").toLowerCase();
 }
 
-async function enrichCollectionCategories(nfts: WalletProfileNFT[], categoryCap: number): Promise<{ enrichedNFTs: WalletProfileNFT[]; debug: CategoryEnrichmentDebug }> {
+async function enrichCollectionCategories(
+  nfts: WalletProfileNFT[],
+  categoryCap: number,
+  stats = createCategoryEnrichmentDebug(categoryCap),
+  timeoutMs = CATEGORY_ENRICHMENT_TIMEOUT_MS
+): Promise<{ enrichedNFTs: WalletProfileNFT[]; debug: CategoryEnrichmentDebug }> {
   const collectionBuckets = new Map<string, { nfts: WalletProfileNFT[]; count: number; name: string }>();
 
   for (const nft of nfts) {
@@ -383,19 +407,9 @@ async function enrichCollectionCategories(nfts: WalletProfileNFT[], categoryCap:
   const topCollections = [...collectionBuckets.values()].sort((a, b) => b.count - a.count).slice(0, categoryCap);
   const categoryCache = new Map<string, string | null>();
   const slugCache = new Map<string, string | null>();
-  const stats: CategoryEnrichmentDebug = {
-    collectionsCheckedForCategory: 0,
-    collectionsWithCategory: 0,
-    collectionsWithoutSlug: 0,
-    collectionsCategoryCap: categoryCap,
-    categoryEnrichmentTimedOut: false,
-    categoryEnrichmentConcurrency: CATEGORY_ENRICHMENT_CONCURRENCY,
-    categoryRequestsStarted: 0,
-    categoryRequestsCompleted: 0,
-    openseaCategorySamples: [],
-  };
   const enrichStartMs = Date.now();
   let nextCollectionIndex = 0;
+  const remainingBudgetMs = () => Math.max(0, timeoutMs - (Date.now() - enrichStartMs));
 
   async function processCollection(collection: { nfts: WalletProfileNFT[]; count: number; name: string }) {
     stats.collectionsCheckedForCategory += 1;
@@ -422,12 +436,21 @@ async function enrichCollectionCategories(nfts: WalletProfileNFT[], categoryCap:
 
     let resolvedSlug = prefilledSlug || "";
     if (!resolvedSlug && contractAddress) {
+      const remainingMs = remainingBudgetMs();
+      if (remainingMs <= 0) {
+        stats.categoryEnrichmentTimedOut = true;
+        return;
+      }
       const contractSlugKey = `contract:${contractAddress}`;
       if (slugCache.has(contractSlugKey)) {
         resolvedSlug = slugCache.get(contractSlugKey) || "";
       } else {
-        const contractData = await fetchOpenSeaJson<OpenSeaContractResponse>(
-          `/chain/ethereum/contract/${contractAddress}`,
+        const contractData = await withTimeout(
+          fetchOpenSeaJson<OpenSeaContractResponse>(
+            `/chain/ethereum/contract/${contractAddress}`,
+            {} as OpenSeaContractResponse
+          ),
+          remainingMs,
           {} as OpenSeaContractResponse
         );
         resolvedSlug = String(contractData?.collection || contractData?.slug || contractData?.collections?.[0]?.slug || "").trim();
@@ -440,7 +463,16 @@ async function enrichCollectionCategories(nfts: WalletProfileNFT[], categoryCap:
       if (categoryCache.has(slugKey)) {
         resolvedCategory = categoryCache.get(slugKey) || null;
       } else {
-        resolvedCategory = await fetchCollectionCategoryWithSample(resolvedSlug, stats.openseaCategorySamples);
+        const remainingMs = remainingBudgetMs();
+        if (remainingMs <= 0) {
+          stats.categoryEnrichmentTimedOut = true;
+        } else {
+          resolvedCategory = await fetchCollectionCategoryWithSample(
+            resolvedSlug,
+            stats.openseaCategorySamples,
+            remainingMs
+          );
+        }
         categoryCache.set(slugKey, resolvedCategory);
       }
     }
@@ -473,7 +505,7 @@ async function enrichCollectionCategories(nfts: WalletProfileNFT[], categoryCap:
 
   async function runCategoryWorker() {
     while (nextCollectionIndex < topCollections.length) {
-      if (Date.now() - enrichStartMs >= CATEGORY_ENRICHMENT_TIMEOUT_MS) {
+      if (Date.now() - enrichStartMs >= timeoutMs) {
         stats.categoryEnrichmentTimedOut = true;
         return;
       }
@@ -1440,11 +1472,11 @@ export async function GET(req: Request) {
     let collectionDisplayIndexMs = 0;
     let topCollectionsDisplayMs = 0;
 
-    // Start enrichment without awaiting — ENS resolution runs in parallel with it
+    // Keep category enrichment on a short response budget; unfinished collections fall back to local classification.
     const enrichStartMs = Date.now();
-    const enrichPromise = enrichCollectionCategories(nfts, categoryCap);
+    const categoryDebug = createCategoryEnrichmentDebug(categoryCap);
 
-    // Resolve ENS names in parallel with enrichment
+    // Resolve ENS names before optional signal tasks
     const walletSignalResolveStartMs = Date.now();
     const resolvedWalletsForSignals = await Promise.all(
       validWallets.map(async (w) => {
@@ -1488,7 +1520,11 @@ export async function GET(req: Request) {
     const latestArrivalTask = (async () => {
       const signalStartMs = Date.now();
       try {
-        return await fetchLatestArrivalSignal(resolvedWalletsForSignals, ALCHEMY_API_KEY || "");
+        return await withTimeout(
+          fetchLatestArrivalSignal(resolvedWalletsForSignals, ALCHEMY_API_KEY || ""),
+          2000,
+          null as ProfileNFTSignal | null
+        );
       } finally {
         latestArrivalMs = Date.now() - signalStartMs;
       }
@@ -1503,97 +1539,24 @@ export async function GET(req: Request) {
       }
     })();
 
-    // Wait for enrichment, then build profile and start market attention (needs enrichedNFTs)
-    const { enrichedNFTs, debug } = await enrichPromise;
+    const { enrichedNFTs, debug } = await enrichCollectionCategories(
+      nfts,
+      categoryCap,
+      categoryDebug,
+      CATEGORY_ENRICHMENT_RESPONSE_BUDGET_MS
+    );
     const categoryEnrichmentMs = Date.now() - enrichStartMs;
 
     const profileCoreBuildStartMs = Date.now();
     const profile = buildWalletProfile(enrichedNFTs);
     profileCoreBuildMs = Date.now() - profileCoreBuildStartMs;
 
-    // Check all wallets for active offers, use MCP first then REST fallback
-    const marketAttentionTask = (async () => {
-      const signalStartMs = Date.now();
-      try {
-        return await withTimeout(
-          Promise.all(
-            resolvedWalletsForSignals.map(async (resolvedAddress) => {
-              const mcpWinner = await fetchTopOfferViaOpenSeaMcp(resolvedAddress);
-              if (mcpWinner) return mcpWinner;
+    const marketAttention: MarketAttention | null = null;
 
-              const normalizedResolvedAddress = normalizeAddress(resolvedAddress);
-
-              const matchingWalletNFTs =
-                validWallets.length === 1
-                  ? enrichedNFTs
-                  : enrichedNFTs.filter((nft) => {
-                      const sourceWallet = normalizeAddress(
-                        String(
-                          (nft as WalletProfileNFT & { sourceWallet?: string })
-                            .sourceWallet || ""
-                        )
-                      );
-
-                      return sourceWallet === normalizedResolvedAddress;
-                    });
-
-              const everyNftMissingSourceWallet = enrichedNFTs.every((nft) => {
-                const sourceWallet = String(
-                  (nft as WalletProfileNFT & { sourceWallet?: string }).sourceWallet ||
-                    ""
-                ).trim();
-
-                return !sourceWallet;
-              });
-
-              const walletNFTs =
-                validWallets.length > 1 &&
-                matchingWalletNFTs.length === 0 &&
-                everyNftMissingSourceWallet
-                  ? enrichedNFTs
-                  : matchingWalletNFTs;
-
-              return fetchMarketAttention(walletNFTs, resolvedAddress);
-            })
-          ).then((results) => {
-            const offers = results.filter(
-              (item): item is MarketAttention => Boolean(item)
-            );
-
-            if (!offers.length) return null;
-
-            const parseOfferAmount = (value: string): number => {
-              const numeric = Number(
-                String(value || "")
-                  .replace(/,/g, "")
-                  .replace(/\s*(ETH|WETH)\s*$/i, "")
-                  .trim()
-              );
-
-              return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
-            };
-
-            offers.sort(
-              (a, b) =>
-                parseOfferAmount(b.ethAmountLabel) -
-                parseOfferAmount(a.ethAmountLabel)
-            );
-
-            return offers[0] || null;
-          }),
-          30000,
-          null as MarketAttention | null
-        );
-      } finally {
-        marketAttentionMs = Date.now() - signalStartMs;
-      }
-    })();
-
-    const [firstMint, acquisitionBreakdown, profileIdentity, marketAttention, latestArrival] = await Promise.all([
+    const [firstMint, acquisitionBreakdown, profileIdentity, latestArrival] = await Promise.all([
       earliestMintTask,
       acquisitionBreakdownTask,
       primaryIdentityTask,
-      marketAttentionTask,
       latestArrivalTask,
     ]);
 
