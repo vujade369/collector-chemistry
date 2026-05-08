@@ -70,13 +70,25 @@
 
 .profile-pattern-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .profile-panel-glow { background: radial-gradient(ellipse at 50% 30%, rgba(255,51,153,0.05), transparent 70%), #111; }
+.profile-taste-module { gap: 20px; }
+.taste-module-head { display: grid; gap: 7px; max-width: 58ch; }
+.taste-module-grid { display: grid; grid-template-columns: minmax(180px, 240px) minmax(0, 1fr); gap: 22px; align-items: center; }
 .taste-map-wrap { display: grid; place-items: center; }
-.taste-map-donut { width: 188px; height: 188px; border-radius: 50%; display: grid; place-items: center; }
+.taste-map-donut { width: 204px; height: 204px; border-radius: 50%; display: grid; place-items: center; box-shadow: inset 0 0 0 0.5px #242424, 0 22px 54px rgba(0,0,0,0.26); }
 .taste-map-hole { width: 118px; height: 118px; border-radius: 50%; background: #111; border: 0.5px solid #1e1e1e; display: grid; place-items: center; }
 .taste-map-center-label { margin: 0; font-size: 10px; color: #a8a49d; text-transform: uppercase; }
 .taste-map-center-value { margin: 0; color: #f0ede6; font-size: 20px; }
 .taste-map-legend { width: 100%; display: grid; gap: 8px; }
 .taste-map-legend-row { display: grid; grid-template-columns: 1fr auto; font-size: 12px; color: #a8a49d; border-bottom: 0.5px solid #1e1e1e; padding-bottom: 8px; }
+.taste-category-list { display: grid; gap: 8px; min-width: 0; }
+.taste-category-row { --category-accent: #555; display: grid; grid-template-columns: 10px minmax(0, 1fr) auto auto; gap: 10px; align-items: center; width: 100%; min-height: 44px; padding: 10px 12px; border-radius: 12px; border: 0.5px solid #222; background: rgba(20,20,20,0.52); color: #a8a49d; text-align: left; cursor: pointer; transition: border-color 150ms ease, background 150ms ease, color 150ms ease; }
+.taste-category-row:hover, .taste-category-row:focus-visible { border-color: #333; background: rgba(20,20,20,0.82); color: #e8e5de; outline: none; }
+.taste-category-row.is-selected { border-color: #444; border-left-color: var(--category-accent); border-left-width: 2px; background: rgba(20,20,20,0.86); color: #f0ede6; }
+.taste-category-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--category-accent); box-shadow: 0 0 18px rgba(240,237,230,0.05); }
+.taste-category-name { min-width: 0; overflow-wrap: anywhere; font-size: 13px; color: inherit; }
+.taste-category-count { color: #666; font-size: 11px; white-space: nowrap; }
+.taste-category-percent { color: #d8d5ce; font-size: 13px; min-width: 36px; text-align: right; }
+.taste-drilldown { display: grid; gap: 14px; padding-top: 18px; border-top: 0.5px solid #222; }
 .taste-bars { display: grid; gap: 10px; }
 .taste-bar-row { display: grid; grid-template-columns: 100px 1fr 36px; gap: 8px; align-items: center; }
 .taste-bar-name, .taste-bar-pct { font-size: 12px; color: #a8a49d; }
@@ -213,6 +225,7 @@
 }
 @media (max-width: 900px) {
   .profile-hero-composed, .profile-pattern-grid { grid-template-columns: 1fr; }
+  .taste-module-grid { grid-template-columns: 1fr; }
   .profile-stats-grid { grid-template-columns: repeat(3, 1fr); }
   .profile-key-signals { grid-template-columns: 1fr; }
   .profile-compare-form { grid-template-columns: 1fr; }
@@ -225,6 +238,9 @@
   .profile-display-name { font-size: 32px; }
   .profile-identity-summary { font-size: 16px; }
   .profile-identity-stat { flex: 1 1 120px; }
+  .taste-map-donut { width: 188px; height: 188px; }
+  .taste-category-row { grid-template-columns: 10px minmax(0, 1fr) auto; }
+  .taste-category-count { grid-column: 2 / -1; }
   .wallet-banner-row { align-items: flex-start; flex-direction: column; gap: 4px; }
   .wallet-banner-form, .wallet-banner--compact .wallet-banner-form { grid-template-columns: 1fr; }
   .converter-result { gap: 8px; }
@@ -237,6 +253,7 @@
   .converter-equation { font-size: 10px; }
   .category-catalog-head { grid-template-columns: 1fr; gap: 4px; }
   .category-catalog-context { text-align: left; }
+  .category-catalog-grid { grid-template-columns: 1fr; }
 }
 
 .profile-behavioral-tags { display: flex; flex-wrap: wrap; gap: 8px; }

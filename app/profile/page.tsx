@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { CSSProperties, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import "./profile.css";
@@ -135,7 +135,7 @@ type PreviewNFT = {
   collectionName: string;
 };
 
-type TasteSlice = { label: string; value: number; key: string };
+type TasteSlice = { label: string; value: number; count: number; key: string };
 
 type WalletResolveResponse =
   | { ok: true; address: string; message?: string }
@@ -320,19 +320,57 @@ function getCategoryOrder(categoryKey: string) {
   return index === -1 ? CATEGORY_FILTER_ORDER.length : index;
 }
 
+function getPreviewOpenSeaLink(preview: CategoryPreview): { href: string; label: string } | null {
+  const contractAddress = String(preview.contractAddress || "").trim();
+  const tokenId = String(preview.tokenId || "").trim();
+  const collectionSlug = String(preview.collectionSlug || "").trim();
+
+  if (contractAddress && tokenId) {
+    return {
+      href: preview.openseaUrl || `https://opensea.io/assets/ethereum/${contractAddress}/${tokenId}`,
+      label: "View NFT ↗",
+    };
+  }
+
+  if (collectionSlug) {
+    return {
+      href: `https://opensea.io/collection/${collectionSlug}`,
+      label: "View Collection ↗",
+    };
+  }
+
+  return null;
+}
+
 // ─── Taste Signature ──────────────────────────────────────────────────────────
 
-function TasteSignature({ slices }: { slices: TasteSlice[] }) {
-  const gradient = `conic-gradient(${slices
-    .map((slice, index) => `${getCategoryAccent(slice.key)} 0 ${(index + 1) * 12.5}%`)
-    .join(",")})`;
+function TasteSignature({
+  slices,
+  selectedKey,
+}: {
+  slices: TasteSlice[];
+  selectedKey: string;
+}) {
+  let cursor = 0;
+  const segments = slices
+    .filter((slice) => slice.value > 0)
+    .map((slice) => {
+      const start = cursor;
+      const end = Math.min(100, cursor + slice.value);
+      cursor = end;
+      return `${getCategoryAccent(slice.key)} ${start}% ${end}%`;
+    });
+  if (cursor < 100) segments.push(`#1e1e1e ${cursor}% 100%`);
+
+  const selectedSlice = slices.find((slice) => slice.key === selectedKey) || slices[0];
+  const gradient = segments.length > 0 ? `conic-gradient(${segments.join(", ")})` : "#1e1e1e";
 
   return (
     <div className="taste-map-wrap">
       <div className="taste-map-donut" style={{ backgroundImage: gradient }}>
         <div className="taste-map-hole">
-          <p className="taste-map-center-label">{slices[0]?.label || "No Category"}</p>
-          <p className="taste-map-center-value">{Math.round(slices[0]?.value || 0)}%</p>
+          <p className="taste-map-center-label">{selectedSlice?.label || "No Category"}</p>
+          <p className="taste-map-center-value">{Math.round(selectedSlice?.value || 0)}%</p>
         </div>
       </div>
     </div>
@@ -359,6 +397,7 @@ export default function ProfilePage() {
   const [compareWallet, setCompareWallet] = useState("");
   const [compareResolveError, setCompareResolveError] = useState("");
   const [resolvingCompare, setResolvingCompare] = useState(false);
+  const [selectedCategoryKey, setSelectedCategoryKey] = useState("");
   const inFlightProfileQueryRef = useRef<string | null>(null);
   const profileRequestIdRef = useRef(0);
 
@@ -521,12 +560,6 @@ export default function ProfilePage() {
     return [...merged.values()].sort((a, b) => b.percentage - a.percentage);
   }, [profile?.categoryDistribution]);
 
-  const tasteSlices = categoryDistribution.map((entry) => ({
-    label: formatCategoryLabel(entry.category),
-    value: entry.percentage,
-    key: entry.category,
-  }));
-
   const topCollections = (profile?.topCollections || []).slice(0, 5);
   const collectionCount = profile?.totalCollections || profile?.topCollections?.length || 0;
   const canCompare = compareWallet.trim().length > 0 && !resolvingCompare;
@@ -587,11 +620,33 @@ export default function ProfilePage() {
       })
       .filter((item) => item.count > 0)
       .sort((a, b) => {
-        const orderDelta = getCategoryOrder(a.key) - getCategoryOrder(b.key);
-        if (orderDelta !== 0) return orderDelta;
-        return b.value - a.value;
+        const aIsOther = normalizeDisplayCategoryKey(a.key) === "other";
+        const bIsOther = normalizeDisplayCategoryKey(b.key) === "other";
+        if (aIsOther !== bIsOther) return aIsOther ? 1 : -1;
+        if (b.value !== a.value) return b.value - a.value;
+        if (b.count !== a.count) return b.count - a.count;
+        return getCategoryOrder(a.key) - getCategoryOrder(b.key);
       });
   }, [categoryDistribution, categoryGroups]);
+
+  useEffect(() => {
+    if (categoryExplorerItems.length === 0) {
+      if (selectedCategoryKey) setSelectedCategoryKey("");
+      return;
+    }
+
+    const selectedStillExists = categoryExplorerItems.some(
+      (item) => item.key === selectedCategoryKey,
+    );
+    if (!selectedCategoryKey || !selectedStillExists) {
+      setSelectedCategoryKey(categoryExplorerItems[0].key);
+    }
+  }, [categoryExplorerItems, selectedCategoryKey]);
+
+  const selectedCategoryItem =
+    categoryExplorerItems.find((item) => item.key === selectedCategoryKey) ||
+    categoryExplorerItems[0] ||
+    null;
 
   const mintedStats = result?.acquisitionBreakdown;
   const mintedPercent = Number.isFinite(mintedStats?.mintPercent)
@@ -1042,46 +1097,115 @@ export default function ProfilePage() {
 
 
             {/* ── Taste System ── */}
-            <section className="profile-pattern-grid">
-              <article className="profile-panel profile-panel-glow">
-                <p className="profile-section-label">Taste Map</p>
-                <TasteSignature slices={tasteSlices} />
-                <div className="taste-map-legend">
-                  {categoryExplorerItems.map((slice) => (
-                    <div
-                      key={slice.key}
-                      className="taste-map-legend-row"
-                    >
-                      <span>{slice.label}</span>
-                      <span>{Math.round(slice.value)}%</span>
-                    </div>
-                  ))}
+            {categoryExplorerItems.length > 0 && selectedCategoryItem && (
+              <section className="profile-panel profile-panel-glow profile-taste-module">
+                <div className="taste-module-head">
+                  <p className="profile-section-label">Taste Map</p>
+                  <p className="profile-muted-copy">
+                    Where this profile keeps returning, grouped by the pieces already in view.
+                  </p>
                 </div>
-              </article>
 
-              <article className="profile-panel">
-                <p className="profile-section-label">Taste Pattern</p>
-                <div className="taste-bars">
-                  {tasteSlices.slice(0, 6).map((slice) => (
-                    <div className="taste-bar-row" key={slice.label}>
-                      <span className="taste-bar-name">{slice.label}</span>
-                      <div className="taste-bar-track">
-                        <div
-                          className="taste-bar-fill"
-                          style={{
-                            width: `${slice.value}%`,
-                            backgroundColor: getCategoryAccent(slice.key),
-                          }}
-                        />
-                      </div>
-                      <span className="taste-bar-pct">{Math.round(slice.value)}%</span>
-                    </div>
-                  ))}
+                <div className="taste-module-grid">
+                  <TasteSignature
+                    slices={categoryExplorerItems}
+                    selectedKey={selectedCategoryItem.key}
+                  />
+
+                  <div className="taste-category-list" aria-label="Taste categories">
+                    {categoryExplorerItems.map((slice) => {
+                      const isSelected = slice.key === selectedCategoryItem.key;
+                      const accent = getCategoryAccent(slice.key);
+                      return (
+                        <button
+                          key={slice.key}
+                          className={`taste-category-row${isSelected ? " is-selected" : ""}`}
+                          type="button"
+                          onClick={() => setSelectedCategoryKey(slice.key)}
+                          style={{ "--category-accent": accent } as CSSProperties}
+                          aria-pressed={isSelected}
+                        >
+                          <span className="taste-category-dot" aria-hidden="true" />
+                          <span className="taste-category-name">{slice.label}</span>
+                          <span className="taste-category-count">
+                            {slice.count} {slice.count === 1 ? "piece" : "pieces"}
+                          </span>
+                          <span className="taste-category-percent">
+                            {Math.round(slice.value)}%
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
+
+                <article className="taste-drilldown">
+                  <div className="category-catalog-head">
+                    <h3 className="category-catalog-title">{selectedCategoryItem.label}</h3>
+                    <p className="category-catalog-context">
+                      {formatCategoryContext(
+                        selectedCategoryItem.count,
+                        selectedCategoryItem.group?.collections,
+                      )}
+                    </p>
+                  </div>
+
+                  {(() => {
+                    const previews = (selectedCategoryItem.group?.previews || []).slice(0, 3);
+                    if (previews.length === 0) {
+                      return (
+                        <p className="category-preview-empty">
+                          No preview NFTs available for this category yet.
+                        </p>
+                      );
+                    }
+
+                    return (
+                      <div className="category-catalog-grid">
+                        {previews.map((preview, idx) => {
+                          const previewLink = getPreviewOpenSeaLink(preview);
+                          return (
+                            <article
+                              key={`${preview.collectionName || "preview"}-${preview.tokenId || idx}`}
+                              className="category-preview-card"
+                            >
+                              <div className="category-preview-media">
+                                <NftMedia
+                                  animationUrl={preview.animationUrl}
+                                  imageUrl={preview.imageUrl}
+                                  alt={preview.title || preview.collectionName || "Category preview"}
+                                  className="category-preview-img"
+                                />
+                              </div>
+                              <p className="category-preview-title">
+                                {preview.title || preview.collectionName || "Untitled NFT"}
+                              </p>
+                              {preview.collectionName && (
+                                <p className="category-preview-collection">
+                                  {preview.collectionName}
+                                </p>
+                              )}
+                              {previewLink && (
+                                <a
+                                  href={previewLink.href}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="profile-external-link"
+                                >
+                                  {previewLink.label}
+                                </a>
+                              )}
+                            </article>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </article>
 
                 {mintedPercent !== null && acquiredPercent !== null && (
                   <div className="minted-module">
-                    <p className="profile-section-label">How This Wallet Collects</p>
+                    <p className="profile-section-label">How This Profile Collects</p>
                     <div className="minted-split">
                       <span>Minted {Math.round(mintedPercent)}%</span>
                       <span>Acquired {Math.round(acquiredPercent)}%</span>
@@ -1095,82 +1219,6 @@ export default function ProfilePage() {
                     </div>
                   </div>
                 )}
-              </article>
-            </section>
-
-            {/* ── Category Explorer (full width) ── */}
-            {categoryExplorerItems.length > 0 && (
-              <section className="profile-panel">
-                <p className="profile-section-label">Your Collection</p>
-                <div className="category-catalog">
-                  {categoryExplorerItems.map((slice) => {
-                    const previews = (slice.group?.previews || []).slice(0, 3);
-                    return (
-                      <article className="category-catalog-section" key={slice.key}>
-                        <div className="category-catalog-head">
-                          <h3 className="category-catalog-title">{slice.label}</h3>
-                          <p className="category-catalog-context">
-                            {formatCategoryContext(slice.count, slice.group?.collections)}
-                          </p>
-                        </div>
-                        {previews.length > 0 ? (
-                          <div className="category-catalog-grid">
-                            {previews.map((preview, idx) => {
-                              const previewLink =
-                                preview.openseaUrl ||
-                                (preview.collectionSlug
-                                  ? `https://opensea.io/collection/${preview.collectionSlug}`
-                                  : preview.contractAddress
-                                    ? `https://opensea.io/assets/ethereum/${preview.contractAddress}`
-                                    : "");
-                              const previewLinkLabel =
-                                preview.tokenId && preview.contractAddress
-                                  ? "View NFT ↗"
-                                  : "View Collection ↗";
-                              return (
-                                <article
-                                  key={`${preview.collectionName || "preview"}-${preview.tokenId || idx}`}
-                                  className="category-preview-card"
-                                >
-                                  <div className="category-preview-media">
-                                    <NftMedia
-                                      animationUrl={preview.animationUrl}
-                                      imageUrl={preview.imageUrl}
-                                      alt={preview.title || preview.collectionName || "Category preview"}
-                                      className="category-preview-img"
-                                    />
-                                  </div>
-                                  <p className="category-preview-title">
-                                    {preview.title || preview.collectionName || "Untitled NFT"}
-                                  </p>
-                                  {preview.collectionName && (
-                                    <p className="category-preview-collection">
-                                      {preview.collectionName}
-                                    </p>
-                                  )}
-                                  {previewLink && (
-                                    <a
-                                      href={previewLink}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="profile-external-link"
-                                    >
-                                      {previewLinkLabel}
-                                    </a>
-                                  )}
-                                </article>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <p className="category-preview-empty">
-                            No preview NFTs available for this category.
-                          </p>
-                        )}
-                      </article>
-                    );
-                  })}
-                </div>
               </section>
             )}
 
