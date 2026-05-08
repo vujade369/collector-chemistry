@@ -132,7 +132,10 @@ async function fetchOpenSeaJson<T>(path: string, fallback: T): Promise<T> {
     headers: { accept: "application/json", "X-API-KEY": OPENSEA_API_KEY },
   })
     .then(async (res) => {
-      if (!res.ok) return fallback;
+      if (!res.ok) {
+        console.error("[openSeaJson] non-ok:", res.status, path);
+        return fallback;
+      }
       try {
         return (await res.json()) as T;
       } catch {
@@ -311,6 +314,33 @@ async function resolveWalletToAddress(wallet: string): Promise<string> {
   );
   const address = String(resolved?.address || "").trim();
   return isEthAddress(address) ? address : value;
+}
+
+// Defensive fallback: resolves an ENS name to a hex address via Alchemy when the
+// primary resolver (OpenSea /accounts/resolve/) returns the ENS string unchanged.
+// Not the preferred wallet-resolution path — fix resolveWalletToAddress if possible.
+async function resolveEnsWithAlchemy(ensName: string): Promise<string> {
+  if (!ALCHEMY_API_KEY || isEthAddress(ensName)) return ensName;
+  try {
+    const alchemyUrl = `https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`;
+    const body = {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "alchemy_getAssetTransfers",
+      params: [{ toAddress: ensName, category: ["erc721", "erc1155"], maxCount: "0x1", withMetadata: false, excludeZeroValue: false }],
+    };
+    const res = await withTimeout(
+      fetch(alchemyUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), cache: "no-store" }),
+      4000,
+      null as Response | null
+    );
+    if (!res || !res.ok) return ensName;
+    const json = (await res.json()) as { result?: { transfers?: Array<{ to?: string }> } };
+    const to = String(json?.result?.transfers?.[0]?.to || "").trim();
+    return isEthAddress(to) ? to : ensName;
+  } catch {
+    return ensName;
+  }
 }
 
 function buildFirstMintLabel(timestamp?: string): string | null {
@@ -553,6 +583,8 @@ type OpenSeaAccountEventNft = {
 type OpenSeaAccountEvent = {
   event_timestamp?: string | number;
   sent_at?: string;
+  transfer_type?: string;
+  chain?: string;
   from_address?: string;
   to_address?: string;
   winner_account?: { address?: string };
@@ -862,6 +894,16 @@ type ProfileTopArtist = {
   externalUrl?: string;
 };
 
+type AcquisitionDNA = {
+  totalSampled: number;
+  totalUnmatched: number;
+  minted: { count: number; percent: number };
+  purchased: { count: number; percent: number };
+  received: { count: number; percent: number };
+  unknown: { count: number; percent: number };
+  scope: "opensea_rest_events_sample";
+};
+
 function normalizeTokenIdForOpenSea(raw: unknown): string | null {
   const value = String(raw || "").trim();
   if (!value) return null;
@@ -879,6 +921,56 @@ function pickTokenId(nft: WalletProfileNFT): string | null {
     (nft as WalletProfileNFT & { identifier?: unknown }).identifier ??
     (nft as WalletProfileNFT & { id?: unknown }).id;
   return normalizeTokenIdForOpenSea(candidate);
+}
+
+
+
+function buildInventoryKeys(nfts: WalletProfileNFT[]): Set<string> {
+  const keys = new Set<string>();
+  for (const nft of nfts) {
+    const contract = normalizeAddress(nft.contract?.address || "");
+    const tokenId = pickTokenId(nft);
+    if (contract && tokenId) keys.add(`${contract}:${tokenId}`);
+  }
+  return keys;
+}
+
+function buildAcquisitionDNAResult(params: {
+  inventoryCount: number;
+  mintedKeys: Set<string>;
+  saleKeys: Set<string>;
+  transferKeys: Set<string>;
+}): AcquisitionDNA {
+  const { inventoryCount, mintedKeys, saleKeys, transferKeys } = params;
+  const matchedKeys = new Set<string>();
+  const purchasedKeys = new Set<string>();
+  const receivedKeys = new Set<string>();
+
+  for (const key of mintedKeys) matchedKeys.add(key);
+  for (const key of saleKeys) {
+    if (matchedKeys.has(key)) continue;
+    purchasedKeys.add(key);
+    matchedKeys.add(key);
+  }
+  for (const key of transferKeys) {
+    if (matchedKeys.has(key)) continue;
+    receivedKeys.add(key);
+    matchedKeys.add(key);
+  }
+
+  const matchedCount = matchedKeys.size;
+  const unknownCount = Math.max(0, inventoryCount - matchedCount);
+  const percent = (count: number) => inventoryCount > 0 ? Math.round((count / inventoryCount) * 100) : 0;
+
+  return {
+    totalSampled: matchedCount,
+    totalUnmatched: unknownCount,
+    minted: { count: mintedKeys.size, percent: percent(mintedKeys.size) },
+    purchased: { count: purchasedKeys.size, percent: percent(purchasedKeys.size) },
+    received: { count: receivedKeys.size, percent: percent(receivedKeys.size) },
+    unknown: { count: unknownCount, percent: percent(unknownCount) },
+    scope: "opensea_rest_events_sample",
+  };
 }
 
 async function fetchTopOfferViaOpenSeaMcp(walletAddress: string): Promise<MarketAttention | null> {
@@ -997,6 +1089,133 @@ const items = Array.isArray(parsed?.items)
     if (process.env.NODE_ENV !== "production") {
       console.warn("MCP market attention lookup failed", error);
     }
+    return null;
+  }
+}
+
+async function fetchAcquisitionDNA(walletAddress: string, nfts: WalletProfileNFT[]): Promise<AcquisitionDNA | null> {
+  if (!OPENSEA_API_KEY || nfts.length === 0) return null;
+
+  const resolved = isEthAddress(walletAddress) ? walletAddress : await resolveEnsWithAlchemy(walletAddress);
+  if (!isEthAddress(resolved)) return null;
+  const target = normalizeAddress(resolved);
+  console.log("[acquisitionDNA] resolved address:", target);
+  const inventoryKeys = buildInventoryKeys(nfts);
+  console.log("[acquisitionDNA] inventory size:", nfts.length, "keys:", inventoryKeys.size);
+  if (!inventoryKeys.size) return null;
+
+  try {
+    const fetchTransferEvents = async (): Promise<{ mintedKeys: Set<string>; receivedKeys: Set<string> }> => {
+      const mintedKeys = new Set<string>();
+      const receivedKeys = new Set<string>();
+      let cursor = "";
+      const deadline = Date.now() + 8000;
+
+      for (let page = 0; page < OPENSEA_MAX_EVENT_PAGES; page += 1) {
+        if (Date.now() >= deadline) break;
+
+        const params = new URLSearchParams({
+          event_type: "transfer",
+          limit: String(OPENSEA_EVENT_PAGE_LIMIT),
+          chain: "ethereum",
+        });
+        if (cursor) params.set("next", cursor);
+
+        const data = await fetchOpenSeaJson<OpenSeaAccountEventsResponse>(
+          `/events/accounts/${target}?${params.toString()}`,
+          { asset_events: [], next: null }
+        );
+
+        const events = data.events || data.asset_events || [];
+
+        for (const event of events) {
+          const chain = String(event.chain || "").toLowerCase();
+          if (chain && chain !== "ethereum") continue;
+
+          const toAddr = normalizeAddress(event.to_address || event.winner_account?.address || "");
+          if (!toAddr || toAddr !== target) continue;
+
+          const contract = normalizeAddress(event.nft?.contract || "");
+          const tokenId = normalizeTokenIdForOpenSea(event.nft?.identifier);
+          if (!contract || !tokenId) continue;
+
+          const key = `${contract}:${tokenId}`;
+          if (!inventoryKeys.has(key)) continue;
+
+          const fromAddr = normalizeAddress(event.from_address || "");
+          const isMint = fromAddr === ZERO_ADDRESS || String(event.transfer_type || "").toLowerCase() === "mint";
+
+          if (isMint) {
+            mintedKeys.add(key);
+          } else {
+            receivedKeys.add(key);
+          }
+        }
+
+        cursor = String(data.next || "").trim();
+        if (!cursor || !events.length) break;
+      }
+
+      return { mintedKeys, receivedKeys };
+    };
+
+    const fetchSaleKeys = async (): Promise<Set<string>> => {
+      const keys = new Set<string>();
+      let cursor = "";
+      const deadline = Date.now() + 8000;
+
+      for (let page = 0; page < OPENSEA_MAX_EVENT_PAGES; page += 1) {
+        if (Date.now() >= deadline) break;
+
+        const params = new URLSearchParams({
+          event_type: "sale",
+          limit: String(OPENSEA_EVENT_PAGE_LIMIT),
+          chain: "ethereum",
+        });
+        if (cursor) params.set("next", cursor);
+
+        const data = await fetchOpenSeaJson<OpenSeaAccountEventsResponse>(
+          `/events/accounts/${target}?${params.toString()}`,
+          { asset_events: [], next: null }
+        );
+
+        const events = data.events || data.asset_events || [];
+
+        for (const event of events) {
+          const chain = String(event.chain || "").toLowerCase();
+          if (chain && chain !== "ethereum") continue;
+
+          const toAddr = normalizeAddress(event.to_address || event.winner_account?.address || "");
+          if (!toAddr || toAddr !== target) continue;
+
+          const contract = normalizeAddress(event.nft?.contract || "");
+          const tokenId = normalizeTokenIdForOpenSea(event.nft?.identifier);
+          if (!contract || !tokenId) continue;
+
+          const key = `${contract}:${tokenId}`;
+          if (inventoryKeys.has(key)) keys.add(key);
+        }
+
+        cursor = String(data.next || "").trim();
+        if (!cursor || !events.length) break;
+      }
+
+      return keys;
+    };
+
+    const [{ mintedKeys, receivedKeys }, saleKeys] = await Promise.all([
+      fetchTransferEvents(),
+      fetchSaleKeys(),
+    ]);
+
+    return buildAcquisitionDNAResult({
+      inventoryCount: inventoryKeys.size,
+      mintedKeys,
+      saleKeys,
+      transferKeys: receivedKeys,
+    });
+  } catch (err) {
+    console.error("[acquisitionDNA] fetch failed:", err);
     return null;
   }
 }
@@ -1647,6 +1866,8 @@ export async function GET(req: Request) {
       }
     })();
 
+    const acquisitionDNATask = fetchAcquisitionDNA(primaryResolvedAddress, nfts);
+
     const marketAttentionTask = (async () => {
       const signalStartMs = Date.now();
       try {
@@ -1672,9 +1893,10 @@ export async function GET(req: Request) {
     const profile = buildWalletProfile(enrichedNFTs);
     profileCoreBuildMs = Date.now() - profileCoreBuildStartMs;
 
-    const [firstMint, acquisitionBreakdown, profileIdentity, latestArrival, marketAttention] = await Promise.all([
+    const [firstMint, acquisitionBreakdown, acquisitionDNA, profileIdentity, latestArrival, marketAttention] = await Promise.all([
       earliestMintTask,
       acquisitionBreakdownTask,
+      acquisitionDNATask,
       primaryIdentityTask,
       latestArrivalTask,
       marketAttentionTask,
@@ -1725,6 +1947,7 @@ export async function GET(req: Request) {
       topCollections,
       firstMintLabel,
       acquisitionBreakdown,
+      acquisitionDNA,
       displayName: profileIdentity.displayName,
       avatarUrl: profileIdentity.avatarUrl,
       openseaUsername: profileIdentity.openseaUsername,
