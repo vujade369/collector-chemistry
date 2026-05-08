@@ -1,114 +1,262 @@
-# Collector Chemistry — Orchestrator
+# Constellate — Orchestrator
 
 ## Purpose
 
-This file routes agent work.
+Route work to the smallest useful context bundle.
 
-Before editing, identify the task type:
+Before editing, identify:
+
+1. task type
+2. task size
+3. product question
+4. source-of-truth docs
+5. files allowed to touch
+6. proof command
+
+Default to the smallest possible task. If the task crosses API and UI, split it into phases.
+
+---
+
+## Task types
+
 - Product UI
 - Data / API
+- Converter
+- Resolver / Search
+- Interpretation / AI Copy
 - Code Health
+- Docs / Agents
 - Mixed
 
-Default to the smallest possible task.
+If unsure, return a plan first.
+
+---
+
+## Context loading rule
+
+Do not read everything. Load only what the task needs.
+
+### Minimum boot context
+
+Always read:
+
+1. `AGENTS.md`
+2. `.agents/registry.yaml`
+3. This orchestrator
+
+Then read the specialist agent and only the relevant docs below.
+
+### Context tiers
+
+| Tier | Use when | Read |
+|---|---|---|
+| 0 | exact one-file edit | boot context + target file |
+| 1 | normal scoped feature/fix | boot context + specialist agent + target files + relevant docs |
+| 2 | API shape, data source, converter, interpretation, or page hierarchy | boot context + relevant docs + target files, then plan first |
+| 3 | architecture or workflow redesign | broad docs, no edits until plan approved |
 
 ---
 
 ## Source-of-truth priority
 
-For product intent:
-`docs/PRODUCT_SOUL.md`
-
-For visual direction:
-`docs/VISUAL_REFERENCES.md`
-
-For design rules:
-`docs/DESIGN_SYSTEM.md`
-
-For current build priority:
-`docs/BUILD_LOG.md`
-
-For file ownership and app structure:
-`docs/ARCHITECTURE.md`
-
-For API shape and data contracts:
-`docs/DATA_MODEL.md`
-
-For profile behavior:
-`docs/PROFILE_SPEC.md`
-
-For compare behavior:
-`docs/COMPARE_SPEC.md`
-
-For component placement:
-`docs/COMPONENT_MAP.md`
+| Need | Source |
+|---|---|
+| Product intent | `docs/PRODUCT_SOUL.md` |
+| Public Constellate language | `docs/00_CONSTELLATE_CANON.md`, `docs/01_CONSTELLATE_TRANSITION_PLAN.md` |
+| Visual direction | `docs/VISUAL_REFERENCES.md`, `docs/PROFILE_VISUAL_BRIEF.md` |
+| Design rules | `docs/DESIGN_SYSTEM.md` |
+| Display contracts/link behavior | `docs/DISPLAY_CONTRACT.md` |
+| Current build priority | `docs/BUILD_LOG.md` |
+| File ownership/app structure | `docs/ARCHITECTURE.md`, `docs/COMPONENT_MAP.md` |
+| API shape/data contracts | `docs/DATA_MODEL.md`, `docs/API_PATTERNS.md` |
+| Data source boundaries | `docs/DATA_SOURCES.md`, `docs/ALCHEMY_CAPABILITIES.md`, `docs/OPENSEA_INTEGRATION.md` |
+| Profile behavior | `docs/PROFILE_SPEC.md`, `docs/PROFILE_EXPERIENCE_SPEC.md` |
+| Compare behavior | `docs/COMPARE_SPEC.md` |
+| Multi-wallet behavior | `docs/MULTI_WALLET_SPEC.md` |
+| Ethical AI/interpreted claims | `docs/ETHICAL_AI_BUILDING.md` |
+| Known bugs | `docs/KNOWN_ISSUES.md` |
 
 ---
 
-## Task routing
+## Capability routing
 
-### Quick routing table
+### Alchemy
+
+Use for:
+- bulk NFT ownership
+- NFT metadata included with ownership records
+- transfer history and acquisition timestamps
+
+Read:
+- `docs/ALCHEMY_CAPABILITIES.md`
+- `docs/DATA_SOURCES.md`
+- `docs/API_PATTERNS.md`
+
+Guardrails:
+- Do not use Alchemy as final authority for OpenSea profile visibility, marketplace offers, collection search, or interpretation.
+- Do not cap, sample, or skip ownership pages for speed without explicit product approval.
+- Preserve pagination observability: page count, break reason, fetched counts.
+
+### OpenSea
+
+Use for:
+- account identity
+- collection slugs and collection identity
+- hidden/spam visibility filtering
+- NFT and collection destination links
+- offers, bids, listings, floors
+- collection/account/search behavior
+
+Read:
+- `docs/OPENSEA_INTEGRATION.md`
+- `docs/DATA_SOURCES.md`
+- `.agents/skills/opensea/SKILL.md` when inspecting endpoints, CLI commands, MCP behavior, or marketplace schema
+
+Guardrails:
+- Runtime code must use server-side helper patterns.
+- Do not shell out to CLI, scripts, or MCP from production runtime.
+- OpenSea should degrade gracefully on missing keys, 404, 429, and 5xx.
+- Avoid one-request-per-NFT across large wallets unless scoped and capped.
+- Use OpenAPI/skill/CLI for development discovery, not as unreviewed runtime architecture.
+
+### Repo-local skills
+
+Use skills for targeted work, not as a reason to load the whole repo.
+
+Known useful skills:
+- `.agents/skills/opensea/SKILL.md` — OpenSea API, CLI, MCP, endpoint discovery, offer/listing/event checks
+- `.agents/skills/frontend-designer/SKILL.md` — visual hierarchy, UI modules, page polish
+- `.agents/skills/converter-auditor/SKILL.md` — converter math, unique NFT dedupe, offer semantics
+- `.agents/skills/copy-editor/SKILL.md` — product copy and language cleanup
+- `.agents/skills/product-architect/SKILL.md` — product framing and phase planning
+
+Use the matching skill only when the task calls for it.
+
+---
+
+## Quick routing table
 
 | Task | Route as | Read | Guardrail |
 |---|---|---|---|
-| Product UI | Product UI | Product UI docs + relevant page spec | No API route or data-contract edits during visual passes. |
-| Converter math / offer logic | Data / API | Data API docs + converter implementation docs when present | Preserve the converter question: best active ETH/WETH offers on unique NFTs, then target-floor buying power. |
-| Wallet resolver / ENS / OpenSea URL lookup | Data / API | Data API docs + resolver/search docs when present | Keep address, ENS, and OpenSea URL handling shared when possible. Do not invent resolved identities. |
-| Collection search quality | Data / API, then Product UI only if dropdown display changes | Data API docs + component map if UI changes | Prefer search-result cleanup at the source. Keep empty and uncertain states truthful. |
-| Copy / error language | Product UI unless API error contract changes | Product soul + design system + relevant spec | Keep copy clear and accurate. Do not force Constellate language into converter utility flows. |
-| Code health / refactor | Code Health | Code Health docs | No behavior, API shape, copy, or visual hierarchy changes. |
-| Visual QA | Product UI verification | Design system + relevant page spec | Use a real browser when possible; inspect desktop and mobile when layout risk exists. |
-| CI failure | Code Health until a fix is approved | `gh-fix-ci` skill | Inspect GitHub Actions failures first; implement only after explicit approval. |
+| Profile/compare layout, visual hierarchy, module ordering | Product UI | UI agent + product/design/display docs + page spec | No API edits during visual passes. |
+| Profile API fields, category groups, acquisition data, traits, current attention | Data / API | Data API agent + architecture/data/source docs | No UI edits unless explicitly scoped. |
+| OpenSea offer/listing/floor/search bug | Data / API | OpenSea integration + OpenSea skill + data model | Verify endpoint/schema; avoid broad fetch refactors. |
+| Alchemy ownership/transfer bug | Data / API | Alchemy capabilities + data sources + API patterns | Preserve pagination safety and visibility filtering. |
+| Converter math or debug output | Converter | converter auditor + converter spec + data sources | Preserve active ETH/WETH offer question; dedupe unique NFTs. |
+| Wallet address/ENS/OpenSea URL resolution | Resolver / Search | data API agent + API patterns + component map if UI changes | Prefer shared resolver helpers; do not invent identities. |
+| Copy/error language only | Product UI or Copy | product soul + canon + relevant spec | Do not change API error contracts unless scoped. |
+| Interpretation prompt/archetype/AI-generated claims | Interpretation / AI Copy | product soul + insight engine + ethical AI | Evidence first; no unsupported claims. |
+| Refactor/extraction/file size cleanup | Code Health | code-health agent + architecture + component map | No behavior, API, visual, or copy changes. |
+| Agent/docs workflow | Docs / Agents | AGENTS + registry + docs README + changed files | Docs-only. No app behavior changes. |
+| CI failure | Code Health | failure logs + relevant docs | Diagnose first; implement only approved fix. |
 
 ---
 
-### Product UI task
+## Product UI task
 
 Use when the task changes:
 - profile page UI
 - compare page UI
-- layout
-- visual hierarchy
+- layout or visual hierarchy
 - copy placement
 - user-facing interaction
 - component composition
 
-Read:
+Read only what is needed:
 - `.agents/agents/product-ui-agent.md`
 - `docs/PRODUCT_SOUL.md`
-- `docs/VISUAL_REFERENCES.md`
 - `docs/DESIGN_SYSTEM.md`
-- `docs/BUILD_LOG.md`
+- `docs/DISPLAY_CONTRACT.md`
 - relevant page spec
+- target component/page/CSS files
 
 Do not touch API routes unless explicitly requested.
 
 ---
 
-### Data / API task
+## Data / API task
 
 Use when the task changes:
 - API response shape
 - Alchemy fetching
 - OpenSea enrichment
-- acquisition dates
-- category grouping
-- highest bid logic
+- acquisition dates or methods
+- category grouping/classification
+- traits or profile signal data
+- highest offer/current attention logic
 - wallet profile logic
 
-Read:
+Read only what is needed:
 - `.agents/agents/data-api-agent.md`
 - `docs/ARCHITECTURE.md`
 - `docs/DATA_MODEL.md`
 - `docs/DATA_SOURCES.md`
 - `docs/API_PATTERNS.md`
-- `docs/KNOWN_ISSUES.md`
+- `docs/ALCHEMY_CAPABILITIES.md` for Alchemy work
+- `docs/OPENSEA_INTEGRATION.md` and `.agents/skills/opensea/SKILL.md` for OpenSea work
+- `docs/KNOWN_ISSUES.md` when debugging
 
 Do not touch UI files unless explicitly requested.
 
 ---
 
-### Code Health task
+## Converter task
+
+Use when the task changes:
+- converter MCP/debug output
+- unique NFT dedupe
+- active ETH/WETH offer selection
+- target collection floor math
+- converter result presentation or error copy
+
+Route math, fetching, resolver use, and API behavior as Data / API. Route presentation-only changes as Product UI.
+
+Non-negotiable product question:
+
+> If I accepted the best currently available ETH/WETH offer on every unique NFT in these wallet(s), how much liquid offer value would that produce, and how many of the chosen target collection could that buy at the current floor?
+
+Do not turn the converter into floor-based wallet valuation.
+
+---
+
+## Resolver / Search task
+
+Use when the task changes:
+- raw wallet address parsing
+- ENS resolution
+- OpenSea profile URL parsing
+- OpenSea collection URL parsing
+- shared wallet resolver behavior
+- collection search result filtering or labels
+
+Prefer shared resolver/search helpers over route-local parsing. Do not change API response shapes unless explicitly scoped.
+
+---
+
+## Interpretation / AI Copy task
+
+Use when the task changes:
+- Groq or model prompts
+- archetype language
+- pattern lines
+- AI-generated profile or compare summaries
+- labels that sound like judgments
+
+Read:
+- `docs/PRODUCT_SOUL.md`
+- `docs/INSIGHT_ENGINE.md`
+- `docs/ETHICAL_AI_BUILDING.md`
+- relevant route/prompt file
+
+Guardrails:
+- Separate fact from interpretation.
+- Use visible evidence near claims.
+- Do not infer sensitive identity traits.
+- Do not rank people by worth, taste, status, wealth, seriousness, or cultural value.
+
+---
+
+## Code Health task
 
 Use when the task changes:
 - file size
@@ -125,46 +273,26 @@ Read:
 - `docs/BUILD_LOG.md`
 - `docs/KNOWN_ISSUES.md`
 
-Do not change behavior.
+Do not change behavior, API shape, copy, or visual hierarchy.
 
 ---
 
-### Converter task
+## Docs / Agents task
 
 Use when the task changes:
-- converter MCP/debug output
-- unique NFT dedupe
-- active ETH/WETH offer selection
-- target collection floor math
-- converter result presentation or error copy
+- AGENTS.md
+- `.agents/**`
+- docs indexes
+- workflow docs
+- governance scripts
 
-Route math, fetching, resolver use, and API behavior as Data / API.
-Route presentation-only changes as Product UI.
+Read:
+- `AGENTS.md`
+- `.agents/registry.yaml`
+- changed agent/doc files
+- `docs/README.md` when doc structure changes
 
-Do not turn the converter into floor-based wallet valuation.
-
----
-
-### Wallet resolver / search task
-
-Use when the task changes:
-- raw wallet address parsing
-- ENS resolution
-- OpenSea profile or collection URL parsing
-- shared wallet resolver behavior
-- collection search result filtering or labels
-
-Prefer shared resolver and search helpers over route-local parsing.
-Do not change API response shapes unless the task explicitly calls for it.
-
----
-
-### Skill routing
-
-- Use `$playwright` for browser UI verification, dropdown checks, responsive checks, and interaction debugging.
-- Use `$screenshot` when an OS-level screenshot is explicitly requested or browser-native screenshots are not enough.
-- Use `$gh-fix-ci` for GitHub Actions PR failures; summarize failures and propose a plan before edits.
-- Future repo-local skills may route specialized work when available: `frontend-designer`, `converter-auditor`, `copy-editor`, `product-architect`.
+Keep docs-only work docs-only.
 
 ---
 
@@ -172,11 +300,13 @@ Do not change API response shapes unless the task explicitly calls for it.
 
 If a task requires both API and UI:
 
-1. Split it into phases.
+1. Return a phase plan.
 2. Do the API/data pass first.
-3. Verify the response.
+3. Verify the response with curl/debug output.
 4. Do the UI pass second.
-5. Do not combine unless explicitly approved.
+5. Verify browser behavior.
+
+Do not combine phases unless explicitly approved.
 
 ---
 
@@ -184,21 +314,23 @@ If a task requires both API and UI:
 
 ### Small
 
-- 1–2 files
+- 1-2 files
 - no API shape change
 - no broad refactor
+- direct verification exists
 
 ### Medium
 
-- 2–4 files
+- 2-4 files
 - one clear feature
-- may add one component
+- may add one helper/component
 - no unrelated cleanup
 
 ### Large
 
 - API + UI
 - major redesign
+- new data fields across layers
 - major refactor
 - must be split into phases
 
@@ -209,12 +341,12 @@ Default to Small.
 ## Direct edit vs plan required
 
 Direct edits are allowed when all are true:
-- the task is scoped to 1-2 files
-- the product question is clear
+- scoped to 1-2 files
+- product question is clear
 - no API response shape changes
 - no data fetching, converter math, OpenSea, Alchemy, or MCP behavior changes
 - no broad visual hierarchy change
-- the allowed files are explicit
+- allowed files are explicit
 
 Return a plan before editing when the task:
 - touches more than two files
@@ -231,58 +363,75 @@ Plans should name likely files, smallest safe path, risks, definition of done, a
 ## Verification recipes
 
 Default after edits:
-- `git diff --name-only`
-- `npx tsc --noEmit` when code changed
-- `git status`
+
+```bash
+git diff --name-only
+npx tsc --noEmit
+git status
+```
+
+Docs/agents:
+
+```bash
+npm run agents:check
+npm run docs:check
+grep -n "<<<<<<\\|=======\\|>>>>>>" AGENTS.md .agents/agents/ORCHESTRATOR.md .agents/registry.yaml
+```
 
 UI:
-- `npx tsc --noEmit`
-- Playwright browser check when possible
-- include mobile and desktop screenshots or observations when layout risk exists
+
+```bash
+npx tsc --noEmit
+```
+
+Then do a browser check when possible, including desktop/mobile if layout risk exists.
+
+Data/API:
+
+```bash
+npx tsc --noEmit
+```
+
+Then include a focused curl/debug validation for the changed route.
+
+OpenSea:
+- Verify the exact endpoint/schema before parser changes.
+- Test with one known entity before batch behavior.
+- Do not run broad parallel OpenSea checks.
+
+Alchemy:
+- Verify page counts, break reasons, and fetched totals when pagination is touched.
 
 Converter:
-- debug curl for the converter path
-- formula check: summed best active ETH/WETH offers on unique NFTs divided by target floor
-- verify single-wallet and multi-wallet inputs
-
-Resolver:
-- raw address
-- ENS
-- OpenSea profile URL
-- invalid input
-
-Search:
-- API curl for query quality
-- dropdown visual check with Playwright when UI is affected
-
-Docs:
-- `git diff --name-only`
-- merge marker check on changed docs
+- Verify single-wallet and multi-wallet inputs.
+- Check unique NFT count, offer count, total ETH/WETH, and target floor math.
 
 ---
 
 ## Required pre-edit response
 
-Before editing, the agent must state:
+Before editing, state:
 
 1. task type
 2. task size
-3. docs read
-4. files to touch
-5. files not to touch
-6. risk areas
+3. product question
+4. docs read
+5. files to touch
+6. files not to touch
+7. risk areas
+8. verification plan
 
 ---
 
 ## Required post-edit response
 
-After editing, the agent must state:
+After editing, state:
 
 1. files changed
 2. behavior changed
 3. behavior preserved
 4. checks run
-5. known issues
+5. known issues or follow-ups
 6. whether any changes were outside scope
 
 ---
@@ -295,3 +444,4 @@ After editing, the agent must state:
 - Do not rewrite working files casually.
 - Do not invent fake wallet data.
 - Do not remove existing functionality without approval.
+- Do not claim verification without terminal proof.
