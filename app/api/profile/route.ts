@@ -1001,6 +1001,35 @@ const items = Array.isArray(parsed?.items)
   }
 }
 
+function parseMarketAttentionEthAmount(marketAttention: MarketAttention | null): number | null {
+  const label = String(marketAttention?.ethAmountLabel || "").trim();
+  const match = label.match(/^([\d,.]+)\s+(ETH|WETH)$/i);
+  if (!match) return null;
+
+  const amount = Number(match[1].replace(/,/g, ""));
+  return Number.isFinite(amount) && amount > 0 ? amount : null;
+}
+
+async function fetchTopWalletMarketAttention(wallets: string[]): Promise<MarketAttention | null> {
+  const uniqueWallets = Array.from(new Set(wallets.map((w) => normalizeAddress(w)).filter(isEthAddress)));
+  if (!uniqueWallets.length) return null;
+
+  const results = await Promise.all(
+    uniqueWallets.map((walletAddress) => fetchTopOfferViaOpenSeaMcp(walletAddress))
+  );
+
+  return results
+    .map((marketAttention) => ({
+      marketAttention,
+      amount: parseMarketAttentionEthAmount(marketAttention),
+    }))
+    .filter(
+      (entry): entry is { marketAttention: MarketAttention; amount: number } =>
+        Boolean(entry.marketAttention) && entry.amount !== null
+    )
+    .sort((a, b) => b.amount - a.amount)[0]?.marketAttention || null;
+}
+
 async function runWithConcurrencyLocal<T>(
   items: T[],
   concurrency: number,
@@ -1621,6 +1650,10 @@ export async function GET(req: Request) {
     const marketAttentionTask = (async () => {
       const signalStartMs = Date.now();
       try {
+        if (resolvedWalletsForSignals.length > 1) {
+          const walletMarketAttention = await fetchTopWalletMarketAttention(resolvedWalletsForSignals);
+          if (walletMarketAttention) return walletMarketAttention;
+        }
         return await fetchMarketAttention(nfts, primaryResolvedAddress);
       } finally {
         marketAttentionMs = Date.now() - signalStartMs;
