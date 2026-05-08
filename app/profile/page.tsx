@@ -181,17 +181,27 @@ function handleImageError(event: React.SyntheticEvent<HTMLImageElement>) {
 }
 
 function NftMedia({ animationUrl, imageUrl, alt, className }: { animationUrl?: string; imageUrl?: string; alt: string; className: string }) {
+  const [videoError, setVideoError] = useState(false);
+  const [imgError, setImgError] = useState(false);
   const animation = normalizeImageUrl(animationUrl);
   const image = normalizeImageUrl(imageUrl);
-  if (animation) {
+
+  if (animation && !videoError) {
     return (
-      <video autoPlay loop muted playsInline className={className}>
+      <video
+        autoPlay
+        loop
+        muted
+        playsInline
+        className={className}
+        onError={() => setVideoError(true)}
+      >
         <source src={animation} />
       </video>
     );
   }
-  if (image) {
-    return <img src={image} alt={alt} className={className} onError={handleImageError} />;
+  if (image && !imgError) {
+    return <img src={image} alt={alt} className={className} onError={() => setImgError(true)} />;
   }
   return <span aria-hidden="true">✦</span>;
 }
