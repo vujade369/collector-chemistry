@@ -203,6 +203,29 @@ function normalizeEntityKey(value?: string) {
   return String(value || "").trim().toLowerCase().replace(/[^\w\s:/-]/g, " ").replace(/\s+/g, " ");
 }
 
+function buildOpenSeaCollectionUrl(slug?: string) {
+  const normalizedSlug = String(slug || "").trim();
+  return normalizedSlug ? `https://opensea.io/collection/${normalizedSlug}` : undefined;
+}
+
+function isOpenSeaCollectionUrl(value?: string) {
+  const raw = String(value || "").trim();
+  if (!raw) return false;
+  try {
+    const url = new URL(raw);
+    const host = url.hostname.toLowerCase();
+    return (host === "opensea.io" || host === "www.opensea.io") && url.pathname.startsWith("/collection/");
+  } catch {
+    return false;
+  }
+}
+
+function compactDisplayCollection(entry: DisplayCollection): DisplayCollection {
+  return Object.fromEntries(
+    Object.entries(entry).filter(([, value]) => Boolean(value))
+  ) as DisplayCollection;
+}
+
 function buildCollectionDisplayIndex(nfts: WalletProfileNFT[], categoryGroups: Record<string, { previews?: Array<{ collectionName?: string; imageUrl?: string; collectionSlug?: string; contractAddress?: string }> }>, profile: ReturnType<typeof buildWalletProfile>) {
   const index = new Map<string, DisplayCollection>();
   const upsert = (entry: DisplayCollection) => {
@@ -233,7 +256,6 @@ function buildCollectionDisplayIndex(nfts: WalletProfileNFT[], categoryGroups: R
       imageUrl: profile.signalPiece.imageUrl,
       collectionSlug: profile.signalPiece.collectionSlug,
       contractAddress: profile.signalPiece.contractAddress,
-      openseaUrl: profile.signalPiece.openseaUrl,
     });
   }
   for (const group of Object.values(categoryGroups || {})) {
@@ -261,27 +283,43 @@ async function enrichTopCollectionsDisplay(params: {
     if (!cache.has(cacheKey)) {
       cache.set(cacheKey, (async () => {
         if (!OPENSEA_API_KEY) return {};
-        if (seed.collectionSlug) {
-          const data = await withTimeout(fetchOpenSeaJson<{ collection?: { slug?: string; name?: string; image_url?: string; category?: string; contracts?: Array<{ address?: string }> } }>(
-            `/collections/${encodeURIComponent(seed.collectionSlug)}`,
+        const fetchBySlug = async (slug: string): Promise<DisplayCollection> => {
+          const data = await withTimeout(fetchOpenSeaJson<{
+            collection?: string | { slug?: string; name?: string; image_url?: string; category?: string; contracts?: Array<{ address?: string }> };
+            slug?: string;
+            name?: string;
+            image_url?: string;
+            category?: string;
+            contracts?: Array<{ address?: string }>;
+          }>(
+            `/collections/${encodeURIComponent(slug)}`,
             {}
           ), 1500, {});
-          const collection = data?.collection;
-          if (collection?.slug) {
-            return {
+          const collection = typeof data?.collection === "object" ? data.collection : data;
+          const collectionSlug = String(
+            typeof data?.collection === "string" ? data.collection : collection?.slug || slug
+          ).trim();
+          if (collectionSlug) {
+            return compactDisplayCollection({
               name: collection.name || seed.name,
-              imageUrl: normalizeImageUrl(collection.image_url || ""),
-              collectionSlug: collection.slug,
-              openseaUrl: `https://opensea.io/collection/${collection.slug}`,
-              contractAddress: normalizeAddress(collection.contracts?.[0]?.address || ""),
+              imageUrl: normalizeImageUrl(collection.image_url || "") || undefined,
+              collectionSlug,
+              openseaUrl: buildOpenSeaCollectionUrl(collectionSlug),
+              contractAddress: normalizeAddress(collection.contracts?.[0]?.address || "") || undefined,
               category: normalizeOpenSeaCategory(collection.category || "") || undefined,
-            };
+            });
           }
+          return {};
+        };
+
+        if (seed.collectionSlug) {
+          const collection = await fetchBySlug(seed.collectionSlug);
+          if (collection.collectionSlug) return collection;
         }
         if (seed.contractAddress) {
           const contractData = await withTimeout(fetchOpenSeaJson<OpenSeaContractResponse>(`/chain/ethereum/contract/${seed.contractAddress}`, {}), 1500, {});
           const slug = String(contractData?.collection || contractData?.slug || contractData?.collections?.[0]?.slug || "").trim();
-          if (slug) return fetchCollection({ ...seed, collectionSlug: slug });
+          if (slug && slug !== seed.collectionSlug) return fetchBySlug(slug);
         }
         return {};
       })());
@@ -291,12 +329,33 @@ async function enrichTopCollectionsDisplay(params: {
 
   const enriched = await Promise.all(params.topCollections.map(async (collection, index) => {
     const local = params.displayIndex.get(normalizeEntityKey(collection.collectionSlug || collection.contractAddress || collection.name)) || {};
-    let merged = { ...collection, ...local };
-    if (!merged.openseaUrl && merged.collectionSlug) merged.openseaUrl = `https://opensea.io/collection/${merged.collectionSlug}`;
-    if (index < cap && (!merged.imageUrl || !merged.collectionSlug || !merged.openseaUrl)) {
+    let merged = {
+      ...collection,
+      name: collection.name || local.name,
+      imageUrl: collection.imageUrl || local.imageUrl,
+      collectionSlug: collection.collectionSlug || local.collectionSlug,
+      contractAddress: collection.contractAddress || local.contractAddress,
+      category: collection.category || local.category,
+      openseaUrl:
+        buildOpenSeaCollectionUrl(collection.collectionSlug || local.collectionSlug) ||
+        (isOpenSeaCollectionUrl(collection.openseaUrl) ? collection.openseaUrl : undefined) ||
+        (isOpenSeaCollectionUrl(local.openseaUrl) ? local.openseaUrl : undefined),
+    };
+
+    if (index < cap) {
       const remote = await fetchCollection(merged);
-      merged = { ...merged, ...remote, openseaUrl: remote.openseaUrl || merged.openseaUrl };
+      merged = {
+        ...merged,
+        ...remote,
+        count: collection.count,
+        percentage: collection.percentage,
+      };
     }
+
+    merged.openseaUrl =
+      buildOpenSeaCollectionUrl(merged.collectionSlug) ||
+      (isOpenSeaCollectionUrl(merged.openseaUrl) ? merged.openseaUrl : undefined);
+
     return merged;
   }));
   return enriched;
