@@ -137,7 +137,15 @@ type AcquisitionDNA = {
   minted: { count: number; percent: number };
   received: { count: number; percent: number };
   unknown: { count: number; percent: number };
+  activityByQuarter?: Array<{ key?: string; year?: number; quarter?: number; count?: number }>;
   scope?: string;
+};
+
+type ActivityQuarter = {
+  key: string;
+  year: number;
+  quarter: number;
+  count: number;
 };
 
 type PreviewNFT = {
@@ -242,6 +250,46 @@ function getEntryPatternRead(percent: number): string {
   if (percent >= 25) return "You mix early discovery with selective collecting.";
   if (percent >= 10) return "You have some early-entry signals, but most of the wallet was built after mint.";
   return "This wallet reads like a curator's eye, not an early mover.";
+}
+
+function formatQuarterLabel(row: ActivityQuarter): string {
+  return `Q${row.quarter} ${row.year}`;
+}
+
+function normalizeActivityByQuarter(
+  rows?: AcquisitionDNA["activityByQuarter"],
+): ActivityQuarter[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows
+    .map((row) => {
+      const year = Number(row?.year);
+      const quarter = Number(row?.quarter);
+      const count = Number(row?.count);
+
+      if (
+        !Number.isFinite(year) ||
+        !Number.isFinite(quarter) ||
+        quarter < 1 ||
+        quarter > 4 ||
+        !Number.isFinite(count) ||
+        count <= 0
+      ) {
+        return null;
+      }
+
+      return {
+        key: row?.key || `${year}-Q${quarter}`,
+        year,
+        quarter,
+        count,
+      };
+    })
+    .filter((row): row is ActivityQuarter => row !== null)
+    .sort((a, b) => {
+      if (a.year !== b.year) return a.year - b.year;
+      return a.quarter - b.quarter;
+    });
 }
 
 function formatCategoryLabel(value: string): string {
@@ -677,6 +725,22 @@ export default function ProfilePage() {
       : null;
 
   const acquisitionDNA = profile?.acquisitionDNA ?? null;
+  const activityByQuarter = useMemo(
+    () => normalizeActivityByQuarter(acquisitionDNA?.activityByQuarter),
+    [acquisitionDNA?.activityByQuarter],
+  );
+  const peakCount = activityByQuarter.reduce(
+    (peak, row) => Math.max(peak, row.count),
+    0,
+  );
+  const peakQuarter =
+    peakCount > 0
+      ? activityByQuarter.find((row) => row.count === peakCount) || null
+      : null;
+  const activityByQuarterNewestFirst = useMemo(
+    () => [...activityByQuarter].reverse(),
+    [activityByQuarter],
+  );
 
   const topCollectionsWithImages = useMemo(
     () =>
@@ -966,6 +1030,51 @@ export default function ProfilePage() {
                     <p className="entry-pattern-caveat">Based on the mint history we could match.</p>
                   )}
                   <p className="entry-pattern-read">{getEntryPatternRead(acquisitionDNA.minted.percent)}</p>
+                </div>
+              </article>
+            )}
+
+            {/* ── Collecting Rhythm ── */}
+            {activityByQuarter.length > 0 && peakQuarter && peakCount > 0 && (
+              <article className="profile-panel profile-collecting-rhythm">
+                <div className="collecting-rhythm-head">
+                  <p className="profile-section-label">Collecting Rhythm</p>
+                  <p className="collecting-rhythm-title">
+                    A clear activity peak appears in {formatQuarterLabel(peakQuarter)}
+                  </p>
+                  <p className="profile-muted-copy">
+                    Based on sampled OpenSea activity, so this is a visible rhythm — not a complete history.
+                  </p>
+                </div>
+
+                <div className="collecting-rhythm-list" aria-label="Collecting activity by quarter">
+                  {activityByQuarterNewestFirst.map((row) => {
+                    const isPeak = row === peakQuarter;
+                    const width = Math.max(3, (row.count / peakCount) * 100);
+
+                    return (
+                      <div
+                        key={row.key}
+                        className={`collecting-rhythm-row${isPeak ? " is-peak" : ""}`}
+                      >
+                        <div className="collecting-rhythm-meta">
+                          <span className="collecting-rhythm-label">
+                            {formatQuarterLabel(row)}
+                          </span>
+                          <span className="collecting-rhythm-count">
+                            {row.count} {row.count === 1 ? "event" : "events"}
+                            {isPeak && <span className="collecting-rhythm-peak">Peak</span>}
+                          </span>
+                        </div>
+                        <div className="collecting-rhythm-track" aria-hidden="true">
+                          <div
+                            className="collecting-rhythm-fill"
+                            style={{ width: `${width}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </article>
             )}
