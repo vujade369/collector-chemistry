@@ -148,6 +148,20 @@ type ActivityQuarter = {
   count: number;
 };
 
+type RhythmChartPoint = ActivityQuarter & {
+  x: number;
+  y: number;
+};
+
+type RhythmChartModel = {
+  width: number;
+  height: number;
+  points: RhythmChartPoint[];
+  linePath: string;
+  areaPath: string;
+  averageY: number;
+};
+
 type PreviewNFT = {
   imageUrl: string;
   name: string;
@@ -256,6 +270,10 @@ function formatQuarterLabel(row: ActivityQuarter): string {
   return `Q${row.quarter} ${row.year}`;
 }
 
+function formatAverageQuarterCount(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
 function normalizeActivityByQuarter(
   rows?: AcquisitionDNA["activityByQuarter"],
 ): ActivityQuarter[] {
@@ -290,6 +308,42 @@ function normalizeActivityByQuarter(
       if (a.year !== b.year) return a.year - b.year;
       return a.quarter - b.quarter;
     });
+}
+
+function buildCollectingRhythmChartModel(
+  rows: ActivityQuarter[],
+  averageCount: number,
+): RhythmChartModel | null {
+  if (!rows.length) return null;
+
+  const width = 360;
+  const height = 160;
+  const padding = { top: 16, right: 16, bottom: 22, left: 16 };
+  const plotWidth = width - padding.left - padding.right;
+  const plotHeight = height - padding.top - padding.bottom;
+  const maxCount = rows.reduce((max, row) => Math.max(max, row.count), 0);
+  if (maxCount <= 0) return null;
+
+  const points = rows.map((row, index) => {
+    const x =
+      rows.length === 1
+        ? padding.left + plotWidth / 2
+        : padding.left + (index / (rows.length - 1)) * plotWidth;
+    const y = padding.top + plotHeight - (row.count / maxCount) * plotHeight;
+    return { ...row, x, y };
+  });
+
+  const baselineY = padding.top + plotHeight;
+  const linePath = points
+    .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
+    .join(" ");
+  const areaPath =
+    points.length === 1
+      ? `M ${points[0].x.toFixed(2)} ${baselineY.toFixed(2)} L ${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)} L ${points[0].x.toFixed(2)} ${baselineY.toFixed(2)} Z`
+      : `${linePath} L ${points[points.length - 1].x.toFixed(2)} ${baselineY.toFixed(2)} L ${points[0].x.toFixed(2)} ${baselineY.toFixed(2)} Z`;
+  const averageY = padding.top + plotHeight - (averageCount / maxCount) * plotHeight;
+
+  return { width, height, points, linePath, areaPath, averageY };
 }
 
 function formatCategoryLabel(value: string): string {
@@ -737,9 +791,14 @@ export default function ProfilePage() {
     peakCount > 0
       ? activityByQuarter.find((row) => row.count === peakCount) || null
       : null;
-  const activityByQuarterNewestFirst = useMemo(
-    () => [...activityByQuarter].reverse(),
-    [activityByQuarter],
+  const firstActivityQuarter = activityByQuarter[0] || null;
+  const latestActivityQuarter = activityByQuarter[activityByQuarter.length - 1] || null;
+  const averageActivityCount = activityByQuarter.length > 0
+    ? activityByQuarter.reduce((sum, row) => sum + row.count, 0) / activityByQuarter.length
+    : 0;
+  const collectingRhythmChart = useMemo(
+    () => buildCollectingRhythmChartModel(activityByQuarter, averageActivityCount),
+    [activityByQuarter, averageActivityCount],
   );
 
   const topCollectionsWithImages = useMemo(
@@ -1035,46 +1094,80 @@ export default function ProfilePage() {
             )}
 
             {/* ── Collecting Rhythm ── */}
-            {activityByQuarter.length > 0 && peakQuarter && peakCount > 0 && (
+            {activityByQuarter.length > 0 && peakQuarter && peakCount > 0 && firstActivityQuarter && latestActivityQuarter && collectingRhythmChart && (
               <article className="profile-panel profile-collecting-rhythm">
                 <div className="collecting-rhythm-head">
                   <p className="profile-section-label">Collecting Rhythm</p>
                   <p className="collecting-rhythm-title">
-                    A clear activity peak appears in {formatQuarterLabel(peakQuarter)}
+                    The busiest stretch was {formatQuarterLabel(peakQuarter)}.
                   </p>
                   <p className="profile-muted-copy">
-                    Based on sampled OpenSea activity, so this is a visible rhythm — not a complete history.
+                    A quarter-by-quarter read of matched visible collecting activity.
+                  </p>
+                  <p className="collecting-rhythm-note">
+                    Based on matched visible OpenSea activity for NFTs currently in this wallet. Older or hidden activity may be incomplete.
                   </p>
                 </div>
 
-                <div className="collecting-rhythm-list" aria-label="Collecting activity by quarter">
-                  {activityByQuarterNewestFirst.map((row) => {
-                    const isPeak = row === peakQuarter;
-                    const width = Math.max(3, (row.count / peakCount) * 100);
+                <div
+                  className="collecting-rhythm-chart"
+                  role="img"
+                  aria-label={`Collecting activity from ${formatQuarterLabel(firstActivityQuarter)} to ${formatQuarterLabel(latestActivityQuarter)}. Peak was ${formatQuarterLabel(peakQuarter)} with ${peakCount} matched ${peakCount === 1 ? "item" : "items"}. Usual pace was ${formatAverageQuarterCount(averageActivityCount)} per quarter.`}
+                >
+                  <svg
+                    className="collecting-rhythm-svg"
+                    viewBox={`0 0 ${collectingRhythmChart.width} ${collectingRhythmChart.height}`}
+                    preserveAspectRatio="none"
+                    aria-hidden="true"
+                  >
+                    <line className="collecting-rhythm-gridline" x1="16" x2="344" y1="138" y2="138" />
+                    <line
+                      className="collecting-rhythm-average-line"
+                      x1="16"
+                      x2="344"
+                      y1={collectingRhythmChart.averageY}
+                      y2={collectingRhythmChart.averageY}
+                    />
+                    <path className="collecting-rhythm-area" d={collectingRhythmChart.areaPath} />
+                    <path className="collecting-rhythm-line" d={collectingRhythmChart.linePath} />
+                    {collectingRhythmChart.points
+                      .filter((point) => point.key === peakQuarter.key)
+                      .map((point) => (
+                        <g key={point.key} className="collecting-rhythm-peak-point">
+                          <circle cx={point.x} cy={point.y} r="8" />
+                          <circle cx={point.x} cy={point.y} r="3.6" />
+                        </g>
+                      ))}
+                  </svg>
+                  <div
+                    className="collecting-rhythm-average-label"
+                    style={{ "--average-y": `${(collectingRhythmChart.averageY / collectingRhythmChart.height) * 100}%` } as CSSProperties}
+                  >
+                    Usual pace
+                  </div>
+                </div>
 
-                    return (
-                      <div
-                        key={row.key}
-                        className={`collecting-rhythm-row${isPeak ? " is-peak" : ""}`}
-                      >
-                        <div className="collecting-rhythm-meta">
-                          <span className="collecting-rhythm-label">
-                            {formatQuarterLabel(row)}
-                          </span>
-                          <span className="collecting-rhythm-count">
-                            {row.count} {row.count === 1 ? "event" : "events"}
-                            {isPeak && <span className="collecting-rhythm-peak">Peak</span>}
-                          </span>
-                        </div>
-                        <div className="collecting-rhythm-track" aria-hidden="true">
-                          <div
-                            className="collecting-rhythm-fill"
-                            style={{ width: `${width}%` }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div className="collecting-rhythm-footer" aria-label="Collecting rhythm summary">
+                  <div className="collecting-rhythm-stat">
+                    <span className="collecting-rhythm-stat-label">Started</span>
+                    <span className="collecting-rhythm-stat-value">{formatQuarterLabel(firstActivityQuarter)}</span>
+                  </div>
+                  <div className="collecting-rhythm-stat">
+                    <span className="collecting-rhythm-stat-label">Peak</span>
+                    <span className="collecting-rhythm-stat-value">
+                      {formatQuarterLabel(peakQuarter)} · {peakCount} matched
+                    </span>
+                  </div>
+                  <div className="collecting-rhythm-stat">
+                    <span className="collecting-rhythm-stat-label">Latest</span>
+                    <span className="collecting-rhythm-stat-value">{formatQuarterLabel(latestActivityQuarter)}</span>
+                  </div>
+                  <div className="collecting-rhythm-stat">
+                    <span className="collecting-rhythm-stat-label">Usual pace</span>
+                    <span className="collecting-rhythm-stat-value">
+                      {formatAverageQuarterCount(averageActivityCount)} / quarter
+                    </span>
+                  </div>
                 </div>
               </article>
             )}

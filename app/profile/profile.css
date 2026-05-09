@@ -223,20 +223,23 @@
 .entry-pattern-proof { margin: 0; font-size: 11px; color: #555; }
 .entry-pattern-read { margin: 0; font-size: 13px; color: #a8a49d; font-style: italic; }
 .entry-pattern-caveat { margin: 0; font-size: 11px; color: #444; }
-.profile-collecting-rhythm { gap: 15px; padding: 20px 22px; }
+.profile-collecting-rhythm { gap: 16px; padding: 20px 22px; }
 .collecting-rhythm-head { display: grid; gap: 7px; }
 .collecting-rhythm-title { margin: 0; font-size: 22px; font-weight: 300; color: #f0ede6; letter-spacing: -0.02em; line-height: 1.15; }
-.collecting-rhythm-list { display: grid; gap: 10px; }
-.collecting-rhythm-row { display: grid; gap: 7px; }
-.collecting-rhythm-meta { display: grid; grid-template-columns: minmax(86px, auto) minmax(0, 1fr); gap: 12px; align-items: baseline; }
-.collecting-rhythm-label { color: #8f8b84; font-size: 12px; }
-.collecting-rhythm-count { color: #555; font-size: 11px; text-align: right; }
-.collecting-rhythm-track { height: 7px; border-radius: 999px; background: #1e1e1e; overflow: hidden; }
-.collecting-rhythm-fill { height: 100%; min-width: 3px; border-radius: inherit; background: #333; }
-.collecting-rhythm-row.is-peak .collecting-rhythm-label { color: #f0ede6; }
-.collecting-rhythm-row.is-peak .collecting-rhythm-count { color: #a8a49d; }
-.collecting-rhythm-row.is-peak .collecting-rhythm-fill { background: #9575ff; box-shadow: 0 0 18px rgba(149,117,255,0.16); }
-.collecting-rhythm-peak { display: inline-flex; margin-left: 7px; padding: 2px 6px; border: 0.5px solid rgba(149,117,255,0.42); border-radius: 999px; color: #c9bdff; font-size: 9px; line-height: 1; letter-spacing: 0.08em; vertical-align: middle; }
+.collecting-rhythm-note { margin: 0; max-width: 58ch; color: #666; font-size: 11px; line-height: 1.55; }
+.collecting-rhythm-chart { position: relative; height: clamp(150px, 28vw, 210px); margin-top: 2px; border-radius: 14px; overflow: hidden; background: linear-gradient(180deg, rgba(255,255,255,0.018), rgba(255,255,255,0)); }
+.collecting-rhythm-svg { display: block; width: 100%; height: 100%; }
+.collecting-rhythm-gridline { stroke: rgba(240,237,230,0.07); stroke-width: 0.5; vector-effect: non-scaling-stroke; }
+.collecting-rhythm-average-line { stroke: rgba(240,237,230,0.22); stroke-width: 0.75; stroke-dasharray: 4 7; vector-effect: non-scaling-stroke; }
+.collecting-rhythm-area { fill: rgba(149,117,255,0.10); }
+.collecting-rhythm-line { fill: none; stroke: #9575ff; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; filter: drop-shadow(0 0 10px rgba(149,117,255,0.14)); }
+.collecting-rhythm-peak-point circle:first-child { fill: rgba(149,117,255,0.18); }
+.collecting-rhythm-peak-point circle:last-child { fill: #c9bdff; stroke: #9575ff; stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+.collecting-rhythm-average-label { position: absolute; top: var(--average-y); right: 10px; transform: translateY(-50%); padding: 3px 7px; border: 0.5px solid rgba(240,237,230,0.10); border-radius: 999px; color: #77716a; background: rgba(17,17,17,0.78); font-size: 10px; line-height: 1; pointer-events: none; }
+.collecting-rhythm-footer { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding-top: 2px; }
+.collecting-rhythm-stat { display: grid; gap: 5px; min-width: 0; padding-top: 10px; border-top: 0.5px solid #1e1e1e; }
+.collecting-rhythm-stat-label { color: #555; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; }
+.collecting-rhythm-stat-value { color: #c8c5be; font-size: 12px; line-height: 1.35; white-space: normal; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
@@ -261,8 +264,9 @@
   .profile-display-name { font-size: 32px; }
   .profile-identity-summary { font-size: 16px; }
   .profile-identity-stat { flex: 1 1 120px; }
-  .collecting-rhythm-meta { grid-template-columns: 1fr; gap: 3px; }
-  .collecting-rhythm-count { text-align: left; }
+  .collecting-rhythm-chart { border-radius: 12px; }
+  .collecting-rhythm-average-label { right: 6px; font-size: 9px; }
+  .collecting-rhythm-footer { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .taste-map-donut { width: 188px; height: 188px; }
   .taste-category-row { grid-template-columns: 10px minmax(0, 1fr) auto; }
   .taste-category-count { grid-column: 2 / -1; }
