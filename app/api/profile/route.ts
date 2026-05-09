@@ -901,6 +901,12 @@ type AcquisitionDNA = {
   purchased: { count: number; percent: number };
   received: { count: number; percent: number };
   unknown: { count: number; percent: number };
+  activityByQuarter: Array<{
+    key: string;
+    year: number;
+    quarter: 1 | 2 | 3 | 4;
+    count: number;
+  }>;
   scope: "opensea_rest_events_sample";
 };
 
@@ -935,27 +941,107 @@ function buildInventoryKeys(nfts: WalletProfileNFT[]): Set<string> {
   return keys;
 }
 
+function parseOpenSeaEventTimestamp(raw: unknown): number | null {
+  const value = typeof raw === "number" ? raw : Number(String(raw || "").trim());
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function storeEarliestTimestamp(timestamps: Map<string, number>, key: string, timestamp: number | null) {
+  if (timestamp == null) return;
+  const current = timestamps.get(key);
+  if (current == null || timestamp < current) timestamps.set(key, timestamp);
+}
+
+function quarterFromTimestamp(timestamp: number): { year: number; quarter: 1 | 2 | 3 | 4 } {
+  const date = new Date(timestamp * 1000);
+  const quarter = (Math.floor(date.getUTCMonth() / 3) + 1) as 1 | 2 | 3 | 4;
+  return { year: date.getUTCFullYear(), quarter };
+}
+
+function quarterKey(year: number, quarter: number) {
+  return `${year}-Q${quarter}`;
+}
+
+function nextQuarter(year: number, quarter: 1 | 2 | 3 | 4): { year: number; quarter: 1 | 2 | 3 | 4 } {
+  return quarter === 4 ? { year: year + 1, quarter: 1 } : { year, quarter: (quarter + 1) as 1 | 2 | 3 | 4 };
+}
+
+function buildActivityByQuarter(timestamps: number[]): AcquisitionDNA["activityByQuarter"] {
+  if (!timestamps.length) return [];
+
+  const earliest = quarterFromTimestamp(Math.min(...timestamps));
+  const now = new Date();
+  const current = {
+    year: now.getUTCFullYear(),
+    quarter: (Math.floor(now.getUTCMonth() / 3) + 1) as 1 | 2 | 3 | 4,
+  };
+  const counts = new Map<string, number>();
+
+  for (const timestamp of timestamps) {
+    const bucket = quarterFromTimestamp(timestamp);
+    const key = quarterKey(bucket.year, bucket.quarter);
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+
+  const activity: AcquisitionDNA["activityByQuarter"] = [];
+  for (
+    let bucket = earliest;
+    bucket.year < current.year || (bucket.year === current.year && bucket.quarter <= current.quarter);
+    bucket = nextQuarter(bucket.year, bucket.quarter)
+  ) {
+    const key = quarterKey(bucket.year, bucket.quarter);
+    activity.push({
+      key,
+      year: bucket.year,
+      quarter: bucket.quarter,
+      count: counts.get(key) || 0,
+    });
+  }
+
+  return activity;
+}
+
 function buildAcquisitionDNAResult(params: {
   inventoryCount: number;
   mintedKeys: Set<string>;
+  mintedTimestamps: Map<string, number>;
   saleKeys: Set<string>;
+  saleTimestamps: Map<string, number>;
   transferKeys: Set<string>;
+  transferTimestamps: Map<string, number>;
 }): AcquisitionDNA {
-  const { inventoryCount, mintedKeys, saleKeys, transferKeys } = params;
+  const {
+    inventoryCount,
+    mintedKeys,
+    mintedTimestamps,
+    saleKeys,
+    saleTimestamps,
+    transferKeys,
+    transferTimestamps,
+  } = params;
   const matchedKeys = new Set<string>();
   const purchasedKeys = new Set<string>();
   const receivedKeys = new Set<string>();
+  const matchedTimestamps: number[] = [];
 
-  for (const key of mintedKeys) matchedKeys.add(key);
+  for (const key of mintedKeys) {
+    matchedKeys.add(key);
+    const timestamp = mintedTimestamps.get(key);
+    if (timestamp != null) matchedTimestamps.push(timestamp);
+  }
   for (const key of saleKeys) {
     if (matchedKeys.has(key)) continue;
     purchasedKeys.add(key);
     matchedKeys.add(key);
+    const timestamp = saleTimestamps.get(key);
+    if (timestamp != null) matchedTimestamps.push(timestamp);
   }
   for (const key of transferKeys) {
     if (matchedKeys.has(key)) continue;
     receivedKeys.add(key);
     matchedKeys.add(key);
+    const timestamp = transferTimestamps.get(key);
+    if (timestamp != null) matchedTimestamps.push(timestamp);
   }
 
   const matchedCount = matchedKeys.size;
@@ -969,6 +1055,7 @@ function buildAcquisitionDNAResult(params: {
     purchased: { count: purchasedKeys.size, percent: percent(purchasedKeys.size) },
     received: { count: receivedKeys.size, percent: percent(receivedKeys.size) },
     unknown: { count: unknownCount, percent: percent(unknownCount) },
+    activityByQuarter: buildActivityByQuarter(matchedTimestamps),
     scope: "opensea_rest_events_sample",
   };
 }
@@ -1105,9 +1192,16 @@ async function fetchAcquisitionDNA(walletAddress: string, nfts: WalletProfileNFT
   if (!inventoryKeys.size) return null;
 
   try {
-    const fetchTransferEvents = async (): Promise<{ mintedKeys: Set<string>; receivedKeys: Set<string> }> => {
+    const fetchTransferEvents = async (): Promise<{
+      mintedKeys: Set<string>;
+      mintedTimestamps: Map<string, number>;
+      receivedKeys: Set<string>;
+      receivedTimestamps: Map<string, number>;
+    }> => {
       const mintedKeys = new Set<string>();
+      const mintedTimestamps = new Map<string, number>();
       const receivedKeys = new Set<string>();
+      const receivedTimestamps = new Map<string, number>();
       let cursor = "";
       const deadline = Date.now() + 8000;
 
@@ -1144,11 +1238,14 @@ async function fetchAcquisitionDNA(walletAddress: string, nfts: WalletProfileNFT
 
           const fromAddr = normalizeAddress(event.from_address || "");
           const isMint = fromAddr === ZERO_ADDRESS || String(event.transfer_type || "").toLowerCase() === "mint";
+          const timestamp = parseOpenSeaEventTimestamp(event.event_timestamp);
 
           if (isMint) {
             mintedKeys.add(key);
+            storeEarliestTimestamp(mintedTimestamps, key, timestamp);
           } else {
             receivedKeys.add(key);
+            storeEarliestTimestamp(receivedTimestamps, key, timestamp);
           }
         }
 
@@ -1156,11 +1253,12 @@ async function fetchAcquisitionDNA(walletAddress: string, nfts: WalletProfileNFT
         if (!cursor || !events.length) break;
       }
 
-      return { mintedKeys, receivedKeys };
+      return { mintedKeys, mintedTimestamps, receivedKeys, receivedTimestamps };
     };
 
-    const fetchSaleKeys = async (): Promise<Set<string>> => {
+    const fetchSaleKeys = async (): Promise<{ saleKeys: Set<string>; saleTimestamps: Map<string, number> }> => {
       const keys = new Set<string>();
+      const saleTimestamps = new Map<string, number>();
       let cursor = "";
       const deadline = Date.now() + 8000;
 
@@ -1193,17 +1291,20 @@ async function fetchAcquisitionDNA(walletAddress: string, nfts: WalletProfileNFT
           if (!contract || !tokenId) continue;
 
           const key = `${contract}:${tokenId}`;
-          if (inventoryKeys.has(key)) keys.add(key);
+          if (inventoryKeys.has(key)) {
+            keys.add(key);
+            storeEarliestTimestamp(saleTimestamps, key, parseOpenSeaEventTimestamp(event.event_timestamp));
+          }
         }
 
         cursor = String(data.next || "").trim();
         if (!cursor || !events.length) break;
       }
 
-      return keys;
+      return { saleKeys: keys, saleTimestamps };
     };
 
-    const [{ mintedKeys, receivedKeys }, saleKeys] = await Promise.all([
+    const [{ mintedKeys, mintedTimestamps, receivedKeys, receivedTimestamps }, { saleKeys, saleTimestamps }] = await Promise.all([
       fetchTransferEvents(),
       fetchSaleKeys(),
     ]);
@@ -1211,8 +1312,11 @@ async function fetchAcquisitionDNA(walletAddress: string, nfts: WalletProfileNFT
     return buildAcquisitionDNAResult({
       inventoryCount: inventoryKeys.size,
       mintedKeys,
+      mintedTimestamps,
       saleKeys,
+      saleTimestamps,
       transferKeys: receivedKeys,
+      transferTimestamps: receivedTimestamps,
     });
   } catch (err) {
     console.error("[acquisitionDNA] fetch failed:", err);
