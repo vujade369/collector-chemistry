@@ -12,6 +12,10 @@ export type OrbitCollection = {
   name: string;
   contractAddress: string;
   heldCount: number;
+  imageUrl?: string | null;
+  avatarUrl?: string | null;
+  bannerUrl?: string | null;
+  openseaUrl?: string | null;
 };
 
 export type OrbitSeedCollection = OrbitCollection & {
@@ -21,6 +25,12 @@ export type OrbitSeedCollection = OrbitCollection & {
 
 export type CandidateStrength = "strong" | "nearby" | "light";
 
+export type OrbitSocialLink = {
+  label: string;
+  url: string;
+  kind: "x" | "instagram" | "website" | "other";
+};
+
 export type OrbitCandidate = {
   wallet: string;
   displayName: string;
@@ -29,7 +39,9 @@ export type OrbitCandidate = {
   bannerUrl: string | null;
   bio: string | null;
   bioDisplay: string;
+  joinedDate: string | null;
   openseaUrl: string;
+  socialLinks: OrbitSocialLink[];
   strength: CandidateStrength;
   sharedSeedCollections: string[];
   sharedSeedCount: number;
@@ -86,6 +98,153 @@ function isExcludedAddress(address: string, enteredWallets: Set<string>): boolea
   const lower = address.toLowerCase();
   if (lower === ZERO_ADDRESS || lower === BURN_ADDRESS) return true;
   return enteredWallets.has(lower);
+}
+
+function pickString(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value !== "string") continue;
+    const trimmed = value.trim();
+    if (trimmed) return trimmed;
+  }
+  return null;
+}
+
+function normalizeSocialHandle(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim().replace(/^@/, "");
+  return trimmed || null;
+}
+
+function normalizeUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed;
+  return `https://${trimmed}`;
+}
+
+function buildSocialLinks(accountData: OpenSeaAccountData | null): OrbitSocialLink[] {
+  if (!accountData) return [];
+
+  const links: OrbitSocialLink[] = [];
+  const seen = new Set<string>();
+
+  function add(label: string, url: string | null, kind: OrbitSocialLink["kind"]) {
+    if (!url) return;
+    const key = url.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    links.push({ label, url, kind });
+  }
+
+  add("Web", normalizeUrl((accountData as any).website), "website");
+
+  const socialMediaAccounts = (accountData as any).social_media_accounts;
+  if (Array.isArray(socialMediaAccounts)) {
+    for (const item of socialMediaAccounts) {
+      const platform = String(item?.platform || item?.provider || item?.site || "").toLowerCase();
+      const username = normalizeSocialHandle(item?.username || item?.handle);
+      const url = normalizeUrl(item?.url);
+
+      if (platform.includes("twitter") || platform === "x") {
+        add("X", url || (username ? `https://x.com/${username}` : null), "x");
+      } else if (platform.includes("instagram")) {
+        add("IG", url || (username ? `https://instagram.com/${username}` : null), "instagram");
+      } else if (url) {
+        add("Link", url, "other");
+      }
+    }
+  }
+
+  return links.slice(0, 3);
+}
+
+type OpenSeaCollectionDisplay = {
+  name: string | null;
+  imageUrl?: string | null;
+  avatarUrl?: string | null;
+  bannerUrl?: string | null;
+  openseaUrl?: string | null;
+};
+
+async function fetchOpenSeaCollectionDisplay(
+  slug: string,
+  openseaApiKey: string | undefined
+): Promise<OpenSeaCollectionDisplay | null> {
+  if (!slug || !openseaApiKey) return null;
+
+  try {
+    const res = await fetch(`${OPENSEA_BASE_URL}/collections/${encodeURIComponent(slug)}`, {
+      headers: { "x-api-key": openseaApiKey },
+      cache: "no-store",
+    });
+
+    if (!res.ok) return null;
+
+    const json = await res.json();
+
+    return {
+      name: pickString(json.name, json?.collection?.name),
+      imageUrl: pickString(
+        json.image_url,
+        json.imageUrl,
+        json.image,
+        json.display_image_url,
+        json.large_image_url,
+        json?.collection?.image_url,
+        json?.collection?.imageUrl,
+        json?.collection?.image
+      ),
+      avatarUrl: pickString(
+        json.avatar_url,
+        json.avatarUrl,
+        json?.collection?.avatar_url,
+        json?.collection?.avatarUrl
+      ),
+      bannerUrl: pickString(
+        json.banner_image_url,
+        json.bannerImageUrl,
+        json.banner_url,
+        json?.collection?.banner_image_url,
+        json?.collection?.bannerImageUrl,
+        json?.collection?.banner_url
+      ),
+      openseaUrl:
+        pickString(json.opensea_url, json.openseaUrl, json?.collection?.opensea_url) ||
+        `https://opensea.io/collection/${slug}`,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function enrichOrbitCollections<T extends OrbitCollection>(
+  collections: T[],
+  openseaApiKey: string | undefined
+): Promise<T[]> {
+  if (!collections.length) return collections;
+
+  const displays = await Promise.all(
+    collections.map((collection) =>
+      withTimeout(fetchOpenSeaCollectionDisplay(collection.slug, openseaApiKey), 2500, null)
+    )
+  );
+
+  return collections.map((collection, index) => {
+    const display = displays[index];
+
+    return {
+      ...collection,
+      name: display?.name || collection.name,
+      imageUrl: display?.imageUrl || collection.imageUrl || null,
+      avatarUrl: display?.avatarUrl || collection.avatarUrl || null,
+      bannerUrl: display?.bannerUrl || collection.bannerUrl || null,
+      openseaUrl:
+        display?.openseaUrl ||
+        collection.openseaUrl ||
+        (collection.slug ? `https://opensea.io/collection/${collection.slug}` : null),
+    };
+  });
 }
 
 function shortenWallet(wallet: string): string {
@@ -328,6 +487,15 @@ export async function findCollectorsInOrbit(
 
   const seedCollections = allCollections.slice(0, seedLimit);
 
+  const enrichedDisplayTopCollections = await enrichOrbitCollections(
+    displayTopCollections,
+    openseaApiKey
+  );
+  const enrichedShowMoreCollections = await enrichOrbitCollections(
+    showMoreCollections,
+    openseaApiKey
+  );
+
   // Step 3: Fetch owners for each seed collection
   const holderDiscoveryStart = Date.now();
 
@@ -337,8 +505,8 @@ export async function findCollectorsInOrbit(
     debugState.timing.totalMs = Date.now() - totalStart;
     return {
       wallets: normalizedWallets,
-      displayTopCollections,
-      showMoreCollections,
+      displayTopCollections: enrichedDisplayTopCollections,
+      showMoreCollections: enrichedShowMoreCollections,
       orbitSeedCollections: [],
       candidates: [],
       debug: debugState,
@@ -374,6 +542,10 @@ export async function findCollectorsInOrbit(
       name: collection.name || collection.contractAddress,
       contractAddress: collection.contractAddress,
       heldCount: collection.heldCount,
+      imageUrl: null,
+      avatarUrl: null,
+      bannerUrl: null,
+      openseaUrl: collection.slug ? `https://opensea.io/collection/${collection.slug}` : null,
       holderCount,
       specificityScore,
     });
@@ -446,10 +618,14 @@ export async function findCollectorsInOrbit(
     const avatarUrl = accountData?.profile_image_url || null;
     const bannerUrl = accountData?.banner_image_url || null;
     const bio = accountData?.bio ? String(accountData.bio).trim() || null : null;
+    const joinedDate = (accountData as any)?.joined_date
+      ? String((accountData as any).joined_date).trim() || null
+      : null;
     const displayName = username || shortenWallet(candidate.wallet);
     const openseaUrl = username
       ? `https://opensea.io/${username}`
       : `https://opensea.io/${candidate.wallet}`;
+    const socialLinks = buildSocialLinks(accountData);
     const strength = computeCandidateStrength(candidate.sharedSeedCount)!;
 
     enrichedCandidates.push({
@@ -460,7 +636,9 @@ export async function findCollectorsInOrbit(
       bannerUrl,
       bio,
       bioDisplay: bio || "No bio found. The signal is in the holdings.",
+      joinedDate,
       openseaUrl,
+      socialLinks,
       strength,
       sharedSeedCollections: candidate.sharedSeedCollections,
       sharedSeedCount: candidate.sharedSeedCount,
@@ -469,13 +647,18 @@ export async function findCollectorsInOrbit(
     });
   }
 
+  const enrichedOrbitSeedCollections = await enrichOrbitCollections(
+    orbitSeedCollections,
+    openseaApiKey
+  );
+
   debugState.timing.totalMs = Date.now() - totalStart;
 
   return {
     wallets: normalizedWallets,
-    displayTopCollections,
-    showMoreCollections,
-    orbitSeedCollections,
+    displayTopCollections: enrichedDisplayTopCollections,
+    showMoreCollections: enrichedShowMoreCollections,
+    orbitSeedCollections: enrichedOrbitSeedCollections,
     candidates: enrichedCandidates,
     debug: debugState,
   };
