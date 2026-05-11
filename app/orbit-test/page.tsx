@@ -39,6 +39,10 @@ type OrbitCollection = {
   specificityScore?: number;
 };
 
+type RoomMode = "focus" | "exclude" | "ignore";
+
+type RoomStateMap = Record<string, RoomMode>;
+
 type OrbitResponse = {
   wallets?: string[];
   displayTopCollections?: OrbitCollection[];
@@ -334,11 +338,61 @@ function SocialLinkPills({ links }: { links?: OrbitSocialLink[] }) {
   );
 }
 
+function mergeUniqueRooms(collections: OrbitCollection[]) {
+  const seen = new Set<string>();
+  const rooms: OrbitCollection[] = [];
+
+  for (const collection of collections) {
+    const slug = collection.slug?.trim();
+    if (!slug || seen.has(slug)) continue;
+    seen.add(slug);
+    rooms.push(collection);
+  }
+
+  return rooms;
+}
+
+function buildAvailableRooms(data: OrbitResponse | null) {
+  if (!data) return [];
+
+  return mergeUniqueRooms([
+    ...(data.orbitSeedCollections || []),
+    ...(data.displayTopCollections || []),
+    ...(data.showMoreCollections || []),
+  ]).slice(0, 10);
+}
+
+function buildDefaultRoomStates(rooms: OrbitCollection[]) {
+  const states: RoomStateMap = {};
+
+  rooms.forEach((room, index) => {
+    if (!room.slug) return;
+    states[room.slug] = index < 5 ? "focus" : "ignore";
+  });
+
+  return states;
+}
+
+function getFocusedSlugs(roomStates: RoomStateMap) {
+  return Object.entries(roomStates)
+    .filter(([, mode]) => mode === "focus")
+    .map(([slug]) => slug);
+}
+
+function getExcludedSlugs(roomStates: RoomStateMap) {
+  return Object.entries(roomStates)
+    .filter(([, mode]) => mode === "exclude")
+    .map(([slug]) => slug);
+}
+
 export default function OrbitTestPage() {
   const [walletRows, setWalletRows] = useState<string[]>(DEFAULT_WALLET_ROWS);
   const [data, setData] = useState<OrbitResponse | null>(null);
   const [expandedCollections, setExpandedCollections] = useState(false);
   const [hideInstitutional, setHideInstitutional] = useState(false);
+  const [roomStates, setRoomStates] = useState<RoomStateMap>({});
+  const [activeFocusCount, setActiveFocusCount] = useState(0);
+  const [activeExcludeCount, setActiveExcludeCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -369,6 +423,10 @@ export default function OrbitTestPage() {
     .filter(Boolean)
     .join(",");
 
+  const availableRooms = buildAvailableRooms(data);
+  const focusedSlugs = getFocusedSlugs(roomStates);
+  const excludedSlugs = getExcludedSlugs(roomStates);
+
   function updateWalletRow(index: number, value: string) {
     setWalletRows((rows) =>
       rows.map((row, rowIndex) => (rowIndex === index ? value : row))
@@ -386,10 +444,60 @@ export default function OrbitTestPage() {
     });
   }
 
+  function initializeRoomStatesFromData(nextData: OrbitResponse) {
+    const rooms = buildAvailableRooms(nextData);
+
+    setRoomStates((current) => {
+      if (Object.keys(current).length === 0) {
+        return buildDefaultRoomStates(rooms);
+      }
+
+      const allowed = new Set(rooms.map((room) => room.slug).filter(Boolean));
+      const next: RoomStateMap = {};
+
+      for (const [slug, mode] of Object.entries(current)) {
+        if (allowed.has(slug)) next[slug] = mode;
+      }
+
+      for (const room of rooms) {
+        if (room.slug && !next[room.slug]) next[room.slug] = "ignore";
+      }
+
+      return next;
+    });
+  }
+
+  function cycleRoomMode(slug?: string | null) {
+    if (!slug) return;
+
+    setRoomStates((current) => {
+      const currentMode = current[slug] || "ignore";
+      const focusedCount = Object.values(current).filter((mode) => mode === "focus").length;
+
+      let nextMode: RoomMode;
+      if (currentMode === "focus") {
+        nextMode = "exclude";
+      } else if (currentMode === "exclude") {
+        nextMode = "ignore";
+      } else {
+        if (focusedCount >= 10) return current;
+        nextMode = "focus";
+      }
+
+      return {
+        ...current,
+        [slug]: nextMode,
+      };
+    });
+  }
+
+  function resetFocusRooms() {
+    setRoomStates(buildDefaultRoomStates(availableRooms));
+  }
+
   async function findCollectors() {
     setLoading(true);
     setError("");
-    setData(null);
 
     const queryWallets = walletRows
       .map((value) => value.trim())
@@ -402,10 +510,34 @@ export default function OrbitTestPage() {
       return;
     }
 
+    if (availableRooms.length > 0 && focusedSlugs.length === 0) {
+      setError("Choose at least one focus room.");
+      setLoading(false);
+      return;
+    }
+
     try {
-      const res = await fetch(
-        `/api/profile/orbit?wallet=${encodeURIComponent(queryWallets)}&debug=1&resultLimit=15`
-      );
+      const params = new URLSearchParams({
+        wallet: queryWallets,
+        debug: "1",
+        resultLimit: "20",
+      });
+
+      const currentFocusedSlugs = getFocusedSlugs(roomStates);
+      const currentExcludedSlugs = getExcludedSlugs(roomStates);
+
+      if (currentFocusedSlugs.length > 0) {
+        params.set("seedSlugs", currentFocusedSlugs.join(","));
+      }
+
+      if (currentExcludedSlugs.length > 0) {
+        params.set("excludeSlugs", currentExcludedSlugs.join(","));
+      }
+
+      setActiveFocusCount(currentFocusedSlugs.length);
+      setActiveExcludeCount(currentExcludedSlugs.length);
+
+      const res = await fetch(`/api/profile/orbit?${params.toString()}`);
       const json = (await res.json()) as OrbitResponse;
 
       if (!res.ok) {
@@ -413,6 +545,7 @@ export default function OrbitTestPage() {
       }
 
       setData(json);
+      initializeRoomStatesFromData(json);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -631,47 +764,140 @@ export default function OrbitTestPage() {
                 marginBottom: 28,
               }}
             >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 16,
-                  alignItems: "center",
-                  marginBottom: 16,
-                }}
-              >
-                <div>
-                  <h2 style={{ margin: 0, fontSize: 20 }}>Rooms shaping this constellation</h2>
-                  <p style={{ margin: "6px 0 0", color: "#a99daa", fontSize: 13 }}>
-                    The collection rooms carrying the strongest signal in this search.
-                  </p>
-                </div>
-
-                {moreCollections.length > 0 && (
-                  <button
-                    onClick={() => setExpandedCollections((value) => !value)}
+              {availableRooms.length > 0 && (
+                <section
+                  style={{
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    background: "rgba(255,255,255,0.035)",
+                    borderRadius: 24,
+                    padding: 18,
+                    marginBottom: 28,
+                  }}
+                >
+                  <div
                     style={{
-                      background: "transparent",
-                      color: "#f4edf4",
-                      border: "1px solid rgba(255,255,255,0.16)",
-                      borderRadius: 999,
-                      padding: "9px 13px",
-                      cursor: "pointer",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "flex-start",
+                      gap: 16,
+                      marginBottom: 14,
                     }}
                   >
-                    {expandedCollections ? "Show less" : "Show 5 more"}
-                  </button>
-                )}
-              </div>
+                    <div>
+                      <h2 style={{ margin: 0, fontSize: 20 }}>Focus rooms</h2>
+                      <p style={{ margin: "6px 0 0", color: "#a99daa", fontSize: 13 }}>
+                        Choose up to 10 rooms to shape this search. Click a room to cycle Focus → Exclude → Ignore.
+                      </p>
+                    </div>
 
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-                {visibleCollections.map((collection) => (
-                  <RoomChip key={collection.slug} slug={collection.slug} collection={collection} />
-                ))}
-              </div>
-            </section>
+                    <button
+                      type="button"
+                      onClick={resetFocusRooms}
+                      style={{
+                        background: "transparent",
+                        border: "1px solid rgba(255,255,255,0.14)",
+                        color: "#d8cddd",
+                        borderRadius: 999,
+                        padding: "8px 11px",
+                        fontSize: 12,
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Reset
+                    </button>
+                  </div>
 
-            <section>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 9 }}>
+                    {availableRooms.map((room) => {
+                      const mode = roomStates[room.slug] || "ignore";
+                      const image = room.imageUrl || room.avatarUrl || room.bannerUrl;
+                      const isFocus = mode === "focus";
+                      const isExclude = mode === "exclude";
+
+                      return (
+                        <button
+                          key={room.slug}
+                          type="button"
+                          onClick={() => cycleRoomMode(room.slug)}
+                          title={isFocus ? "Focused room" : isExclude ? "Excluded room" : "Ignored room"}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 8,
+                            borderRadius: 999,
+                            padding: "7px 10px 7px 7px",
+                            border: isFocus
+                              ? "1px solid rgba(164,139,255,0.62)"
+                              : isExclude
+                                ? "1px solid rgba(255,255,255,0.16)"
+                                : "1px solid rgba(255,255,255,0.12)",
+                            background: isFocus
+                              ? "rgba(108,79,255,0.22)"
+                              : isExclude
+                                ? "rgba(255,255,255,0.028)"
+                                : "rgba(255,255,255,0.035)",
+                            color: isFocus ? "#f1ecff" : isExclude ? "#a99daa" : "#8f8292",
+                            cursor: "pointer",
+                            maxWidth: 260,
+                          }}
+                        >
+                          <span
+                            style={{
+                              width: 20,
+                              height: 20,
+                              borderRadius: "50%",
+                              overflow: "hidden",
+                              background: "rgba(255,255,255,0.08)",
+                              display: "grid",
+                              placeItems: "center",
+                              flexShrink: 0,
+                              fontSize: 10,
+                            }}
+                          >
+                            {image ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={image}
+                                alt=""
+                                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                              />
+                            ) : (
+                              "✦"
+                            )}
+                          </span>
+
+                          <span
+                            style={{
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                              fontSize: 12,
+                            }}
+                          >
+                            {room.name || room.slug}
+                          </span>
+
+                          <span
+                            style={{
+                              fontSize: 10,
+                              opacity: isFocus ? 0.9 : 0.62,
+                              letterSpacing: 0.1,
+                            }}
+                          >
+                            {isFocus ? "Focus" : isExclude ? "Exclude" : "Ignore"}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <p style={{ margin: "12px 0 0", color: "#8f8292", fontSize: 12 }}>
+                    {focusedSlugs.length} focused · {excludedSlugs.length} excluded
+                  </p>
+                </section>
+              )}
+
               <div
                 style={{
                   display: "flex",
@@ -684,7 +910,9 @@ export default function OrbitTestPage() {
                 <div>
                   <h2 style={{ margin: 0, fontSize: 24 }}>Collectors in Your Orbit</h2>
                   <p style={{ margin: "7px 0 0", color: "#a99daa", fontSize: 13 }}>
-                    Wallets ranked by shared rooms, overlap weight, and visible collector signal.
+                    {loading ? "Updating this scenario…" : activeFocusCount > 0
+                      ? `Matching through ${activeFocusCount} focus room${activeFocusCount === 1 ? "" : "s"}.${activeExcludeCount ? ` ${activeExcludeCount} room${activeExcludeCount === 1 ? "" : "s"} excluded.` : ""}`
+                      : "Wallets ranked by shared rooms, overlap weight, and visible collector signal."}
                   </p>
                 </div>
 
