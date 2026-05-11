@@ -21,6 +21,19 @@ function parseIntParam(value: string | null, defaultVal: number, max: number): n
   return Math.min(parsed, max);
 }
 
+function parseSlugListParam(value: string | null): string[] {
+  if (!value) return [];
+
+  return Array.from(
+    new Set(
+      value
+        .split(",")
+        .map((slug) => slug.trim().toLowerCase())
+        .filter(Boolean)
+    )
+  );
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
 
@@ -47,9 +60,16 @@ export async function GET(request: NextRequest) {
 
   const seedLimit = parseIntParam(searchParams.get("seedLimit"), 10, 10);
   const resultLimit = parseIntParam(searchParams.get("resultLimit"), 10, 20);
+  const seedSlugs = parseSlugListParam(searchParams.get("seedSlugs"));
+  const excludeSlugs = parseSlugListParam(searchParams.get("excludeSlugs"));
 
   try {
-    const result = await findCollectorsInOrbit(walletInputs, { seedLimit, resultLimit });
+    const result = await findCollectorsInOrbit(walletInputs, {
+      seedLimit,
+      resultLimit,
+      seedSlugs,
+      excludeSlugs,
+    });
     return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";

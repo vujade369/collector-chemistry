@@ -75,6 +75,8 @@ export type OrbitResponse = {
 export type OrbitOptions = {
   seedLimit?: number;
   resultLimit?: number;
+  seedSlugs?: string[];
+  excludeSlugs?: string[];
 };
 
 // --- private helpers ---
@@ -98,6 +100,39 @@ function isExcludedAddress(address: string, enteredWallets: Set<string>): boolea
   const lower = address.toLowerCase();
   if (lower === ZERO_ADDRESS || lower === BURN_ADDRESS) return true;
   return enteredWallets.has(lower);
+}
+
+function isEthAddress(value: string): boolean {
+  return /^0x[a-fA-F0-9]{40}$/.test(value.trim());
+}
+
+async function resolveOrbitWalletInput(
+  wallet: string,
+  openseaApiKey: string | undefined
+): Promise<string> {
+  const trimmed = wallet.trim();
+  if (!trimmed) return trimmed;
+  if (isEthAddress(trimmed)) return trimmed.toLowerCase();
+  if (!openseaApiKey) return trimmed.toLowerCase();
+
+  try {
+    const res = await fetch(`${OPENSEA_BASE_URL}/accounts/resolve/${encodeURIComponent(trimmed)}`, {
+      cache: "no-store",
+      headers: {
+        accept: "application/json",
+        "x-api-key": openseaApiKey,
+      },
+    });
+
+    if (!res.ok) return trimmed.toLowerCase();
+
+    const json = await res.json();
+    const resolved = String(json?.address || "").trim();
+
+    return isEthAddress(resolved) ? resolved.toLowerCase() : trimmed.toLowerCase();
+  } catch {
+    return trimmed.toLowerCase();
+  }
 }
 
 function pickString(...values: unknown[]): string | null {
@@ -450,9 +485,25 @@ export async function findCollectorsInOrbit(
 
   const seedLimit = Math.min(options.seedLimit ?? 10, 10);
   const resultLimit = Math.min(options.resultLimit ?? 10, 20);
+  const selectedSeedSlugs = Array.from(
+    new Set((options.seedSlugs || []).map((slug) => slug.trim().toLowerCase()).filter(Boolean))
+  );
+  const excludedSlugs = Array.from(
+    new Set((options.excludeSlugs || []).map((slug) => slug.trim().toLowerCase()).filter(Boolean))
+  );
+  const selectedSeedSlugSet = new Set(selectedSeedSlugs);
+  const excludedSlugSet = new Set(excludedSlugs);
 
   const normalizedWallets = wallets.map((w) => w.trim().toLowerCase()).filter(Boolean);
-  const enteredWalletSet = new Set(normalizedWallets);
+  const resolvedInputWallets = await Promise.all(
+    normalizedWallets.map((wallet) =>
+      withTimeout(resolveOrbitWalletInput(wallet, openseaApiKey), 2500, wallet)
+    )
+  );
+  const enteredWalletSet = new Set([
+    ...normalizedWallets,
+    ...resolvedInputWallets.map((wallet) => wallet.trim().toLowerCase()).filter(Boolean),
+  ]);
 
   const debugState: OrbitDebug = {
     seedLimit,
@@ -485,7 +536,19 @@ export async function findCollectorsInOrbit(
     heldCount: c.heldCount,
   }));
 
-  const seedCollections = allCollections.slice(0, seedLimit);
+  const validSelectedCollections = selectedSeedSlugs.length
+    ? allCollections.filter((collection) => selectedSeedSlugSet.has(collection.slug))
+    : [];
+
+  const defaultSeedCollections = allCollections
+    .filter((collection) => !excludedSlugSet.has(collection.slug))
+    .slice(0, seedLimit);
+
+  const seedCollections = (
+    validSelectedCollections.length ? validSelectedCollections : defaultSeedCollections
+  )
+    .filter((collection) => !excludedSlugSet.has(collection.slug))
+    .slice(0, seedLimit);
 
   const enrichedDisplayTopCollections = await enrichOrbitCollections(
     displayTopCollections,
