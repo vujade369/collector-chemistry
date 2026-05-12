@@ -395,6 +395,11 @@ export default function OrbitTestPage() {
   const [expandedCollections, setExpandedCollections] = useState(false);
   const [hideInstitutional, setHideInstitutional] = useState(false);
   const [roomStates, setRoomStates] = useState<RoomStateMap>({});
+  const [outsideRooms, setOutsideRooms] = useState<OrbitCollection[]>([]);
+  const [collectionSearchQuery, setCollectionSearchQuery] = useState("");
+  const [collectionSearchResults, setCollectionSearchResults] = useState<OrbitCollection[]>([]);
+  const [collectionSearchLoading, setCollectionSearchLoading] = useState(false);
+  const [collectionSearchMessage, setCollectionSearchMessage] = useState("");
   const [activeFocusCount, setActiveFocusCount] = useState(0);
   const [activeExcludeCount, setActiveExcludeCount] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -422,12 +427,72 @@ export default function OrbitTestPage() {
     }
   }, [walletRows]);
 
+  useEffect(() => {
+    const query = collectionSearchQuery.trim();
+
+    if (query.length < 2) {
+      setCollectionSearchResults([]);
+      setCollectionSearchLoading(false);
+      setCollectionSearchMessage("");
+      return;
+    }
+
+    let cancelled = false;
+    setCollectionSearchLoading(true);
+    setCollectionSearchMessage("");
+
+    const timer = window.setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/converter/search?q=${encodeURIComponent(query)}`);
+        const json = await res.json();
+        const rawResults = Array.isArray(json?.results) ? json.results : [];
+
+        const results = rawResults
+          .map((item: any): OrbitCollection | null => {
+            const slug = String(item?.slug || item?.collection || "").trim();
+            if (!slug) return null;
+
+            return {
+              slug,
+              name: String(item?.name || item?.title || slug),
+              imageUrl: item?.imageUrl || item?.image_url || item?.bannerImageUrl || item?.banner_image_url || null,
+              avatarUrl: item?.imageUrl || item?.image_url || null,
+              bannerUrl: item?.bannerImageUrl || item?.banner_image_url || null,
+              openseaUrl: item?.openseaUrl || item?.opensea_url || `https://opensea.io/collection/${slug}`,
+            } as OrbitCollection;
+          })
+          .filter(Boolean) as OrbitCollection[];
+
+        if (!cancelled) {
+          setCollectionSearchResults(results.slice(0, 8));
+          setCollectionSearchMessage(results.length ? "" : "No collections found.");
+        }
+      } catch {
+        if (!cancelled) {
+          setCollectionSearchResults([]);
+          setCollectionSearchMessage("Collection search is unavailable right now.");
+        }
+      } finally {
+        if (!cancelled) setCollectionSearchLoading(false);
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [collectionSearchQuery]);
+
   const joinedWallets = walletRows
     .map((value) => value.trim())
     .filter(Boolean)
     .join(",");
 
-  const availableRooms = buildAvailableRooms(data);
+  const walletAvailableRooms = buildAvailableRooms(data);
+  const availableRooms = useMemo(
+    () => mergeUniqueRooms([...walletAvailableRooms, ...outsideRooms]),
+    [walletAvailableRooms, outsideRooms]
+  );
   const focusedSlugs = getFocusedSlugs(roomStates);
   const excludedSlugs = getExcludedSlugs(roomStates);
 
@@ -449,7 +514,7 @@ export default function OrbitTestPage() {
   }
 
   function initializeRoomStatesFromData(nextData: OrbitResponse) {
-    const rooms = buildAvailableRooms(nextData);
+    const rooms = mergeUniqueRooms([...buildAvailableRooms(nextData), ...outsideRooms]);
 
     setRoomStates((current) => {
       if (Object.keys(current).length === 0) {
@@ -492,6 +557,46 @@ export default function OrbitTestPage() {
         ...current,
         [slug]: nextMode,
       };
+    });
+  }
+
+  function addOutsideRoom(room: OrbitCollection) {
+    if (!room.slug) return;
+
+    const alreadyExists = availableRooms.some((existing) => existing.slug === room.slug);
+
+    if (!alreadyExists) {
+      setOutsideRooms((current) => mergeUniqueRooms([...current, room]));
+    }
+
+    setRoomStates((current) => {
+      const existingMode = current[room.slug || ""];
+      if (existingMode === "focus") return current;
+
+      const focusedCount = Object.values(current).filter((mode) => mode === "focus").length;
+      if (focusedCount >= 10) {
+        setCollectionSearchMessage("Focus is limited to 10 rooms. Ignore or exclude one to add another.");
+        return current;
+      }
+
+      return {
+        ...current,
+        [room.slug || ""]: "focus",
+      };
+    });
+
+    setCollectionSearchQuery("");
+    setCollectionSearchResults([]);
+  }
+
+  function removeOutsideRoom(slug?: string | null) {
+    if (!slug) return;
+
+    setOutsideRooms((current) => current.filter((room) => room.slug !== slug));
+    setRoomStates((current) => {
+      const next = { ...current };
+      delete next[slug];
+      return next;
     });
   }
 
@@ -901,6 +1006,170 @@ export default function OrbitTestPage() {
                   </p>
                 </section>
               )}
+
+              <section
+                style={{
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  background: "rgba(255,255,255,0.026)",
+                  borderRadius: 24,
+                  padding: 18,
+                  marginBottom: 28,
+                }}
+              >
+                <div style={{ marginBottom: 14 }}>
+                  <h2 style={{ margin: 0, fontSize: 20 }}>Add outside rooms</h2>
+                  <p style={{ margin: "6px 0 0", color: "#a99daa", fontSize: 13 }}>
+                    Search OpenSea collections to include rooms you do not currently hold.
+                  </p>
+                </div>
+
+                <div style={{ position: "relative" }}>
+                  <input
+                    value={collectionSearchQuery}
+                    onChange={(event) => setCollectionSearchQuery(event.target.value)}
+                    placeholder="Search collections…"
+                    style={{
+                      width: "100%",
+                      boxSizing: "border-box",
+                      background: "#120f15",
+                      color: "#f4edf4",
+                      border: "1px solid rgba(255,255,255,0.14)",
+                      borderRadius: 14,
+                      padding: "13px 15px",
+                      fontSize: 14,
+                      outline: "none",
+                    }}
+                  />
+
+                  {(collectionSearchLoading || collectionSearchResults.length > 0 || collectionSearchMessage) && (
+                    <div
+                      style={{
+                        marginTop: 10,
+                        border: "1px solid rgba(255,255,255,0.1)",
+                        background: "#100d13",
+                        borderRadius: 18,
+                        overflow: "hidden",
+                      }}
+                    >
+                      {collectionSearchLoading && (
+                        <p style={{ margin: 0, padding: 13, color: "#a99daa", fontSize: 13 }}>
+                          Searching…
+                        </p>
+                      )}
+
+                      {!collectionSearchLoading && collectionSearchResults.map((room) => {
+                        const image = room.imageUrl || room.avatarUrl || room.bannerUrl;
+                        const alreadyAdded = availableRooms.some((existing) => existing.slug === room.slug);
+                        const mode = room.slug ? roomStates[room.slug] : undefined;
+
+                        return (
+                          <button
+                            key={room.slug}
+                            type="button"
+                            onClick={() => addOutsideRoom(room)}
+                            style={{
+                              width: "100%",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              gap: 12,
+                              padding: "11px 13px",
+                              background: "transparent",
+                              border: "none",
+                              borderBottom: "1px solid rgba(255,255,255,0.07)",
+                              color: "#f4edf4",
+                              cursor: "pointer",
+                              textAlign: "left",
+                            }}
+                          >
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                              <span
+                                style={{
+                                  width: 28,
+                                  height: 28,
+                                  borderRadius: "50%",
+                                  overflow: "hidden",
+                                  background: "rgba(255,255,255,0.08)",
+                                  display: "grid",
+                                  placeItems: "center",
+                                  flexShrink: 0,
+                                  color: "#817583",
+                                }}
+                              >
+                                {image ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    src={image}
+                                    alt=""
+                                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                  />
+                                ) : (
+                                  "✦"
+                                )}
+                              </span>
+
+                              <span style={{ minWidth: 0 }}>
+                                <span
+                                  style={{
+                                    display: "block",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap",
+                                    fontSize: 13,
+                                  }}
+                                >
+                                  {room.name || room.slug}
+                                </span>
+                                <span style={{ display: "block", color: "#8f8292", fontSize: 11 }}>
+                                  {room.slug}
+                                </span>
+                              </span>
+                            </span>
+
+                            <span style={{ color: alreadyAdded ? "#a99daa" : "#d8cddd", fontSize: 12, flexShrink: 0 }}>
+                              {mode === "focus" ? "Focused" : alreadyAdded ? "Added" : "+ Focus"}
+                            </span>
+                          </button>
+                        );
+                      })}
+
+                      {!collectionSearchLoading && collectionSearchMessage && (
+                        <p style={{ margin: 0, padding: 13, color: "#a99daa", fontSize: 13 }}>
+                          {collectionSearchMessage}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {outsideRooms.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 13 }}>
+                    {outsideRooms.map((room) => (
+                      <button
+                        key={room.slug}
+                        type="button"
+                        onClick={() => removeOutsideRoom(room.slug)}
+                        title="Remove outside room"
+                        style={{
+                          border: "1px solid rgba(255,255,255,0.13)",
+                          background: "rgba(255,255,255,0.035)",
+                          color: "#d8cddd",
+                          borderRadius: 999,
+                          padding: "7px 10px",
+                          fontSize: 12,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {room.name || room.slug} ×
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <p style={{ margin: "12px 0 0", color: "#8f8292", fontSize: 12 }}>
+                  Add up to 10 focused rooms total.
+                </p>
+              </section>
 
               <div
                 style={{

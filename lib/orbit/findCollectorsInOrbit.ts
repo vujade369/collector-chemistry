@@ -254,6 +254,45 @@ async function fetchOpenSeaCollectionDisplay(
   }
 }
 
+async function resolveOpenSeaCollectionSeed(
+  slug: string,
+  openseaApiKey: string | undefined
+): Promise<RawCollection | null> {
+  const safeSlug = slug.trim().toLowerCase();
+  if (!safeSlug || !openseaApiKey) return null;
+
+  try {
+    const [display, nftRes] = await Promise.all([
+      fetchOpenSeaCollectionDisplay(safeSlug, openseaApiKey),
+      fetch(`${OPENSEA_BASE_URL}/collection/${encodeURIComponent(safeSlug)}/nfts?limit=1`, {
+        headers: { "x-api-key": openseaApiKey },
+        cache: "no-store",
+      }),
+    ]);
+
+    if (!nftRes.ok) return null;
+
+    const json = await nftRes.json();
+    const nft = Array.isArray(json?.nfts) ? json.nfts[0] : null;
+    const contractAddress = pickString(
+      nft?.contract,
+      nft?.contract_address,
+      nft?.asset_contract?.address
+    );
+
+    if (!contractAddress) return null;
+
+    return {
+      slug: safeSlug,
+      name: display?.name || safeSlug,
+      contractAddress: contractAddress.toLowerCase(),
+      heldCount: 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function enrichOrbitCollections<T extends OrbitCollection>(
   collections: T[],
   openseaApiKey: string | undefined
@@ -359,6 +398,20 @@ type RawCollection = {
   name: string;
   heldCount: number;
 };
+
+function mergeRawCollections(collections: RawCollection[]): RawCollection[] {
+  const seen = new Set<string>();
+  const merged: RawCollection[] = [];
+
+  for (const collection of collections) {
+    const key = collection.slug || collection.contractAddress;
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    merged.push(collection);
+  }
+
+  return merged;
+}
 
 function buildTopCollectionsFromNFTs(nfts: WalletOwnerNFT[]): RawCollection[] {
   const collectionMap = new Map<string, RawCollection>();
@@ -578,16 +631,38 @@ export async function findCollectorsInOrbit(
     heldCount: c.heldCount,
   }));
 
-  const validSelectedCollections = selectedSeedSlugs.length
+  const walletSelectedCollections = selectedSeedSlugs.length
     ? allCollections.filter((collection) => selectedSeedSlugSet.has(collection.slug))
     : [];
+
+  const walletSelectedSlugSet = new Set(walletSelectedCollections.map((collection) => collection.slug));
+  const outsideSelectedSlugs = selectedSeedSlugs.filter(
+    (slug) => !walletSelectedSlugSet.has(slug) && !excludedSlugSet.has(slug)
+  );
+
+  const outsideSelectedResults = selectedSeedSlugs.length
+    ? await Promise.allSettled(
+        outsideSelectedSlugs.map((slug) =>
+          withTimeout(resolveOpenSeaCollectionSeed(slug, openseaApiKey), 3500, null)
+        )
+      )
+    : [];
+
+  const outsideSelectedCollections = outsideSelectedResults
+    .map((result) => (result.status === "fulfilled" ? result.value : null))
+    .filter((collection): collection is RawCollection => Boolean(collection));
+
+  const selectedSeedCollections = mergeRawCollections([
+    ...walletSelectedCollections,
+    ...outsideSelectedCollections,
+  ]);
 
   const defaultSeedCollections = allCollections
     .filter((collection) => !excludedSlugSet.has(collection.slug))
     .slice(0, seedLimit);
 
   const seedCollections = (
-    validSelectedCollections.length ? validSelectedCollections : defaultSeedCollections
+    selectedSeedSlugs.length ? selectedSeedCollections : defaultSeedCollections
   )
     .filter((collection) => !excludedSlugSet.has(collection.slug))
     .slice(0, seedLimit);
@@ -684,6 +759,8 @@ export async function findCollectorsInOrbit(
   }
 
   // Step 5: Rank candidates by sharedSeedCount desc, then specificity sum desc
+  const minimumSharedSeedCount = seedCollections.length <= 1 ? 1 : 2;
+
   const rankedCandidates = [...candidateMap.entries()]
     .map(([wallet, data]) => ({
       wallet,
@@ -692,7 +769,7 @@ export async function findCollectorsInOrbit(
       sharedRoomHoldings: data.sharedRoomHoldings,
       score: data.specificitySum,
     }))
-    .filter((c) => c.sharedSeedCount >= 2)
+    .filter((c) => c.sharedSeedCount >= minimumSharedSeedCount)
     .sort((a, b) => {
       if (b.sharedSeedCount !== a.sharedSeedCount) return b.sharedSeedCount - a.sharedSeedCount;
       return b.score - a.score;
