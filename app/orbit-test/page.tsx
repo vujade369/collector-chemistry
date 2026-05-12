@@ -22,6 +22,7 @@ type OrbitCandidate = {
   strength?: string | null;
   sharedSeedCollections?: string[];
   sharedSeedCount?: number;
+  sharedRoomHoldings?: Record<string, number>;
   score?: number;
   proof?: string;
 };
@@ -135,13 +136,16 @@ function RoomChip({
   slug,
   collection,
   compact = false,
+  holdingCount,
 }: {
   slug: string;
   collection?: OrbitCollection;
   compact?: boolean;
+  holdingCount?: number;
 }) {
   const image = collectionImage(collection);
   const name = collection?.name || label(collection?.slug || slug);
+  const displayCount = typeof holdingCount === "number" && holdingCount > 1 ? holdingCount : null;
 
   return (
     <a
@@ -195,7 +199,7 @@ function RoomChip({
           whiteSpace: "nowrap",
         }}
       >
-        {name}
+        {name}{displayCount ? ` · ${displayCount}` : ""}
       </span>
     </a>
   );
@@ -826,7 +830,7 @@ export default function OrbitTestPage() {
                             alignItems: "center",
                             gap: 8,
                             borderRadius: 999,
-                            padding: "7px 10px 7px 7px",
+                            padding: "8px 12px 8px 8px",
                             border: isFocus
                               ? "1px solid rgba(164,139,255,0.62)"
                               : isExclude
@@ -839,7 +843,7 @@ export default function OrbitTestPage() {
                                 : "rgba(255,255,255,0.035)",
                             color: isFocus ? "#f1ecff" : isExclude ? "#a99daa" : "#8f8292",
                             cursor: "pointer",
-                            maxWidth: 260,
+                            maxWidth: 340,
                           }}
                         >
                           <span
@@ -875,7 +879,7 @@ export default function OrbitTestPage() {
                               fontSize: 12,
                             }}
                           >
-                            {room.name || room.slug}
+                            {room.name || room.slug}{typeof room.heldCount === "number" && room.heldCount > 0 ? ` · ${room.heldCount} held` : ""}
                           </span>
 
                           <span
@@ -948,7 +952,7 @@ export default function OrbitTestPage() {
                   const score = displayOrbitPercent(index);
                   const institutional = looksInstitutional(candidate);
                   const sharedRooms = candidate.sharedSeedCollections || [];
-                  const visibleSharedRooms = sharedRooms.slice(0, 4);
+                  const visibleSharedRooms = sharedRooms.slice(0, 3);
                   const hiddenSharedRoomCount = Math.max(sharedRooms.length - visibleSharedRooms.length, 0);
 
                   return (
@@ -964,7 +968,7 @@ export default function OrbitTestPage() {
                         overflow: "hidden",
                         display: "flex",
                         flexDirection: "column",
-                        height: 548,
+                        height: 604,
                       }}
                     >
                       <div
@@ -1184,7 +1188,7 @@ export default function OrbitTestPage() {
                           value={candidate.bioDisplay || "No bio found. The signal is in the holdings."}
                         />
 
-                        <div style={{ marginBottom: 14, height: 128, overflow: "hidden" }}>
+                        <div style={{ marginBottom: 14, height: 196, overflow: "hidden" }}>
                         <div
                           style={{
                             display: "flex",
@@ -1201,15 +1205,96 @@ export default function OrbitTestPage() {
                             {candidate.sharedSeedCount || sharedRooms.length} total
                           </p>
                         </div>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
-                          {visibleSharedRooms.map((slug) => (
-                            <RoomChip
-                              key={`${candidate.wallet}-${slug}`}
-                              slug={slug}
-                              collection={collectionMap.get(slug)}
-                              compact
-                            />
-                          ))}
+                        <div
+                          style={{
+                            display: "grid",
+                            gap: 8,
+                          }}
+                        >
+                          {visibleSharedRooms.map((slug) => {
+                            const collection = collectionMap.get(slug);
+                            const image = collectionImage(collection);
+                            const roomName = collection?.name || label(collection?.slug || slug);
+                            const count = candidate.sharedRoomHoldings?.[slug] || 1;
+
+                            return (
+                              <a
+                                key={`${candidate.wallet}-${slug}`}
+                                href={collectionUrl(collection, slug)}
+                                target="_blank"
+                                rel="noreferrer"
+                                title={`${roomName} · ${count} held`}
+                                style={{
+                                  display: "grid",
+                                  gridTemplateColumns: "44px 24px minmax(0, 1fr)",
+                                  alignItems: "center",
+                                  gap: 9,
+                                  minHeight: 38,
+                                  border: "1px solid rgba(255,255,255,0.12)",
+                                  background: "rgba(255,255,255,0.035)",
+                                  borderRadius: 14,
+                                  padding: "6px 9px 6px 6px",
+                                  color: "#eee5ef",
+                                  fontSize: 12,
+                                  textDecoration: "none",
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    height: 28,
+                                    minWidth: 36,
+                                    borderRadius: 10,
+                                    background: "rgba(164,139,255,0.2)",
+                                    border: "1px solid rgba(164,139,255,0.34)",
+                                    color: "#f1ecff",
+                                    fontSize: 13,
+                                    fontWeight: 850,
+                                    lineHeight: 1,
+                                  }}
+                                >
+                                  {count}
+                                </span>
+
+                                <span
+                                  style={{
+                                    width: 24,
+                                    height: 24,
+                                    borderRadius: "50%",
+                                    overflow: "hidden",
+                                    background: "#1b1520",
+                                    display: "grid",
+                                    placeItems: "center",
+                                    color: "#817583",
+                                  }}
+                                >
+                                  {image ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img
+                                      src={image}
+                                      alt=""
+                                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                    />
+                                  ) : (
+                                    "✦"
+                                  )}
+                                </span>
+
+                                <span
+                                  style={{
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap",
+                                    fontSize: 12,
+                                  }}
+                                >
+                                  {roomName}
+                                </span>
+                              </a>
+                            );
+                          })}
                           {hiddenSharedRoomCount > 0 && (
                             <span
                               style={{
@@ -1223,7 +1308,7 @@ export default function OrbitTestPage() {
                                 fontSize: 11,
                               }}
                             >
-                              +{hiddenSharedRoomCount} more
+                              +{hiddenSharedRoomCount} more rooms
                             </span>
                           )}
                         </div>

@@ -45,6 +45,7 @@ export type OrbitCandidate = {
   strength: CandidateStrength;
   sharedSeedCollections: string[];
   sharedSeedCount: number;
+  sharedRoomHoldings: Record<string, number>;
   score: number;
   proof: string;
 };
@@ -392,33 +393,74 @@ function buildTopCollectionsFromNFTs(nfts: WalletOwnerNFT[]): RawCollection[] {
     .sort((a, b) => b.heldCount - a.heldCount);
 }
 
-type AlchemyOwnersResponse = {
-  owners?: string[];
+type AlchemyOwnerTokenBalance = {
+  tokenId?: string;
+  balance?: string | number;
 };
+
+type AlchemyOwnerWithBalances = {
+  ownerAddress?: string;
+  tokenBalances?: AlchemyOwnerTokenBalance[];
+};
+
+type AlchemyOwnersResponse = {
+  owners?: Array<string | AlchemyOwnerWithBalances>;
+};
+
+type CollectionOwnerHolding = {
+  address: string;
+  heldCount: number;
+};
+
+function parseOwnerHeldCount(owner: string | AlchemyOwnerWithBalances): CollectionOwnerHolding | null {
+  if (typeof owner === "string") {
+    const address = owner.trim().toLowerCase();
+    return address ? { address, heldCount: 1 } : null;
+  }
+
+  const address = String(owner?.ownerAddress || "").trim().toLowerCase();
+  if (!address) return null;
+
+  const tokenBalances = Array.isArray(owner?.tokenBalances) ? owner.tokenBalances : [];
+  if (tokenBalances.length === 0) return { address, heldCount: 1 };
+
+  let total = 0;
+  for (const token of tokenBalances) {
+    const parsed = Number(token?.balance ?? 1);
+    total += Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+  }
+
+  return { address, heldCount: Math.max(total, tokenBalances.length, 1) };
+}
 
 async function fetchOwnersForContract(
   contractAddress: string,
   alchemyApiKey: string
-): Promise<{ owners: string[]; failed: boolean }> {
-  const url = `https://eth-mainnet.g.alchemy.com/nft/v3/${alchemyApiKey}/getOwnersForContract?contractAddress=${contractAddress}&withTokenBalances=false`;
-  const fallback = { owners: [] as string[], failed: true };
+): Promise<{ owners: CollectionOwnerHolding[]; failed: boolean }> {
+  const url = `https://eth-mainnet.g.alchemy.com/nft/v3/${alchemyApiKey}/getOwnersForContract?contractAddress=${contractAddress}&withTokenBalances=true`;
+  const fallback = { owners: [] as CollectionOwnerHolding[], failed: true };
 
   for (let attempt = 1; attempt <= 3; attempt++) {
     const request = fetch(url, { cache: "no-store" })
       .then(async (res) => {
-        if (!res.ok) return { ok: false, status: res.status, owners: [] as string[] };
+        if (!res.ok) return { ok: false, status: res.status, owners: [] as CollectionOwnerHolding[] };
         try {
           const data = (await res.json()) as AlchemyOwnersResponse;
-          return { ok: true, status: res.status, owners: Array.isArray(data.owners) ? data.owners : [] };
+          const owners = Array.isArray(data.owners)
+            ? data.owners
+                .map(parseOwnerHeldCount)
+                .filter((owner): owner is CollectionOwnerHolding => Boolean(owner))
+            : [];
+          return { ok: true, status: res.status, owners };
         } catch {
-          return { ok: false, status: res.status, owners: [] as string[] };
+          return { ok: false, status: res.status, owners: [] as CollectionOwnerHolding[] };
         }
       })
       .catch(() => ({ ok: false, status: 0, owners: [] as string[] }));
 
     const result = await withTimeout(request, 10_000, { ok: false, status: 0, owners: [] as string[] });
 
-    if (result.ok) return { owners: result.owners, failed: false };
+    if (result.ok) return { owners: result.owners as CollectionOwnerHolding[], failed: false };
 
     const canRetry = attempt < 3 && (result.status === 0 || result.status === 429 || result.status >= 500);
     if (!canRetry) return fallback;
@@ -586,7 +628,14 @@ export async function findCollectorsInOrbit(
 
   // Step 4: Build candidate set and seed collection stats
   const orbitSeedCollections: OrbitSeedCollection[] = [];
-  const candidateMap = new Map<string, { sharedSeedCollections: string[]; specificitySum: number }>();
+  const candidateMap = new Map<
+    string,
+    {
+      sharedSeedCollections: string[];
+      sharedRoomHoldings: Record<string, number>;
+      specificitySum: number;
+    }
+  >();
 
   for (const result of ownerResults) {
     if (result.status === "rejected") continue;
@@ -616,16 +665,18 @@ export async function findCollectorsInOrbit(
     const seedIdentifier = collection.slug || collection.contractAddress;
 
     for (const owner of owners) {
-      const ownerLower = owner.toLowerCase();
-      if (isExcludedAddress(ownerLower, enteredWalletSet)) continue;
+      const normalizedOwner = owner.address.toLowerCase();
+      if (isExcludedAddress(normalizedOwner, enteredWalletSet)) continue;
 
-      const existing = candidateMap.get(ownerLower);
+      const existing = candidateMap.get(normalizedOwner);
       if (existing) {
         existing.sharedSeedCollections.push(seedIdentifier);
+        existing.sharedRoomHoldings[seedIdentifier] = owner.heldCount;
         existing.specificitySum += specificityScore;
       } else {
-        candidateMap.set(ownerLower, {
+        candidateMap.set(normalizedOwner, {
           sharedSeedCollections: [seedIdentifier],
+          sharedRoomHoldings: { [seedIdentifier]: owner.heldCount },
           specificitySum: specificityScore,
         });
       }
@@ -638,6 +689,7 @@ export async function findCollectorsInOrbit(
       wallet,
       sharedSeedCollections: data.sharedSeedCollections,
       sharedSeedCount: data.sharedSeedCollections.length,
+      sharedRoomHoldings: data.sharedRoomHoldings,
       score: data.specificitySum,
     }))
     .filter((c) => c.sharedSeedCount >= 2)
@@ -705,6 +757,7 @@ export async function findCollectorsInOrbit(
       strength,
       sharedSeedCollections: candidate.sharedSeedCollections,
       sharedSeedCount: candidate.sharedSeedCount,
+      sharedRoomHoldings: candidate.sharedRoomHoldings,
       score: Math.round(candidate.score * 10_000) / 10_000,
       proof: `Appears across ${candidate.sharedSeedCount} of this wallet's top collection rooms.`,
     });
