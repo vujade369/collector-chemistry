@@ -5,7 +5,9 @@ const OPENSEA_API_KEY_ENV = process.env.OPENSEA_API_KEY;
 const OPENSEA_BASE_URL = "https://api.opensea.io/api/v2";
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const BURN_ADDRESS = "0x000000000000000000000000000000000000dead";
-const MAX_OWNER_PAGES = 1;
+const DEFAULT_OWNER_PAGES = 1;
+const OUTSIDE_OWNER_PAGES = 20;
+const MAX_OWNER_PAGES = OUTSIDE_OWNER_PAGES;
 
 export type OrbitCollection = {
   slug: string;
@@ -458,6 +460,7 @@ type AlchemyOwnerWithBalances = {
 
 type AlchemyOwnersResponse = {
   owners?: Array<string | AlchemyOwnerWithBalances>;
+  pageKey?: string;
 };
 
 type CollectionOwnerHolding = {
@@ -488,39 +491,98 @@ function parseOwnerHeldCount(owner: string | AlchemyOwnerWithBalances): Collecti
 
 async function fetchOwnersForContract(
   contractAddress: string,
-  alchemyApiKey: string
+  alchemyApiKey: string,
+  maxPages = DEFAULT_OWNER_PAGES
 ): Promise<{ owners: CollectionOwnerHolding[]; failed: boolean }> {
-  const url = `https://eth-mainnet.g.alchemy.com/nft/v3/${alchemyApiKey}/getOwnersForContract?contractAddress=${contractAddress}&withTokenBalances=true`;
   const fallback = { owners: [] as CollectionOwnerHolding[], failed: true };
+  const ownerMap = new Map<string, CollectionOwnerHolding>();
+  let pageKey: string | null = null;
 
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    const request = fetch(url, { cache: "no-store" })
-      .then(async (res) => {
-        if (!res.ok) return { ok: false, status: res.status, owners: [] as CollectionOwnerHolding[] };
-        try {
-          const data = (await res.json()) as AlchemyOwnersResponse;
-          const owners = Array.isArray(data.owners)
-            ? data.owners
-                .map(parseOwnerHeldCount)
-                .filter((owner): owner is CollectionOwnerHolding => Boolean(owner))
-            : [];
-          return { ok: true, status: res.status, owners };
-        } catch {
-          return { ok: false, status: res.status, owners: [] as CollectionOwnerHolding[] };
+  for (let page = 0; page < maxPages; page++) {
+    const params = new URLSearchParams({
+      contractAddress,
+      withTokenBalances: "true",
+    });
+
+    if (pageKey) params.set("pageKey", pageKey);
+
+    const url = `https://eth-mainnet.g.alchemy.com/nft/v3/${alchemyApiKey}/getOwnersForContract?${params.toString()}`;
+
+    let pageSucceeded = false;
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const request = fetch(url, { cache: "no-store" })
+        .then(async (res) => {
+          if (!res.ok) {
+            return {
+              ok: false,
+              status: res.status,
+              owners: [] as CollectionOwnerHolding[],
+              pageKey: null as string | null,
+            };
+          }
+
+          try {
+            const data = (await res.json()) as AlchemyOwnersResponse;
+            const owners = Array.isArray(data.owners)
+              ? data.owners
+                  .map(parseOwnerHeldCount)
+                  .filter((owner): owner is CollectionOwnerHolding => Boolean(owner))
+              : [];
+
+            return {
+              ok: true,
+              status: res.status,
+              owners,
+              pageKey: typeof data.pageKey === "string" && data.pageKey.trim() ? data.pageKey.trim() : null,
+            };
+          } catch {
+            return {
+              ok: false,
+              status: res.status,
+              owners: [] as CollectionOwnerHolding[],
+              pageKey: null as string | null,
+            };
+          }
+        })
+        .catch(() => ({
+          ok: false,
+          status: 0,
+          owners: [] as CollectionOwnerHolding[],
+          pageKey: null as string | null,
+        }));
+
+      const result = await withTimeout(request, 15_000, {
+        ok: false,
+        status: 0,
+        owners: [] as CollectionOwnerHolding[],
+        pageKey: null as string | null,
+      });
+
+      if (result.ok) {
+        for (const owner of result.owners) {
+          const existing = ownerMap.get(owner.address);
+          if (existing) {
+            existing.heldCount += owner.heldCount;
+          } else {
+            ownerMap.set(owner.address, { ...owner });
+          }
         }
-      })
-      .catch(() => ({ ok: false, status: 0, owners: [] as string[] }));
 
-    const result = await withTimeout(request, 10_000, { ok: false, status: 0, owners: [] as string[] });
+        pageKey = result.pageKey;
+        pageSucceeded = true;
+        break;
+      }
 
-    if (result.ok) return { owners: result.owners as CollectionOwnerHolding[], failed: false };
+      const canRetry = attempt < 3 && (result.status === 0 || result.status === 429 || result.status >= 500);
+      if (!canRetry) return ownerMap.size ? { owners: [...ownerMap.values()], failed: false } : fallback;
+      await sleep(1000 * attempt);
+    }
 
-    const canRetry = attempt < 3 && (result.status === 0 || result.status === 429 || result.status >= 500);
-    if (!canRetry) return fallback;
-    await sleep(1000 * attempt);
+    if (!pageSucceeded || !pageKey) break;
   }
 
-  return fallback;
+  return { owners: [...ownerMap.values()], failed: ownerMap.size === 0 };
 }
 
 type OpenSeaAccountData = {
@@ -721,7 +783,16 @@ export async function findCollectorsInOrbit(
 
   const ownerResults = await Promise.allSettled(
     seedCollections.map(async (collection) => {
-      const result = await fetchOwnersForContract(collection.contractAddress, alchemyApiKey);
+      const maxOwnerPages = outsideSelectedSlugs.includes(collection.slug)
+        ? OUTSIDE_OWNER_PAGES
+        : DEFAULT_OWNER_PAGES;
+
+      const result = await fetchOwnersForContract(
+        collection.contractAddress,
+        alchemyApiKey,
+        maxOwnerPages
+      );
+
       return { collection, owners: result.owners, failed: result.failed };
     })
   );
@@ -787,16 +858,37 @@ export async function findCollectorsInOrbit(
   // Step 5: Rank candidates by sharedSeedCount desc, then specificity sum desc
   const minimumSharedSeedCount = seedCollections.length <= 1 ? 1 : 2;
 
+  const priorityOutsideSeedSlugs = outsideSelectedSlugs.filter((slug) => !excludedSlugSet.has(slug));
+  const hasPriorityOutsideSeed = priorityOutsideSeedSlugs.length > 0;
+
   const rankedCandidates = [...candidateMap.entries()]
-    .map(([wallet, data]) => ({
-      wallet,
-      sharedSeedCollections: data.sharedSeedCollections,
-      sharedSeedCount: data.sharedSeedCollections.length,
-      sharedRoomHoldings: data.sharedRoomHoldings,
-      score: data.specificitySum,
-    }))
-    .filter((c) => c.sharedSeedCount >= minimumSharedSeedCount)
+    .map(([wallet, data]) => {
+      const priorityOutsideScore = priorityOutsideSeedSlugs.reduce((sum, slug) => {
+        const heldCount = data.sharedRoomHoldings[slug] || 0;
+        if (!heldCount) return sum;
+
+        // Manually added outside rooms are intentional anchors.
+        // Presence matters first; extra holdings add signal without letting whales dominate.
+        return sum + 2 + Math.min(heldCount, 10) * 0.25;
+      }, 0);
+
+      return {
+        wallet,
+        sharedSeedCollections: data.sharedSeedCollections,
+        sharedSeedCount: data.sharedSeedCollections.length,
+        sharedRoomHoldings: data.sharedRoomHoldings,
+        score: data.specificitySum + priorityOutsideScore,
+      };
+    })
+    .filter((c) => {
+      if (c.sharedSeedCount < minimumSharedSeedCount) return false;
+
+      if (!hasPriorityOutsideSeed) return true;
+
+      return priorityOutsideSeedSlugs.some((slug) => (c.sharedRoomHoldings[slug] || 0) > 0);
+    })
     .sort((a, b) => {
+      if (hasPriorityOutsideSeed && b.score !== a.score) return b.score - a.score;
       if (b.sharedSeedCount !== a.sharedSeedCount) return b.sharedSeedCount - a.sharedSeedCount;
       return b.score - a.score;
     })
