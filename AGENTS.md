@@ -68,9 +68,9 @@ Use the right source for the job. Do not make one source do another source's wor
 |---|---|---|
 | Bulk wallet NFTs, metadata, transfer facts | Alchemy | `docs/ALCHEMY_CAPABILITIES.md`, `docs/DATA_SOURCES.md` |
 | OpenSea visibility, hidden/spam filtering, slugs, profile identity, marketplace destinations | OpenSea REST | `docs/OPENSEA_INTEGRATION.md`, `docs/DATA_SOURCES.md` |
-| Offers, listings, floors, collection search, marketplace context | OpenSea REST/MCP | `docs/OPENSEA_INTEGRATION.md`, `.agents/skills/opensea/SKILL.md` |
+| Offers, listings, floors, collection search, marketplace context | OpenSea REST/MCP | `.agents/skills/constellate-data-sources/SKILL.md`, `docs/OPENSEA_INTEGRATION.md` |
 | Runtime app logic | Existing server helpers | `docs/API_PATTERNS.md`, `docs/ARCHITECTURE.md` |
-| CLI/schema discovery during development | OpenSea CLI/OpenAPI/skill scripts | `.agents/skills/opensea/SKILL.md`, OpenAPI only as needed |
+| Schema discovery during development | OpenSea docs/API references, only as needed | `.agents/skills/constellate-data-sources/SKILL.md`, `docs/OPENSEA_INTEGRATION.md` |
 | Interpretation, archetypes, summaries, taste reads | Constellate logic and prompts | `docs/PRODUCT_SOUL.md`, `docs/INSIGHT_ENGINE.md`, `docs/ETHICAL_AI_BUILDING.md` |
 | Visual hierarchy, UI, page modules | Product UI agent | `docs/DESIGN_SYSTEM.md`, `docs/PROFILE_VISUAL_BRIEF.md`, relevant page spec |
 
