@@ -4,8 +4,8 @@
 
 - OpenSea LLM discovery map: https://opensea.io/llms.txt
 - OpenSea v2 OpenAPI spec: https://api.opensea.io/api/v2/openapi.json
-- Local skill workflow: `.agents/skills/opensea/SKILL.md`
-- Local examples: `.agents/skills/opensea/scripts/*`
+- Local read-only workflow: `.agents/skills/constellate-opensea-readonly/SKILL.md`
+- OpenSea safety policy: `.agents/policies/opensea-readonly.yaml`
 
 Use `llms.txt` for high-level capability discovery. Use the OpenAPI spec for endpoint names, params, and response schema. Treat local skills and scripts as developer references for Codex workflows, not runtime dependencies.
 
