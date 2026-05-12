@@ -135,6 +135,7 @@ type AcquisitionDNA = {
   totalMatched?: number;
   totalUnmatched?: number;
   minted: { count: number; percent: number };
+  purchased?: { count: number; percent: number };
   received: { count: number; percent: number };
   unknown: { count: number; percent: number };
   activityByQuarter?: Array<{ key?: string; year?: number; quarter?: number; count?: number }>;
@@ -162,17 +163,16 @@ type RhythmChartModel = {
   averageY: number;
 };
 
-type PreviewNFT = {
-  imageUrl: string;
-  name: string;
-  collectionName: string;
-};
-
 type TasteSlice = { label: string; value: number; count: number; key: string };
 
 type WalletResolveResponse =
   | { ok: true; address: string; message?: string }
   | { ok: false; message?: string };
+
+const LOADING_ARTIFACT_IMAGE_URL =
+  "https://arweave.net/zdYyQZPXrMuLvbqFou8STWUkBP4mg6osCFud5wny0CQ";
+const LOADING_ARTIFACT_IFRAME_URL =
+  "https://ipfs.io/ipfs/bafkreifvup3adpgrazguszphfvhvuve7nmuchpkfxdgnkkcjfakgwxxrna";
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
@@ -259,10 +259,14 @@ function formatCollectorSince(timestamp?: string): string {
   return date.toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
 }
 
-function getEntryPatternRead(percent: number): string {
-  if (percent >= 50) return "You tend to show up before the crowd.";
-  if (percent >= 25) return "You mix early discovery with selective collecting.";
-  if (percent >= 10) return "You have some early-entry signals, but most of the wallet was built after mint.";
+function getEntryPatternRead(mintedPercent: number, purchasedPercent = 0): string {
+  if (mintedPercent >= 50) return "This wallet shows a strong primary-entry pattern.";
+  if (purchasedPercent >= 40) return "This wallet reads more like a later-curated collection than a mostly primary-mint wallet.";
+  if (mintedPercent >= 10 && purchasedPercent >= 10) {
+    return "This wallet has some early-entry signals, with a meaningful share built through later curation.";
+  }
+  if (mintedPercent >= 25) return "You mix early discovery with selective collecting.";
+  if (mintedPercent >= 10) return "You have some early-entry signals, but most of the wallet was built after mint.";
   return "This wallet reads like a curator's eye, not an early mover.";
 }
 
@@ -407,17 +411,17 @@ function formatCategoryContext(pieceCount: number, collections?: Array<{ name: s
 function getCategoryAccent(categoryKey: string): string {
   const key = normalizeDisplayCategoryKey(categoryKey);
   const mapping: Record<string, string> = {
-    meme: "#ff3399",
-    pfp: "#29b6f6",
-    generative: "#9575ff",
-    fine_art: "#ff8c42",
-    utility: "#39d353",
-    access: "#39d353",
-    domains: "#00e5cc",
-    music: "#00e5cc",
-    photography: "#ffcc00",
-    gaming: "#a78bfa",
-    other: "#444",
+    meme:        "#00E676",
+    pfp:         "#4A9FFF",
+    generative:  "#B44FFF",
+    fine_art:    "#F5A623",
+    utility:     "#00BFA5",
+    access:      "#00BFA5",
+    domains:     "#90A4AE",
+    music:       "#FF4081",
+    photography: "#29B6F6",
+    gaming:      "#FF5722",
+    other:       "#546E7A",
   };
   return mapping[key] || "#555";
 }
@@ -512,30 +516,14 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<ProfileResponse | null>(null);
-  const [previewImages, setPreviewImages] = useState<PreviewNFT[]>([]);
-  const [activePreviewIndex, setActivePreviewIndex] = useState(0);
+  const [artifactFailed, setArtifactFailed] = useState(false);
+  const [showResults, setShowResults] = useState(false);
   const [compareWallet, setCompareWallet] = useState("");
   const [compareResolveError, setCompareResolveError] = useState("");
   const [resolvingCompare, setResolvingCompare] = useState(false);
   const [selectedCategoryKey, setSelectedCategoryKey] = useState("");
   const inFlightProfileQueryRef = useRef<string | null>(null);
   const profileRequestIdRef = useRef(0);
-
-  useEffect(() => {
-    if (!loading || previewImages.length <= 1) return;
-
-    const timer = setInterval(() => {
-      setActivePreviewIndex((prev) => {
-        if (prev >= previewImages.length - 1) {
-          clearInterval(timer);
-          return prev;
-        }
-        return prev + 1;
-      });
-    }, 1800);
-
-    return () => clearInterval(timer);
-  }, [loading, previewImages.length]);
 
   useEffect(() => {
     async function load() {
@@ -550,8 +538,8 @@ export default function ProfilePage() {
         inFlightProfileQueryRef.current = null;
         setError("Nothing found for this wallet.");
         setResult(null);
-        setPreviewImages([]);
-        setActivePreviewIndex(0);
+        setArtifactFailed(false);
+        setShowResults(false);
         return;
       }
 
@@ -565,21 +553,8 @@ export default function ProfilePage() {
       setLoading(true);
       setError("");
       setResult(null);
-      setPreviewImages([]);
-      setActivePreviewIndex(0);
-
-      void fetch(`/api/profile/preview?wallet=${encodeURIComponent(profileQuery)}`)
-        .then(async (previewRes) => {
-          if (!previewRes.ok) return;
-          const data = (await previewRes.json()) as { images?: PreviewNFT[] };
-          const isCurrent =
-            profileRequestIdRef.current === requestId &&
-            inFlightProfileQueryRef.current === profileQuery;
-          if (!isCurrent) return;
-          setActivePreviewIndex(0);
-          setPreviewImages((data.images || []).slice(0, 12));
-        })
-        .catch(() => {});
+      setArtifactFailed(false);
+      setShowResults(false);
 
       try {
         const res = await fetch(
@@ -615,8 +590,6 @@ export default function ProfilePage() {
         ) {
           inFlightProfileQueryRef.current = null;
           setLoading(false);
-          setPreviewImages([]);
-          setActivePreviewIndex(0);
         }
       }
     }
@@ -628,6 +601,8 @@ export default function ProfilePage() {
 
   const profile = result?.profile || null;
   const resolvedWallet = result?.wallet || walletFromQuery;
+  const profileReady = !loading && !error && Boolean(profile);
+  const showLoadingArtifact = loading || (profileReady && !showResults);
 
   const fallbackDisplayName = useMemo(
     () => toDisplayName(resolvedWallet),
@@ -904,28 +879,71 @@ export default function ProfilePage() {
       <div className="profile-shell">
 
         {/* Loading */}
-{loading && (
-  <section className="profile-loading-panel">
-    {previewImages.length > 0 && (
-      <div className="loading-preview-stage" aria-hidden="true">
-        {previewImages.slice(0, 12).map((preview, idx) => (
-          <img
-            key={`${preview.imageUrl}-${idx}`}
-            src={preview.imageUrl}
-            alt=""
-            className={`loading-preview-image${idx === activePreviewIndex ? " is-active" : ""}`}
-            loading="lazy"
-            decoding="async"
-            onError={(event) => {
-              event.currentTarget.style.display = "none";
-            }}
-          />
-        ))}
-      </div>
-    )}
-    {previewImages.length === 0 && <div className="loading-ring" aria-hidden="true" />}
-  </section>
-)}
+        {showLoadingArtifact && (
+          <section className="profile-loading-panel" aria-live="polite">
+            <div className="loading-artifact-copy">
+              <p className="profile-eyebrow">Loading Artifact</p>
+              <h2>Watch a live cultural signal while your constellation forms.</h2>
+            </div>
+
+            <article className="loading-artifact-card">
+              <div className="loading-artifact-frame">
+                {!artifactFailed ? (
+                  <iframe
+                    src={LOADING_ARTIFACT_IFRAME_URL}
+                    title="6529 NEWS by 6529 Collections"
+                    className="loading-artifact-preview"
+                    loading="eager"
+                    sandbox="allow-scripts"
+                    onError={() => setArtifactFailed(true)}
+                  />
+                ) : (
+                  <img
+                    src={LOADING_ARTIFACT_IMAGE_URL}
+                    alt="6529 NEWS by 6529 Collections"
+                    className="loading-artifact-preview"
+                    loading="eager"
+                    decoding="async"
+                  />
+                )}
+              </div>
+
+              <div className="loading-artifact-meta">
+                <div>
+                  <p className="loading-artifact-title">6529 NEWS</p>
+                  <p className="loading-artifact-creator">6529 Collections</p>
+                </div>
+                <p className="loading-artifact-context">
+                  A decentralized news protocol for the 6529 world. Governed by TDH.
+                </p>
+                {artifactFailed && (
+                  <p className="loading-artifact-fallback">
+                    Artifact animation unavailable. Continuing to read the wallet.
+                  </p>
+                )}
+              </div>
+            </article>
+
+            <div className="loading-signal">
+              {profileReady ? (
+                <div className="loading-ready-state">
+                  <p>Your constellation is ready.</p>
+                  <button
+                    className="profile-btn-primary"
+                    type="button"
+                    onClick={() => setShowResults(true)}
+                  >
+                    See results
+                  </button>
+                </div>
+              ) : (
+                <p className="loading-status-line">
+                  Reading visible NFTs · Matching activity · Finding patterns
+                </p>
+              )}
+            </div>
+          </section>
+        )}
 
         {/* Error */}
         {!loading && error && (
@@ -944,11 +962,29 @@ export default function ProfilePage() {
         )}
 
         {/* Profile */}
-        {!loading && !error && profile && (
+        {profileReady && showResults && profile && (
           <>
             {/* ── Hero ── */}
             <section className="profile-hero-composed">
               <article className="profile-panel profile-identity-block">
+                {topCollectionsWithImages.slice(0, 4).some((c) => c.resolvedImageUrl) && (
+                  <div className="profile-identity-atmosphere" aria-hidden="true">
+                    {topCollectionsWithImages
+                      .slice(0, 4)
+                      .filter((c) => c.resolvedImageUrl)
+                      .map((collection, i) => (
+                        <img
+                          key={i}
+                          src={collection.resolvedImageUrl}
+                          alt=""
+                          className="profile-identity-atmosphere-img"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = "none";
+                          }}
+                        />
+                      ))}
+                  </div>
+                )}
                 <div className="profile-identity-avatar-wrap">
                   {headerAvatarUrl ? (
                     <img
@@ -1085,10 +1121,18 @@ export default function ProfilePage() {
                   <p className="profile-eyebrow">Entry Pattern</p>
                   <p className="entry-pattern-main">{Math.round(acquisitionDNA.minted.percent)}% minted directly</p>
                   <p className="entry-pattern-proof">{acquisitionDNA.minted.count} Ethereum mints matched to this wallet</p>
-                  {acquisitionDNA.unknown.percent >= 30 && (
-                    <p className="entry-pattern-caveat">Based on the mint history we could match.</p>
+                  {(acquisitionDNA.purchased?.count || 0) > 0 && (
+                    <div className="entry-pattern-secondary" aria-label="Additional entry pattern signals">
+                      <p>
+                        <span>{Math.round(acquisitionDNA.purchased?.percent || 0)}% bought after mint</span>
+                        <span>{acquisitionDNA.purchased?.count || 0} matched secondary buys</span>
+                      </p>
+                    </div>
                   )}
-                  <p className="entry-pattern-read">{getEntryPatternRead(acquisitionDNA.minted.percent)}</p>
+                  {acquisitionDNA.unknown.percent >= 30 && (
+                    <p className="entry-pattern-caveat">Based on the mint and sale history we could match.</p>
+                  )}
+                  <p className="entry-pattern-read">{getEntryPatternRead(acquisitionDNA.minted.percent, acquisitionDNA.purchased?.percent || 0)}</p>
                 </div>
               </article>
             )}
@@ -1508,7 +1552,8 @@ export default function ProfilePage() {
                         <div>
                           <p className="profile-collection-title">{collection.name}</p>
                           <p className="profile-muted-copy">
-                            Holdings {collection.count} · {walletPct}% of wallet
+                            <span className="profile-collection-count">{collection.count}</span>
+                            {" held · "}{walletPct}% of wallet
                           </p>
                           {openseaUrl && (
                             <a

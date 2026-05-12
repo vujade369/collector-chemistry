@@ -828,7 +828,7 @@ export default function OrbitTestPage() {
                           style={{
                             display: "inline-flex",
                             alignItems: "center",
-                            gap: 8,
+                            gap: 9,
                             borderRadius: 999,
                             padding: "8px 12px 8px 8px",
                             border: isFocus
@@ -952,8 +952,8 @@ export default function OrbitTestPage() {
                   const score = displayOrbitPercent(index);
                   const institutional = looksInstitutional(candidate);
                   const sharedRooms = candidate.sharedSeedCollections || [];
-                  const visibleSharedRooms = sharedRooms.slice(0, 3);
-                  const hiddenSharedRoomCount = Math.max(sharedRooms.length - visibleSharedRooms.length, 0);
+                  const visibleSharedRooms = sharedRooms;
+                  const hiddenSharedRoomCount = 0;
 
                   return (
                     <article
@@ -968,7 +968,7 @@ export default function OrbitTestPage() {
                         overflow: "hidden",
                         display: "flex",
                         flexDirection: "column",
-                        height: 604,
+                        height: 636,
                       }}
                     >
                       <div
@@ -1099,6 +1099,19 @@ export default function OrbitTestPage() {
                               >
                                 ⧉
                               </button>
+
+                              {candidate.socialLinks && candidate.socialLinks.length > 0 && (
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 5,
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  <SocialLinkPills links={candidate.socialLinks} />
+                                </div>
+                              )}
                             </div>
                             <p
                               style={{
@@ -1171,24 +1184,7 @@ export default function OrbitTestPage() {
                           flex: 1,
                         }}
                       >
-                                                <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "flex-end",
-                            alignItems: "center",
-                            gap: 10,
-                            minHeight: 20,
-                            marginBottom: 8,
-                          }}
-                        >
-                          <SocialLinkPills links={candidate.socialLinks} />
-                        </div>
-
-                        <BioText
-                          value={candidate.bioDisplay || "No bio found. The signal is in the holdings."}
-                        />
-
-                        <div style={{ marginBottom: 14, height: 196, overflow: "hidden" }}>
+                                                <div style={{ marginBottom: 14 }}>
                         <div
                           style={{
                             display: "flex",
@@ -1208,7 +1204,7 @@ export default function OrbitTestPage() {
                         <div
                           style={{
                             display: "grid",
-                            gap: 8,
+                            gap: 9,
                           }}
                         >
                           {visibleSharedRooms.map((slug) => {
@@ -1226,10 +1222,10 @@ export default function OrbitTestPage() {
                                 title={`${roomName} · ${count} held`}
                                 style={{
                                   display: "grid",
-                                  gridTemplateColumns: "44px 24px minmax(0, 1fr)",
+                                  gridTemplateColumns: "48px 24px minmax(0, 1fr)",
                                   alignItems: "center",
                                   gap: 9,
-                                  minHeight: 38,
+                                  minHeight: 40,
                                   border: "1px solid rgba(255,255,255,0.12)",
                                   background: "rgba(255,255,255,0.035)",
                                   borderRadius: 14,
@@ -1244,13 +1240,13 @@ export default function OrbitTestPage() {
                                     display: "inline-flex",
                                     alignItems: "center",
                                     justifyContent: "center",
-                                    height: 28,
-                                    minWidth: 36,
+                                    height: 30,
+                                    minWidth: 40,
                                     borderRadius: 10,
                                     background: "rgba(164,139,255,0.2)",
                                     border: "1px solid rgba(164,139,255,0.34)",
                                     color: "#f1ecff",
-                                    fontSize: 13,
+                                    fontSize: 14,
                                     fontWeight: 850,
                                     lineHeight: 1,
                                   }}
@@ -1295,22 +1291,6 @@ export default function OrbitTestPage() {
                               </a>
                             );
                           })}
-                          {hiddenSharedRoomCount > 0 && (
-                            <span
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                border: "1px solid rgba(255,255,255,0.12)",
-                                background: "rgba(255,255,255,0.035)",
-                                borderRadius: 999,
-                                padding: "5px 8px",
-                                color: "#b8aaba",
-                                fontSize: 11,
-                              }}
-                            >
-                              +{hiddenSharedRoomCount} more rooms
-                            </span>
-                          )}
                         </div>
                       </div>
 
