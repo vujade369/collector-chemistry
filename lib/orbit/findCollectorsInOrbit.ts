@@ -526,12 +526,38 @@ async function fetchOwnersForContract(
 type OpenSeaAccountData = {
   username?: string | null;
   name?: string | null;
+  display_name?: string | null;
+  displayName?: string | null;
   profile_image_url?: string | null;
   banner_image_url?: string | null;
   bio?: string | null;
-  account?: { username?: string | null; name?: string | null } | null;
-  user?: { username?: string | null; name?: string | null } | null;
+  account?: { username?: string | null; name?: string | null; display_name?: string | null; displayName?: string | null } | null;
+  user?: { username?: string | null; name?: string | null; display_name?: string | null; displayName?: string | null } | null;
 };
+
+type OpenSeaResolvedAccountData = {
+  address?: string | null;
+  username?: string | null;
+  ens_name?: string | null;
+};
+
+async function fetchOpenSeaResolvedAccount(
+  address: string,
+  apiKey: string
+): Promise<OpenSeaResolvedAccountData | null> {
+  try {
+    const res = await fetch(`${OPENSEA_BASE_URL}/accounts/resolve/${encodeURIComponent(address)}`, {
+      cache: "no-store",
+      headers: { accept: "application/json", "x-api-key": apiKey },
+    });
+
+    if (!res.ok) return null;
+
+    return (await res.json()) as OpenSeaResolvedAccountData;
+  } catch {
+    return null;
+  }
+}
 
 async function fetchOpenSeaAccount(
   address: string,
@@ -782,10 +808,32 @@ export async function findCollectorsInOrbit(
   const profileResults = await Promise.allSettled(
     rankedCandidates.map(async (candidate) => {
       let accountData: OpenSeaAccountData | null = null;
+      let resolvedAccountData: OpenSeaResolvedAccountData | null = null;
+
       if (openseaApiKey) {
         accountData = await fetchOpenSeaAccount(candidate.wallet, openseaApiKey);
+
+        const hasReadableName = Boolean(
+          accountData?.username ||
+            accountData?.name ||
+            accountData?.display_name ||
+            accountData?.displayName ||
+            accountData?.account?.username ||
+            accountData?.account?.name ||
+            accountData?.user?.username ||
+            accountData?.user?.name
+        );
+
+        if (!hasReadableName) {
+          resolvedAccountData = await withTimeout(
+            fetchOpenSeaResolvedAccount(candidate.wallet, openseaApiKey),
+            2000,
+            null
+          );
+        }
       }
-      return { candidate, accountData };
+
+      return { candidate, accountData, resolvedAccountData };
     })
   );
 
@@ -795,7 +843,7 @@ export async function findCollectorsInOrbit(
 
   for (const result of profileResults) {
     if (result.status === "rejected") continue;
-    const { candidate, accountData } = result.value;
+    const { candidate, accountData, resolvedAccountData } = result.value;
 
     if (!accountData) {
       debugState.failedProfiles.push(candidate.wallet);
@@ -807,15 +855,36 @@ export async function findCollectorsInOrbit(
           .find(Boolean) || null
       : null;
 
+    const profileName = accountData
+      ? [
+          accountData.name,
+          accountData.display_name,
+          accountData.displayName,
+          accountData.account?.name,
+          accountData.account?.display_name,
+          accountData.account?.displayName,
+          accountData.user?.name,
+          accountData.user?.display_name,
+          accountData.user?.displayName,
+        ]
+          .map((v) => String(v || "").trim())
+          .find(Boolean) || null
+      : null;
+
     const avatarUrl = accountData?.profile_image_url || null;
     const bannerUrl = accountData?.banner_image_url || null;
     const bio = accountData?.bio ? String(accountData.bio).trim() || null : null;
     const joinedDate = (accountData as any)?.joined_date
       ? String((accountData as any).joined_date).trim() || null
       : null;
-    const displayName = username || shortenWallet(candidate.wallet);
-    const openseaUrl = username
-      ? `https://opensea.io/${username}`
+    const resolvedEnsName = resolvedAccountData?.ens_name
+      ? String(resolvedAccountData.ens_name).trim() || null
+      : null;
+
+    const displayName = username || profileName || resolvedEnsName || shortenWallet(candidate.wallet);
+    const openseaProfilePath = username || resolvedEnsName || (profileName && !profileName.includes(" ") ? profileName : null);
+    const openseaUrl = openseaProfilePath
+      ? `https://opensea.io/${openseaProfilePath}`
       : `https://opensea.io/${candidate.wallet}`;
     const socialLinks = buildSocialLinks(accountData);
     const strength = computeCandidateStrength(candidate.sharedSeedCount)!;
