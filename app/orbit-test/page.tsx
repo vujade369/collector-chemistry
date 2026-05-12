@@ -99,9 +99,16 @@ function specificityWeight(holderCount?: number | null) {
 }
 
 function looksInstitutional(candidate: OrbitCandidate) {
-  const text = [
+  const nameText = [
     candidate.displayName,
     candidate.username,
+    candidate.wallet,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  const profileText = [
     candidate.bio,
     candidate.bioDisplay,
   ]
@@ -109,17 +116,53 @@ function looksInstitutional(candidate: OrbitCandidate) {
     .join(" ")
     .toLowerCase();
 
-  return [
-    "transactional",
-    "museum",
-    "vault",
-    "auction",
-    "harvest",
-    "bulk",
-    "claim",
+  const allText = `${nameText} ${profileText}`;
+
+  const hardInstitutionalTerms = [
     "marketplace",
+    "exchange",
+    "opensea",
+    "blur",
+    "looksrare",
+    "x2y2",
     "delegate",
-  ].some((term) => text.includes(term));
+    "delegation",
+    "escrow",
+    "staking",
+  ];
+
+  const softVaultTerms = [
+    "vault",
+    "treasury",
+    "fund",
+    "safe",
+    "cold wallet",
+    "storage",
+    "multisig",
+    "multi-sig",
+    "dao",
+  ];
+
+  const hasHardInstitutionalTerm = hardInstitutionalTerms.some((term) => allText.includes(term));
+  const hasSoftVaultTerm = softVaultTerms.some((term) => allText.includes(term));
+
+  const hasHumanProfile =
+    Boolean(candidate.avatarUrl) &&
+    Boolean(candidate.bioDisplay && !candidate.bioDisplay.toLowerCase().includes("no bio found"));
+
+  const hasSocialPresence = Array.isArray(candidate.socialLinks) && candidate.socialLinks.length > 0;
+  const looksNamedLikeAddress = /^0x[a-f0-9]{4}/i.test(candidate.displayName || "");
+
+  let score = 0;
+
+  if (hasHardInstitutionalTerm) score += 2;
+  if (hasSoftVaultTerm) score += 1;
+  if (looksNamedLikeAddress && !hasHumanProfile) score += 1;
+  if (!hasHumanProfile && !hasSocialPresence) score += 1;
+
+  // A hard marketplace/delegate signal is enough.
+  // Softer vault-like language needs another signal before hiding.
+  return score >= 2;
 }
 
 function strengthLabel(candidate: OrbitCandidate, orbitScore: number) {
