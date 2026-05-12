@@ -69,11 +69,12 @@ Then read the specialist agent and only the relevant docs below.
 | Current build priority | `docs/BUILD_LOG.md` |
 | File ownership/app structure | `docs/ARCHITECTURE.md`, `docs/COMPONENT_MAP.md` |
 | API shape/data contracts | `docs/DATA_MODEL.md`, `docs/API_PATTERNS.md` |
-| Data source boundaries | `docs/DATA_SOURCES.md`, `docs/ALCHEMY_CAPABILITIES.md`, `docs/OPENSEA_INTEGRATION.md` |
+| Data source boundaries | `docs/DATA_SOURCES.md`, `docs/ALCHEMY_CAPABILITIES.md`, `docs/OPENSEA_INTEGRATION.md`, `.agents/skills/constellate-data-sources/SKILL.md` |
 | Profile behavior | `docs/PROFILE_SPEC.md`, `docs/PROFILE_EXPERIENCE_SPEC.md` |
 | Compare behavior | `docs/COMPARE_SPEC.md` |
 | Multi-wallet behavior | `docs/MULTI_WALLET_SPEC.md` |
 | Ethical AI/interpreted claims | `docs/ETHICAL_AI_BUILDING.md` |
+| Verification | `.agents/skills/constellate-verification/SKILL.md` |
 | Known bugs | `docs/KNOWN_ISSUES.md` |
 
 ---
@@ -88,6 +89,7 @@ Use for:
 - transfer history and acquisition timestamps
 
 Read:
+- `.agents/skills/constellate-data-sources/SKILL.md`
 - `docs/ALCHEMY_CAPABILITIES.md`
 - `docs/DATA_SOURCES.md`
 - `docs/API_PATTERNS.md`
@@ -108,29 +110,26 @@ Use for:
 - collection/account/search behavior
 
 Read:
+- `.agents/skills/constellate-data-sources/SKILL.md`
 - `docs/OPENSEA_INTEGRATION.md`
 - `docs/DATA_SOURCES.md`
-- `.agents/skills/opensea/SKILL.md` when inspecting endpoints, CLI commands, MCP behavior, or marketplace schema
 
 Guardrails:
 - Runtime code must use server-side helper patterns.
 - Do not shell out to CLI, scripts, or MCP from production runtime.
 - OpenSea should degrade gracefully on missing keys, 404, 429, and 5xx.
 - Avoid one-request-per-NFT across large wallets unless scoped and capped.
-- Use OpenAPI/skill/CLI for development discovery, not as unreviewed runtime architecture.
+- Use docs, API references, or skill guidance for development discovery, not as unreviewed runtime architecture.
 
 ### Repo-local skills
 
 Use skills for targeted work, not as a reason to load the whole repo.
 
-Known useful skills:
-- `.agents/skills/opensea/SKILL.md` — OpenSea API, CLI, MCP, endpoint discovery, offer/listing/event checks
-- `.agents/skills/frontend-designer/SKILL.md` — visual hierarchy, UI modules, page polish
-- `.agents/skills/converter-auditor/SKILL.md` — converter math, unique NFT dedupe, offer semantics
-- `.agents/skills/copy-editor/SKILL.md` — product copy and language cleanup
-- `.agents/skills/product-architect/SKILL.md` — product framing and phase planning
+Known active Constellate skills:
+- `.agents/skills/constellate-data-sources/SKILL.md` — source boundaries, Alchemy/OpenSea responsibilities, converter data boundaries, link rules, debug expectations
+- `.agents/skills/constellate-verification/SKILL.md` — task-specific proof commands, governance checks, UI/API/converter verification recipes
 
-Use the matching skill only when the task calls for it.
+Use the matching skill only when the task calls for it. Do not assume generic downloaded skills are product authority.
 
 ---
 
@@ -139,16 +138,16 @@ Use the matching skill only when the task calls for it.
 | Task | Route as | Read | Guardrail |
 |---|---|---|---|
 | Profile/compare layout, visual hierarchy, module ordering | Product UI | UI agent + product/design/display docs + page spec | No API edits during visual passes. |
-| Profile API fields, category groups, acquisition data, traits, current attention | Data / API | Data API agent + architecture/data/source docs | No UI edits unless explicitly scoped. |
-| OpenSea offer/listing/floor/search bug | Data / API | OpenSea integration + OpenSea skill + data model | Verify endpoint/schema; avoid broad fetch refactors. |
-| Alchemy ownership/transfer bug | Data / API | Alchemy capabilities + data sources + API patterns | Preserve pagination safety and visibility filtering. |
-| Converter math or debug output | Converter | converter auditor + converter spec + data sources | Preserve active ETH/WETH offer question; dedupe unique NFTs. |
+| Profile API fields, category groups, acquisition data, traits, current attention | Data / API | Data API agent + Constellate data sources + architecture/data/source docs | No UI edits unless explicitly scoped. |
+| OpenSea offer/listing/floor/search bug | Data / API | Constellate data sources + OpenSea integration + data model | Verify endpoint/schema; avoid broad fetch refactors. |
+| Alchemy ownership/transfer bug | Data / API | Constellate data sources + Alchemy capabilities + data sources + API patterns | Preserve pagination safety and visibility filtering. |
+| Converter math or debug output | Converter | Constellate data sources + Constellate verification + converter spec | Preserve active ETH/WETH offer question; dedupe unique NFTs. |
 | Wallet address/ENS/OpenSea URL resolution | Resolver / Search | data API agent + API patterns + component map if UI changes | Prefer shared resolver helpers; do not invent identities. |
 | Copy/error language only | Product UI or Copy | product soul + canon + relevant spec | Do not change API error contracts unless scoped. |
 | Interpretation prompt/archetype/AI-generated claims | Interpretation / AI Copy | product soul + insight engine + ethical AI | Evidence first; no unsupported claims. |
 | Refactor/extraction/file size cleanup | Code Health | code-health agent + architecture + component map | No behavior, API, visual, or copy changes. |
-| Agent/docs workflow | Docs / Agents | AGENTS + registry + docs README + changed files | Docs-only. No app behavior changes. |
-| CI failure | Code Health | failure logs + relevant docs | Diagnose first; implement only approved fix. |
+| Agent/docs workflow | Docs / Agents | AGENTS + registry + orchestrator + changed files + Constellate verification | Docs-only. No app behavior changes. |
+| CI failure | Code Health | failure logs + relevant docs + Constellate verification | Diagnose first; implement only approved fix. |
 
 ---
 
@@ -188,12 +187,13 @@ Use when the task changes:
 
 Read only what is needed:
 - `.agents/agents/data-api-agent.md`
+- `.agents/skills/constellate-data-sources/SKILL.md`
 - `docs/ARCHITECTURE.md`
 - `docs/DATA_MODEL.md`
 - `docs/DATA_SOURCES.md`
 - `docs/API_PATTERNS.md`
 - `docs/ALCHEMY_CAPABILITIES.md` for Alchemy work
-- `docs/OPENSEA_INTEGRATION.md` and `.agents/skills/opensea/SKILL.md` for OpenSea work
+- `docs/OPENSEA_INTEGRATION.md` for OpenSea work
 - `docs/KNOWN_ISSUES.md` when debugging
 
 Do not touch UI files unless explicitly requested.
@@ -208,6 +208,12 @@ Use when the task changes:
 - active ETH/WETH offer selection
 - target collection floor math
 - converter result presentation or error copy
+
+Read:
+- `.agents/skills/constellate-data-sources/SKILL.md`
+- `.agents/skills/constellate-verification/SKILL.md`
+- relevant converter spec/docs
+- target converter route/component files
 
 Route math, fetching, resolver use, and API behavior as Data / API. Route presentation-only changes as Product UI.
 
@@ -268,6 +274,7 @@ Use when the task changes:
 
 Read:
 - `.agents/agents/code-health-agent.md`
+- `.agents/skills/constellate-verification/SKILL.md`
 - `docs/ARCHITECTURE.md`
 - `docs/COMPONENT_MAP.md`
 - `docs/BUILD_LOG.md`
@@ -289,6 +296,7 @@ Use when the task changes:
 Read:
 - `AGENTS.md`
 - `.agents/registry.yaml`
+- `.agents/skills/constellate-verification/SKILL.md`
 - changed agent/doc files
 - `docs/README.md` when doc structure changes
 
@@ -375,6 +383,7 @@ Docs/agents:
 ```bash
 npm run agents:check
 npm run docs:check
+npm run skills:check
 grep -n "<<<<<<\\|=======\\|>>>>>>" AGENTS.md .agents/agents/ORCHESTRATOR.md .agents/registry.yaml
 ```
 
@@ -398,6 +407,7 @@ OpenSea:
 - Verify the exact endpoint/schema before parser changes.
 - Test with one known entity before batch behavior.
 - Do not run broad parallel OpenSea checks.
+- Run `npm run skills:check` when OpenSea safety/policy risk exists.
 
 Alchemy:
 - Verify page counts, break reasons, and fetched totals when pagination is touched.
@@ -405,6 +415,7 @@ Alchemy:
 Converter:
 - Verify single-wallet and multi-wallet inputs.
 - Check unique NFT count, offer count, total ETH/WETH, and target floor math.
+- Use `.agents/skills/constellate-verification/SKILL.md` for the current converter proof recipe.
 
 ---
 
