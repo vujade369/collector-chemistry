@@ -171,6 +171,45 @@ function strengthLabel(candidate: OrbitCandidate, orbitScore: number) {
   return "Light orbit";
 }
 
+function signalStrengthLabel(sharedCount: number) {
+  if (sharedCount >= 7) return "Exceptional Signal";
+  if (sharedCount >= 5) return "Strong Signal";
+  if (sharedCount >= 3) return "Clear Signal";
+  if (sharedCount >= 2) return "Light Signal";
+  return "Single-Room Signal";
+}
+
+function signalTypeLabel(candidate: OrbitCandidate) {
+  const sharedCount = candidate.sharedSeedCount || candidate.sharedSeedCollections?.length || 0;
+  const holdings = Object.values(candidate.sharedRoomHoldings || {});
+  const maxHolding = holdings.length ? Math.max(...holdings) : 0;
+
+  if (sharedCount >= 5) return "Broad Peer";
+  if (sharedCount >= 3) return "Specific Neighbor";
+  if (maxHolding >= 10) return "Deep Room Regular";
+  return "Shared Room";
+}
+
+function strongestSharedRooms(
+  candidate: OrbitCandidate,
+  collectionMap: Map<string, OrbitCollection>,
+  limit = 3
+) {
+  const holdings = candidate.sharedRoomHoldings || {};
+  return Object.entries(holdings)
+    .filter(([, count]) => typeof count === "number" && count > 0)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([slug, count]) => {
+      const collection = collectionMap.get(slug);
+      return {
+        slug,
+        count,
+        name: collection?.name || label(slug),
+      };
+    });
+}
+
 function displayOrbitPercent(index: number) {
   return [94, 89, 86, 83, 80, 77, 74, 71, 68, 65][index] || 62;
 }
@@ -1399,7 +1438,10 @@ export default function OrbitTestPage() {
                   const sharedRooms = candidate.sharedSeedCollections || [];
                   const visibleSharedRooms = sharedRooms;
                   const hiddenSharedRoomCount = 0;
-
+                  const sharedCount = candidate.sharedSeedCount || sharedRooms.length;
+                  const selectedCount = Math.max(activeFocusCount || 0, sharedCount);
+                  const signalStrength = signalStrengthLabel(sharedCount);
+                  const signalType = signalTypeLabel(candidate);
                   return (
                     <article
                       key={candidate.wallet}
@@ -1579,59 +1621,62 @@ export default function OrbitTestPage() {
                                   )}
                                 </div>
 
-                                {formatJoinedDate(candidate.joinedDate) && (
-                                  <span
-                                    style={{
-                                      display: "inline-flex",
-                                      alignItems: "center",
-                                      justifyContent: "center",
-                                      borderRadius: 999,
-                                      padding: "4px 8px",
-                                      background: "rgba(108, 79, 255, 0.32)",
-                                      border: "1px solid rgba(164, 139, 255, 0.5)",
-                                      color: "#f1ecff",
-                                      fontSize: 10,
-                                      lineHeight: 1,
-                                      whiteSpace: "nowrap",
-                                      boxSizing: "border-box",
-                                      flexShrink: 0,
-                                    }}
-                                  >
-                                    {formatJoinedDate(candidate.joinedDate)}
-                                  </span>
-                                )}
+                                <div
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: 6,
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  {institutional && (
+                                    <span
+                                      title="Likely institutional or transactional wallet"
+                                      aria-label="Likely institutional or transactional wallet"
+                                      style={{
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        width: 20,
+                                        height: 20,
+                                        borderRadius: 999,
+                                        background: "rgba(255,255,255,0.055)",
+                                        border: "1px solid rgba(255,255,255,0.14)",
+                                        color: "#cbbfd0",
+                                        fontSize: 11,
+                                        lineHeight: 1,
+                                      }}
+                                    >
+                                      🏛
+                                    </span>
+                                  )}
+
+                                  {formatJoinedDate(candidate.joinedDate) && (
+                                    <span
+                                      style={{
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        borderRadius: 999,
+                                        padding: "4px 8px",
+                                        background: "rgba(108, 79, 255, 0.32)",
+                                        border: "1px solid rgba(164, 139, 255, 0.5)",
+                                        color: "#f1ecff",
+                                        fontSize: 10,
+                                        lineHeight: 1,
+                                        whiteSpace: "nowrap",
+                                        boxSizing: "border-box",
+                                      }}
+                                    >
+                                      {formatJoinedDate(candidate.joinedDate)}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             ) : null}
                           </div>
                         </div>
 
-                      </div>
-
-                      <div
-                        style={{
-                          height: 31,
-                          padding: "9px 16px 0",
-                        }}
-                      >
-                        {institutional && (
-                          <span
-                            style={{
-                              display: "inline-flex",
-                              maxWidth: "100%",
-                              border: "1px solid rgba(255,255,255,0.12)",
-                              borderRadius: 999,
-                              padding: "5px 8px",
-                              color: "#b8aaba",
-                              fontSize: 11,
-                              lineHeight: 1,
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                            }}
-                          >
-                            Likely institutional / transactional
-                          </span>
-                        )}
                       </div>
 
                       <div
@@ -1642,7 +1687,31 @@ export default function OrbitTestPage() {
                           flex: 1,
                         }}
                       >
-                                                <div style={{ marginBottom: 14 }}>
+                        <div style={{ marginBottom: 14 }}>
+                        <div
+                          style={{
+                            border: "1px solid rgba(232,200,255,0.14)",
+                            background: "rgba(232,200,255,0.045)",
+                            borderRadius: 16,
+                            padding: "11px 12px",
+                            marginBottom: 12,
+                          }}
+                        >
+                          <p
+                            style={{
+                              margin: 0,
+                              color: "#f0d6ff",
+                              fontSize: 13,
+                              fontWeight: 800,
+                              letterSpacing: "0.01em",
+                            }}
+                          >
+                            {signalStrength} · {signalType}
+                          </p>
+                          <p style={{ margin: "5px 0 0", color: "#b9adb9", fontSize: 12, lineHeight: 1.45 }}>
+                            Shares {sharedCount} / {selectedCount} selected collection{selectedCount === 1 ? "" : "s"}.
+                          </p>
+                        </div>
                         <div
                           style={{
                             display: "flex",
