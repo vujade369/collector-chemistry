@@ -982,9 +982,38 @@ export default function OrbitTestPage() {
                     }}
                   >
                     <div>
-                      <h2 style={{ margin: 0, fontSize: 20 }}>Your search rooms</h2>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                        <h2 style={{ margin: 0, fontSize: 20 }}>Your search rooms</h2>
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            flexDirection: "column",
+                            alignItems: "flex-start",
+                            gap: 3,
+                            border: "1px solid rgba(164,139,255,0.34)",
+                            background: "rgba(108,79,255,0.16)",
+                            color: "#d9d0ff",
+                            borderRadius: 14,
+                            padding: "7px 10px",
+                            fontSize: 11,
+                            lineHeight: 1,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          <strong style={{ color: "#f1ecff", fontSize: 12 }}>
+                            {focusedSlugs.length} / 10 selected
+                          </strong>
+                          <span style={{ color: "#a99ee8", fontSize: 10 }}>
+                            {focusedSlugs.length >= 10
+                              ? "Room limit reached"
+                              : focusedSlugs.length === 0
+                                ? "Choose at least one room"
+                                : `Add up to ${10 - focusedSlugs.length} more`}
+                          </span>
+                        </span>
+                      </div>
                       <p style={{ margin: "6px 0 0", color: "#a99daa", fontSize: 13 }}>
-                        Selected from your wallet automatically. Remove anything that should not shape this search.
+                        Selected from your wallet automatically. Add or remove rooms to shape who appears below.
                       </p>
                     </div>
 
@@ -1007,7 +1036,7 @@ export default function OrbitTestPage() {
                   </div>
 
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 9 }}>
-                    {availableRooms.map((room) => {
+                    {walletAvailableRooms.map((room) => {
                       const mode = roomStates[room.slug] || "ignore";
                       const image = room.imageUrl || room.avatarUrl || room.bannerUrl;
                       const isFocus = mode === "focus";
@@ -1090,6 +1119,35 @@ export default function OrbitTestPage() {
                     })}
                   </div>
 
+                  {outsideRooms.length > 0 && (
+                    <div style={{ marginTop: 16 }}>
+                      <p style={{ margin: "0 0 8px", color: "#a99daa", fontSize: 12 }}>
+                        Added rooms
+                      </p>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                        {outsideRooms.map((room) => (
+                          <button
+                            key={room.slug}
+                            type="button"
+                            onClick={() => removeOutsideRoom(room.slug)}
+                            title="Remove added room"
+                            style={{
+                              border: "1px solid rgba(164,139,255,0.42)",
+                              background: "rgba(108,79,255,0.18)",
+                              color: "#f1ecff",
+                              borderRadius: 999,
+                              padding: "7px 10px",
+                              fontSize: 12,
+                              cursor: "pointer",
+                            }}
+                          >
+                            {room.name || room.slug} ×
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <p style={{ margin: "12px 0 0", color: "#8f8292", fontSize: 12 }}>
                     {focusedSlugs.length} focused · {excludedSlugs.length} excluded
                   </p>
@@ -1106,9 +1164,9 @@ export default function OrbitTestPage() {
                 }}
               >
                 <div style={{ marginBottom: 14 }}>
-                  <h2 style={{ margin: 0, fontSize: 20 }}>Explore outside rooms</h2>
+                  <h2 style={{ margin: 0, fontSize: 20 }}>Explore more rooms</h2>
                   <p style={{ margin: "6px 0 0", color: "#a99daa", fontSize: 13 }}>
-                    Add collections you do not currently hold to find collectors adjacent to your orbit.
+                    Search collections to add more rooms to this search, whether or not they appear in your top rooms.
                   </p>
                 </div>
 
@@ -1230,31 +1288,6 @@ export default function OrbitTestPage() {
                     </div>
                   )}
                 </div>
-
-                {outsideRooms.length > 0 && (
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 13 }}>
-                    {outsideRooms.map((room) => (
-                      <button
-                        key={room.slug}
-                        type="button"
-                        onClick={() => removeOutsideRoom(room.slug)}
-                        title="Remove outside room"
-                        style={{
-                          border: "1px solid rgba(255,255,255,0.13)",
-                          background: "rgba(255,255,255,0.035)",
-                          color: "#d8cddd",
-                          borderRadius: 999,
-                          padding: "7px 10px",
-                          fontSize: 12,
-                          cursor: "pointer",
-                        }}
-                      >
-                        {room.name || room.slug} ×
-                      </button>
-                    ))}
-                  </div>
-                )}
-
                 <div
                   style={{
                     display: "flex",
@@ -1271,7 +1304,7 @@ export default function OrbitTestPage() {
                     <p style={{ margin: 0, color: "#8f8292", fontSize: 12 }}>
                       Using {focusedSlugs.length} selected room{focusedSlugs.length === 1 ? "" : "s"}
                       {outsideRooms.length > 0
-                        ? `, including ${outsideRooms.length} outside room${outsideRooms.length === 1 ? "" : "s"}`
+                        ? `, including ${outsideRooms.length} added room${outsideRooms.length === 1 ? "" : "s"}`
                         : ""}.
                     </p>
                     <p style={{ margin: "5px 0 0", color: "#c8bdca", fontSize: 13 }}>
