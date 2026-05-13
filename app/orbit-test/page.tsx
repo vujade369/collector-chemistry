@@ -982,9 +982,9 @@ export default function OrbitTestPage() {
                     }}
                   >
                     <div>
-                      <h2 style={{ margin: 0, fontSize: 20 }}>Rooms shaping this search</h2>
+                      <h2 style={{ margin: 0, fontSize: 20 }}>Your search rooms</h2>
                       <p style={{ margin: "6px 0 0", color: "#a99daa", fontSize: 13 }}>
-                        Choose the rooms that should define this search. Click a room to cycle Focus → Exclude → Ignore.
+                        Selected from your wallet automatically. Remove anything that should not shape this search.
                       </p>
                     </div>
 
@@ -1106,9 +1106,9 @@ export default function OrbitTestPage() {
                 }}
               >
                 <div style={{ marginBottom: 14 }}>
-                  <h2 style={{ margin: 0, fontSize: 20 }}>Add outside rooms</h2>
+                  <h2 style={{ margin: 0, fontSize: 20 }}>Explore outside rooms</h2>
                   <p style={{ margin: "6px 0 0", color: "#a99daa", fontSize: 13 }}>
-                    Search OpenSea collections to include rooms you do not currently hold.
+                    Add collections you do not currently hold to find collectors adjacent to your orbit.
                   </p>
                 </div>
 
@@ -1204,7 +1204,7 @@ export default function OrbitTestPage() {
                                     overflow: "hidden",
                                     textOverflow: "ellipsis",
                                     whiteSpace: "nowrap",
-                                    fontSize: 13,
+                                    fontSize: 14,
                                   }}
                                 >
                                   {room.name || room.slug}
@@ -1255,9 +1255,49 @@ export default function OrbitTestPage() {
                   </div>
                 )}
 
-                <p style={{ margin: "12px 0 0", color: "#8f8292", fontSize: 12 }}>
-                  Add up to 10 focused rooms total.
-                </p>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 14,
+                    marginTop: 16,
+                    paddingTop: 14,
+                    borderTop: "1px solid rgba(255,255,255,0.08)",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div>
+                    <p style={{ margin: 0, color: "#8f8292", fontSize: 12 }}>
+                      Using {focusedSlugs.length} selected room{focusedSlugs.length === 1 ? "" : "s"}
+                      {outsideRooms.length > 0
+                        ? `, including ${outsideRooms.length} outside room${outsideRooms.length === 1 ? "" : "s"}`
+                        : ""}.
+                    </p>
+                    <p style={{ margin: "5px 0 0", color: "#c8bdca", fontSize: 13 }}>
+                      Ready to search with these rooms?
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={findCollectors}
+                    disabled={loading || focusedSlugs.length === 0}
+                    style={{
+                      background: loading || focusedSlugs.length === 0 ? "#312636" : "#f4edf4",
+                      color: loading || focusedSlugs.length === 0 ? "#978a99" : "#08070a",
+                      border: "none",
+                      borderRadius: 999,
+                      padding: "11px 18px",
+                      minWidth: 168,
+                      fontWeight: 700,
+                      fontSize: 14,
+                      cursor: loading || focusedSlugs.length === 0 ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {loading ? "Finding…" : "Find nearby collectors"}
+                  </button>
+                </div>
               </section>
 
               <div
@@ -1274,7 +1314,7 @@ export default function OrbitTestPage() {
                   <p style={{ margin: "7px 0 0", color: "#a99daa", fontSize: 13 }}>
                     {loading ? "Updating this scenario…" : activeFocusCount > 0
                       ? `Matching through ${activeFocusCount} focus room${activeFocusCount === 1 ? "" : "s"}.${activeExcludeCount ? ` ${activeExcludeCount} room${activeExcludeCount === 1 ? "" : "s"} excluded.` : ""}`
-                      : "Collectors ranked by shared rooms, overlap weight, and visible collector signal."}
+                      : "Collectors who overlap with the rooms currently shaping this search."}
                   </p>
                 </div>
 
