@@ -452,7 +452,7 @@ function buildAvailableRooms(data: OrbitResponse | null) {
     ...(data.orbitSeedCollections || []),
     ...(data.displayTopCollections || []),
     ...(data.showMoreCollections || []),
-  ]).slice(0, 10);
+  ]).slice(0, 15);
 }
 
 function buildDefaultRoomStates(rooms: OrbitCollection[]) {
@@ -460,7 +460,7 @@ function buildDefaultRoomStates(rooms: OrbitCollection[]) {
 
   rooms.forEach((room, index) => {
     if (!room.slug) return;
-    states[room.slug] = index < 5 ? "focus" : "ignore";
+    states[room.slug] = index < 10 ? "focus" : "ignore";
   });
 
   return states;
@@ -582,6 +582,14 @@ export default function OrbitTestPage() {
     () => mergeUniqueRooms([...walletAvailableRooms, ...outsideRooms]),
     [walletAvailableRooms, outsideRooms]
   );
+
+  const addedRooms = useMemo(
+    () =>
+      outsideRooms.filter(
+        (room) => room.slug && !walletAvailableRooms.some((walletRoom) => walletRoom.slug === room.slug)
+      ),
+    [outsideRooms, walletAvailableRooms]
+  );
   const focusedSlugs = getFocusedSlugs(roomStates);
   const excludedSlugs = getExcludedSlugs(roomStates);
 
@@ -664,7 +672,7 @@ export default function OrbitTestPage() {
 
       const focusedCount = Object.values(current).filter((mode) => mode === "focus").length;
       if (focusedCount >= 10) {
-        setCollectionSearchMessage("Focus is limited to 10 rooms. Ignore or exclude one to add another.");
+        setCollectionSearchMessage("Room limit reached. Remove a selected room before adding another.");
         return current;
       }
 
@@ -1062,7 +1070,7 @@ export default function OrbitTestPage() {
                           key={room.slug}
                           type="button"
                           onClick={() => cycleRoomMode(room.slug)}
-                          title={isFocus ? "Focused room" : isExclude ? "Excluded room" : "Ignored room"}
+                          title={isFocus ? "Click to remove from search" : "Click to add to search"}
                           style={{
                             display: "inline-flex",
                             alignItems: "center",
@@ -1119,28 +1127,18 @@ export default function OrbitTestPage() {
                           >
                             {room.name || room.slug}{typeof room.heldCount === "number" && room.heldCount > 0 ? ` · ${room.heldCount} held` : ""}
                           </span>
-
-                          <span
-                            style={{
-                              fontSize: 10,
-                              opacity: isFocus ? 0.9 : 0.62,
-                              letterSpacing: 0.1,
-                            }}
-                          >
-                            {isFocus ? "Focus" : isExclude ? "Exclude" : "Ignore"}
-                          </span>
                         </button>
                       );
                     })}
                   </div>
 
-                  {outsideRooms.length > 0 && (
+                  {addedRooms.length > 0 && (
                     <div style={{ marginTop: 16 }}>
                       <p style={{ margin: "0 0 8px", color: "#a99daa", fontSize: 12 }}>
                         Added rooms
                       </p>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                        {outsideRooms.map((room) => (
+                        {addedRooms.map((room) => (
                           <button
                             key={room.slug}
                             type="button"
@@ -1164,7 +1162,7 @@ export default function OrbitTestPage() {
                   )}
 
                   <p style={{ margin: "12px 0 0", color: "#8f8292", fontSize: 12 }}>
-                    {focusedSlugs.length} focused · {excludedSlugs.length} excluded
+                    {focusedSlugs.length} selected · {Math.max(walletAvailableRooms.length - focusedSlugs.length, 0)} removed
                   </p>
                 </section>
               )}
@@ -1329,8 +1327,8 @@ export default function OrbitTestPage() {
                   <div>
                     <p style={{ margin: 0, color: "#8f8292", fontSize: 12 }}>
                       Using {focusedSlugs.length} selected room{focusedSlugs.length === 1 ? "" : "s"}
-                      {outsideRooms.length > 0
-                        ? `, including ${outsideRooms.length} added room${outsideRooms.length === 1 ? "" : "s"}`
+                      {addedRooms.length > 0
+                        ? `, including ${addedRooms.length} added room${addedRooms.length === 1 ? "" : "s"}`
                         : ""}.
                     </p>
                     <p style={{ margin: "5px 0 0", color: "#c8bdca", fontSize: 13 }}>
@@ -1372,7 +1370,7 @@ export default function OrbitTestPage() {
                   <h2 style={{ margin: 0, fontSize: 24 }}>Collectors in Your Orbit</h2>
                   <p style={{ margin: "7px 0 0", color: "#a99daa", fontSize: 13 }}>
                     {loading ? "Updating this scenario…" : activeFocusCount > 0
-                      ? `Matching through ${activeFocusCount} focus room${activeFocusCount === 1 ? "" : "s"}.${activeExcludeCount ? ` ${activeExcludeCount} room${activeExcludeCount === 1 ? "" : "s"} excluded.` : ""}`
+                      ? `Showing collectors who overlap with ${activeFocusCount} selected room${activeFocusCount === 1 ? "" : "s"}.`
                       : "Collectors who overlap with the rooms currently shaping this search."}
                   </p>
                 </div>

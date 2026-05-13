@@ -712,7 +712,7 @@ export async function findCollectorsInOrbit(
     heldCount: c.heldCount,
   }));
 
-  const showMoreCollections: OrbitCollection[] = allCollections.slice(5, 10).map((c) => ({
+  const showMoreCollections: OrbitCollection[] = allCollections.slice(5, 15).map((c) => ({
     slug: c.slug,
     name: c.name || c.contractAddress,
     contractAddress: c.contractAddress,
