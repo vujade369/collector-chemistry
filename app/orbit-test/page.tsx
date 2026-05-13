@@ -962,6 +962,21 @@ export default function OrbitTestPage() {
                 marginBottom: 28,
               }}
             >
+              <div style={{ marginBottom: 18 }}>
+                <h2 style={{ margin: 0, fontSize: 22 }}>Build your search rooms</h2>
+                <p style={{ margin: "7px 0 0", color: "#a99daa", fontSize: 13 }}>
+                  Start from your wallet rooms, then add more collections to shape who appears below.
+                </p>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "minmax(0, 1.15fr) minmax(320px, 0.85fr)",
+                  gap: 18,
+                  alignItems: "start",
+                }}
+              >
               {availableRooms.length > 0 && (
                 <section
                   style={{
@@ -969,7 +984,7 @@ export default function OrbitTestPage() {
                     background: "rgba(255,255,255,0.035)",
                     borderRadius: 24,
                     padding: 18,
-                    marginBottom: 28,
+                    marginBottom: 0,
                   }}
                 >
                   <div
@@ -1188,6 +1203,12 @@ export default function OrbitTestPage() {
                     }}
                   />
 
+                  {!collectionSearchQuery && collectionSearchResults.length === 0 && !collectionSearchMessage && (
+                    <p style={{ margin: "10px 0 0", color: "#8f8292", fontSize: 12 }}>
+                      Added rooms will appear on the left.
+                    </p>
+                  )}
+
                   {(collectionSearchLoading || collectionSearchResults.length > 0 || collectionSearchMessage) && (
                     <div
                       style={{
@@ -1288,18 +1309,23 @@ export default function OrbitTestPage() {
                     </div>
                   )}
                 </div>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 14,
-                    marginTop: 16,
-                    paddingTop: 14,
-                    borderTop: "1px solid rgba(255,255,255,0.08)",
-                    flexWrap: "wrap",
-                  }}
-                >
+              </section>
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 14,
+                  marginTop: 18,
+                  padding: "14px 16px",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  background: "rgba(255,255,255,0.026)",
+                  borderRadius: 18,
+                  flexWrap: "wrap",
+                }}
+              >
                   <div>
                     <p style={{ margin: 0, color: "#8f8292", fontSize: 12 }}>
                       Using {focusedSlugs.length} selected room{focusedSlugs.length === 1 ? "" : "s"}
@@ -1330,8 +1356,7 @@ export default function OrbitTestPage() {
                   >
                     {loading ? "Finding…" : "Find nearby collectors"}
                   </button>
-                </div>
-              </section>
+              </div>
 
               <div
                 style={{
@@ -1339,6 +1364,7 @@ export default function OrbitTestPage() {
                   alignItems: "end",
                   justifyContent: "space-between",
                   gap: 16,
+                  marginTop: 6,
                   marginBottom: 16,
                 }}
               >
