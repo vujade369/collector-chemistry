@@ -175,6 +175,52 @@ function displayOrbitPercent(index: number) {
   return [94, 89, 86, 83, 80, 77, 74, 71, 68, 65][index] || 62;
 }
 
+function strongestSharedRoom(
+  candidate: OrbitCandidate,
+  collectionMap: Map<string, OrbitCollection>
+) {
+  const holdings = candidate.sharedRoomHoldings || {};
+  const entries = Object.entries(holdings)
+    .filter(([, count]) => typeof count === "number" && count > 0)
+    .sort((a, b) => b[1] - a[1]);
+
+  if (!entries.length) return null;
+
+  const [slug, count] = entries[0];
+  const collection = collectionMap.get(slug);
+
+  return {
+    slug,
+    count,
+    name: collection?.name || label(slug),
+  };
+}
+
+function candidateReason(
+  candidate: OrbitCandidate,
+  collectionMap: Map<string, OrbitCollection>
+) {
+  if (candidate.proof) return candidate.proof;
+
+  const shared = candidate.sharedSeedCollections || [];
+  const strongest = strongestSharedRoom(candidate, collectionMap);
+
+  if (shared.length >= 2 && strongest) {
+    return `Shares ${shared.length} rooms. Strongest bridge: ${strongest.count} in ${strongest.name}.`;
+  }
+
+  if (shared.length === 1 && strongest) {
+    return `Shared room: ${strongest.name}, with ${strongest.count} held.`;
+  }
+
+  if (shared.length > 0) {
+    return `Shares ${shared.length} room${shared.length === 1 ? "" : "s"} with this constellation.`;
+  }
+
+  return "Surfaced through visible collector overlap around these rooms.";
+}
+
+
 function RoomChip({
   slug,
   collection,
@@ -354,8 +400,8 @@ function SocialLinkPills({ links }: { links?: OrbitSocialLink[] }) {
         display: "flex",
         gap: 5,
         alignItems: "center",
-        height: 18,
-        marginTop: 4,
+        height: 22,
+        marginTop: 0,
       }}
     >
       {visibleLinks.map((link) => (
@@ -367,8 +413,8 @@ function SocialLinkPills({ links }: { links?: OrbitSocialLink[] }) {
           title={link.url}
           aria-label={link.label}
           style={{
-            width: 18,
-            height: 18,
+            width: 22,
+            height: 22,
             color: "#d8cddd",
             border: "1px solid rgba(255,255,255,0.16)",
             background: "rgba(255,255,255,0.055)",
@@ -770,7 +816,7 @@ export default function OrbitTestPage() {
         </h1>
 
         <p style={{ margin: "0 0 28px", maxWidth: 760, color: "#bdb0bd", lineHeight: 1.55 }}>
-          Find collectors who appear across the same top collection rooms as this constellation.
+          Find nearby collectors who share your collecting rooms, then see exactly why each person surfaced.
         </p>
 
         <div
@@ -792,10 +838,10 @@ export default function OrbitTestPage() {
                 fontWeight: 700,
               }}
             >
-              Build your constellation
+              Start with your wallet
             </p>
             <p style={{ margin: 0, color: "#a99daa", fontSize: 13 }}>
-              Start with one wallet, then add another if you want the orbit to reflect both.
+              Add one or more wallets. The search uses their visible collection rooms as the starting point.
             </p>
           </div>
 
@@ -885,7 +931,7 @@ export default function OrbitTestPage() {
                 cursor: loading ? "not-allowed" : "pointer",
               }}
             >
-              {loading ? "Finding…" : "Find collectors"}
+              {loading ? "Finding…" : "Find nearby collectors"}
             </button>
           </div>
         </div>
@@ -936,9 +982,9 @@ export default function OrbitTestPage() {
                     }}
                   >
                     <div>
-                      <h2 style={{ margin: 0, fontSize: 20 }}>Focus rooms</h2>
+                      <h2 style={{ margin: 0, fontSize: 20 }}>Rooms shaping this search</h2>
                       <p style={{ margin: "6px 0 0", color: "#a99daa", fontSize: 13 }}>
-                        Choose up to 10 rooms to shape this search. Click a room to cycle Focus → Exclude → Ignore.
+                        Choose the rooms that should define this search. Click a room to cycle Focus → Exclude → Ignore.
                       </p>
                     </div>
 
@@ -1228,7 +1274,7 @@ export default function OrbitTestPage() {
                   <p style={{ margin: "7px 0 0", color: "#a99daa", fontSize: 13 }}>
                     {loading ? "Updating this scenario…" : activeFocusCount > 0
                       ? `Matching through ${activeFocusCount} focus room${activeFocusCount === 1 ? "" : "s"}.${activeExcludeCount ? ` ${activeExcludeCount} room${activeExcludeCount === 1 ? "" : "s"} excluded.` : ""}`
-                      : "Wallets ranked by shared rooms, overlap weight, and visible collector signal."}
+                      : "Collectors ranked by shared rooms, overlap weight, and visible collector signal."}
                   </p>
                 </div>
 
@@ -1248,7 +1294,7 @@ export default function OrbitTestPage() {
                     checked={hideInstitutional}
                     onChange={(event) => setHideInstitutional(event.target.checked)}
                   />
-                  Hide vaults
+                  Hide vault-like wallets
                 </label>
               </div>
 
@@ -1277,10 +1323,10 @@ export default function OrbitTestPage() {
                         borderRadius: 24,
                         padding: 0,
                         position: "relative",
-                        overflow: "hidden",
+                        overflow: "visible",
                         display: "flex",
                         flexDirection: "column",
-                        height: 636,
+                        minHeight: 520,
                       }}
                     >
                       <div
@@ -1298,23 +1344,50 @@ export default function OrbitTestPage() {
 
                       <div
                         style={{
+                          position: "absolute",
+                          top: -10,
+                          right: -10,
+                          width: 70,
+                          height: 70,
+                          borderRadius: "50%",
+                          border: "1px solid rgba(232,200,255,0.32)",
+                          background: "rgba(14,10,18,0.82)",
+                          boxShadow: "0 16px 38px rgba(0,0,0,0.42)",
+                          backdropFilter: "blur(8px)",
+                          display: "grid",
+                          placeItems: "center",
+                          color: "#f0d6ff",
+                          zIndex: 2,
+                        }}
+                      >
+                        <div style={{ textAlign: "center", lineHeight: 1 }}>
+                          <div style={{ fontWeight: 850, fontSize: 20 }}>{score}%</div>
+                          <div style={{ fontSize: 9, color: "#c8b7cf", marginTop: 5 }}>
+                            SIGNAL
+                          </div>
+                        </div>
+                      </div>
+
+                      <div
+                        style={{
                           display: "flex",
                           justifyContent: "space-between",
+                          alignItems: "flex-start",
                           gap: 14,
-                          height: 112,
-                          padding: "12px 16px 14px",
+                          minHeight: 84,
+                          padding: "10px 16px 8px",
                           background: "rgba(16,12,20,0.92)",
                           borderBottom: "1px solid rgba(255,255,255,0.1)",
                         }}
                       >
-                        <div style={{ display: "flex", gap: 13, alignItems: "flex-start", minWidth: 0 }}>
+                        <div style={{ display: "flex", gap: 13, alignItems: "flex-start", minWidth: 0, flex: 1 }}>
                           <div
                             style={{
                               display: "flex",
                               flexDirection: "column",
-                              alignItems: "center",
+                              alignItems: "flex-start",
                               gap: 7,
-                              width: 92,
+                              width: 76,
                               flexShrink: 0,
                             }}
                           >
@@ -1344,30 +1417,9 @@ export default function OrbitTestPage() {
                             )}
                           </div>
 
-                            {formatJoinedDate(candidate.joinedDate) && (
-                              <span
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  maxWidth: 92,
-                                  borderRadius: 999,
-                                  padding: "4px 8px",
-                                  background: "rgba(108, 79, 255, 0.32)",
-                                  border: "1px solid rgba(164, 139, 255, 0.5)",
-                                  color: "#f1ecff",
-                                  fontSize: 10,
-                                  lineHeight: 1,
-                                  whiteSpace: "nowrap",
-                                  boxSizing: "border-box",
-                                }}
-                              >
-                                {formatJoinedDate(candidate.joinedDate)}
-                              </span>
-                            )}
                           </div>
 
-                          <div style={{ minWidth: 0 }}>
+                          <div style={{ minWidth: 0, flex: 1 }}>
                             <div
                               style={{
                                 display: "flex",
@@ -1377,13 +1429,15 @@ export default function OrbitTestPage() {
                               }}
                             >
                               <h3
+                                title={candidate.displayName || shortWallet(candidate.wallet)}
                                 style={{
                                   margin: 0,
                                   fontSize: 17,
+                                  lineHeight: 1.15,
                                   overflow: "hidden",
                                   textOverflow: "ellipsis",
                                   whiteSpace: "nowrap",
-                                  minWidth: 0,
+                                  maxWidth: "100%",
                                 }}
                               >
                                 {candidate.displayName || shortWallet(candidate.wallet)}
@@ -1392,14 +1446,14 @@ export default function OrbitTestPage() {
                               <button
                                 type="button"
                                 onClick={() => navigator.clipboard?.writeText(candidate.wallet)}
-                                title="Copy wallet"
-                                aria-label="Copy wallet"
+                                title="Copy wallet address"
+                                aria-label="Copy wallet address"
                                 style={{
                                   width: 24,
                                   height: 24,
                                   borderRadius: 8,
-                                  border: "1px solid rgba(255,255,255,0.11)",
-                                  background: "rgba(255,255,255,0.035)",
+                                  border: "1px solid rgba(255,255,255,0.12)",
+                                  background: "rgba(255,255,255,0.04)",
                                   color: "#a99daa",
                                   display: "grid",
                                   placeItems: "center",
@@ -1411,54 +1465,59 @@ export default function OrbitTestPage() {
                               >
                                 ⧉
                               </button>
+                            </div>
 
-                              {candidate.socialLinks && candidate.socialLinks.length > 0 && (
+                            {(candidate.socialLinks && candidate.socialLinks.length > 0) || formatJoinedDate(candidate.joinedDate) ? (
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "space-between",
+                                  gap: 10,
+                                  marginTop: 8,
+                                  width: "100%",
+                                  minWidth: 0,
+                                }}
+                              >
                                 <div
                                   style={{
                                     display: "flex",
                                     alignItems: "center",
-                                    gap: 5,
-                                    flexShrink: 0,
+                                    gap: 6,
+                                    minWidth: 0,
                                   }}
                                 >
-                                  <SocialLinkPills links={candidate.socialLinks} />
+                                  {candidate.socialLinks && candidate.socialLinks.length > 0 && (
+                                    <SocialLinkPills links={candidate.socialLinks} />
+                                  )}
                                 </div>
-                              )}
-                            </div>
-                            <p
-                              style={{
-                                margin: "5px 0 0",
-                                color: "#b8aaba",
-                                fontSize: 12,
-                              }}
-                            >
-                              {candidate.sharedSeedCount || sharedRooms.length} shared rooms
-                            </p>
 
-                            
+                                {formatJoinedDate(candidate.joinedDate) && (
+                                  <span
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      borderRadius: 999,
+                                      padding: "4px 8px",
+                                      background: "rgba(108, 79, 255, 0.32)",
+                                      border: "1px solid rgba(164, 139, 255, 0.5)",
+                                      color: "#f1ecff",
+                                      fontSize: 10,
+                                      lineHeight: 1,
+                                      whiteSpace: "nowrap",
+                                      boxSizing: "border-box",
+                                      flexShrink: 0,
+                                    }}
+                                  >
+                                    {formatJoinedDate(candidate.joinedDate)}
+                                  </span>
+                                )}
+                              </div>
+                            ) : null}
                           </div>
                         </div>
 
-                        <div
-                          style={{
-                            width: 56,
-                            height: 56,
-                            borderRadius: "50%",
-                            border: "1px solid rgba(232,200,255,0.28)",
-                            background: "rgba(232,200,255,0.08)",
-                            display: "grid",
-                            placeItems: "center",
-                            color: "#f0d6ff",
-                            flexShrink: 0,
-                          }}
-                        >
-                          <div style={{ textAlign: "center", lineHeight: 1 }}>
-                            <div style={{ fontWeight: 800, fontSize: 17 }}>{score}%</div>
-                            <div style={{ fontSize: 9, color: "#b9a8bf", marginTop: 4 }}>
-                              ORBIT
-                            </div>
-                          </div>
-                        </div>
                       </div>
 
                       <div
@@ -1534,14 +1593,14 @@ export default function OrbitTestPage() {
                                 title={`${roomName} · ${count} held`}
                                 style={{
                                   display: "grid",
-                                  gridTemplateColumns: "48px 24px minmax(0, 1fr)",
+                                  gridTemplateColumns: "44px 22px minmax(0, 1fr)",
                                   alignItems: "center",
                                   gap: 9,
-                                  minHeight: 40,
+                                  minHeight: 36,
                                   border: "1px solid rgba(255,255,255,0.12)",
                                   background: "rgba(255,255,255,0.035)",
                                   borderRadius: 14,
-                                  padding: "6px 9px 6px 6px",
+                                  padding: "5px 8px 5px 6px",
                                   color: "#eee5ef",
                                   fontSize: 12,
                                   textDecoration: "none",
@@ -1552,8 +1611,8 @@ export default function OrbitTestPage() {
                                     display: "inline-flex",
                                     alignItems: "center",
                                     justifyContent: "center",
-                                    height: 30,
-                                    minWidth: 40,
+                                    height: 26,
+                                    minWidth: 38,
                                     borderRadius: 10,
                                     background: "rgba(164,139,255,0.2)",
                                     border: "1px solid rgba(164,139,255,0.34)",
@@ -1568,8 +1627,8 @@ export default function OrbitTestPage() {
 
                                 <span
                                   style={{
-                                    width: 24,
-                                    height: 24,
+                                    width: 22,
+                                    height: 22,
                                     borderRadius: "50%",
                                     overflow: "hidden",
                                     background: "#1b1520",
