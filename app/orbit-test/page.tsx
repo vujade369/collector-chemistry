@@ -672,7 +672,7 @@ export default function OrbitTestPage() {
 
       const focusedCount = Object.values(current).filter((mode) => mode === "focus").length;
       if (focusedCount >= 10) {
-        setCollectionSearchMessage("Room limit reached. Remove a selected room before adding another.");
+        setCollectionSearchMessage("Collection limit reached. Remove a selected collection before adding another.");
         return current;
       }
 
@@ -971,9 +971,9 @@ export default function OrbitTestPage() {
               }}
             >
               <div style={{ marginBottom: 18 }}>
-                <h2 style={{ margin: 0, fontSize: 22 }}>Build your search rooms</h2>
+                <h2 style={{ margin: 0, fontSize: 22 }}>Build your collector search</h2>
                 <p style={{ margin: "7px 0 0", color: "#a99daa", fontSize: 13 }}>
-                  Start from your wallet rooms, then add more collections to shape who appears below.
+                  Start from your wallet collections, then add more to shape who appears below.
                 </p>
               </div>
 
@@ -1006,7 +1006,7 @@ export default function OrbitTestPage() {
                   >
                     <div>
                       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                        <h2 style={{ margin: 0, fontSize: 20 }}>Your search rooms</h2>
+                        <h2 style={{ margin: 0, fontSize: 20 }}>Your search collections</h2>
                         <span
                           style={{
                             display: "inline-flex",
@@ -1028,15 +1028,15 @@ export default function OrbitTestPage() {
                           </strong>
                           <span style={{ color: "#a99ee8", fontSize: 10 }}>
                             {focusedSlugs.length >= 10
-                              ? "Room limit reached"
+                              ? "Collection limit reached"
                               : focusedSlugs.length === 0
-                                ? "Choose at least one room"
+                                ? "Choose at least one collection"
                                 : `Add up to ${10 - focusedSlugs.length} more`}
                           </span>
                         </span>
                       </div>
                       <p style={{ margin: "6px 0 0", color: "#a99daa", fontSize: 13 }}>
-                        Selected from your wallet automatically. Add or remove rooms to shape who appears below.
+                        Selected from your wallet automatically. Add or remove collections to shape who appears below.
                       </p>
                     </div>
 
@@ -1143,7 +1143,7 @@ export default function OrbitTestPage() {
                             key={room.slug}
                             type="button"
                             onClick={() => removeOutsideRoom(room.slug)}
-                            title="Remove added room"
+                            title="Remove added collection"
                             style={{
                               border: "1px solid rgba(164,139,255,0.42)",
                               background: "rgba(108,79,255,0.18)",
@@ -1160,10 +1160,6 @@ export default function OrbitTestPage() {
                       </div>
                     </div>
                   )}
-
-                  <p style={{ margin: "12px 0 0", color: "#8f8292", fontSize: 12 }}>
-                    {focusedSlugs.length} selected · {Math.max(walletAvailableRooms.length - focusedSlugs.length, 0)} removed
-                  </p>
                 </section>
               )}
 
@@ -1177,9 +1173,9 @@ export default function OrbitTestPage() {
                 }}
               >
                 <div style={{ marginBottom: 14 }}>
-                  <h2 style={{ margin: 0, fontSize: 20 }}>Explore more rooms</h2>
+                  <h2 style={{ margin: 0, fontSize: 20 }}>Explore more collections</h2>
                   <p style={{ margin: "6px 0 0", color: "#a99daa", fontSize: 13 }}>
-                    Search collections to add more rooms to this search, whether or not they appear in your top rooms.
+                    Search any collection to add it to this search, whether or not it appears in your top holdings.
                   </p>
                 </div>
 
@@ -1203,7 +1199,7 @@ export default function OrbitTestPage() {
 
                   {!collectionSearchQuery && collectionSearchResults.length === 0 && !collectionSearchMessage && (
                     <p style={{ margin: "10px 0 0", color: "#8f8292", fontSize: 12 }}>
-                      Added rooms will appear on the left.
+                      Added collections will appear on the left.
                     </p>
                   )}
 
@@ -1326,13 +1322,13 @@ export default function OrbitTestPage() {
               >
                   <div>
                     <p style={{ margin: 0, color: "#8f8292", fontSize: 12 }}>
-                      Using {focusedSlugs.length} selected room{focusedSlugs.length === 1 ? "" : "s"}
+                      Using {focusedSlugs.length} selected collection{focusedSlugs.length === 1 ? "" : "s"}
                       {addedRooms.length > 0
-                        ? `, including ${addedRooms.length} added room${addedRooms.length === 1 ? "" : "s"}`
+                        ? `, including ${addedRooms.length} added collection${addedRooms.length === 1 ? "" : "s"}`
                         : ""}.
                     </p>
                     <p style={{ margin: "5px 0 0", color: "#c8bdca", fontSize: 13 }}>
-                      Ready to search with these rooms?
+                      Ready to search with these collections?
                     </p>
                   </div>
 
@@ -1370,7 +1366,7 @@ export default function OrbitTestPage() {
                   <h2 style={{ margin: 0, fontSize: 24 }}>Collectors in Your Orbit</h2>
                   <p style={{ margin: "7px 0 0", color: "#a99daa", fontSize: 13 }}>
                     {loading ? "Updating this scenario…" : activeFocusCount > 0
-                      ? `Showing collectors who overlap with ${activeFocusCount} selected room${activeFocusCount === 1 ? "" : "s"}.`
+                      ? `Showing collectors who overlap with ${activeFocusCount} selected collection${activeFocusCount === 1 ? "" : "s"}.`
                       : "Collectors who overlap with the rooms currently shaping this search."}
                   </p>
                 </div>
