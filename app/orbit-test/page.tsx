@@ -1321,12 +1321,6 @@ export default function OrbitTestPage() {
                 }}
               >
                   <div>
-                    <p style={{ margin: 0, color: "#8f8292", fontSize: 12 }}>
-                      Using {focusedSlugs.length} selected collection{focusedSlugs.length === 1 ? "" : "s"}
-                      {addedRooms.length > 0
-                        ? `, including ${addedRooms.length} added collection${addedRooms.length === 1 ? "" : "s"}`
-                        : ""}.
-                    </p>
                     <p style={{ margin: "5px 0 0", color: "#c8bdca", fontSize: 13 }}>
                       Ready to search with these collections?
                     </p>
