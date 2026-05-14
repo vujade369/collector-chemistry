@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const seedLimit = parseIntParam(searchParams.get("seedLimit"), 10, 10);
+  const seedLimit = parseIntParam(searchParams.get("seedLimit"), 50, 50);
   const resultLimit = parseIntParam(searchParams.get("resultLimit"), 10, 20);
   const seedSlugs = parseSlugListParam(searchParams.get("seedSlugs"));
   const excludeSlugs = parseSlugListParam(searchParams.get("excludeSlugs"));

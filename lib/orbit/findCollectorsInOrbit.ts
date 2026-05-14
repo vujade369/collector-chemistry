@@ -666,7 +666,7 @@ export async function findCollectorsInOrbit(
   const alchemyApiKey = ALCHEMY_API_KEY_ENV;
   const openseaApiKey = OPENSEA_API_KEY_ENV;
 
-  const seedLimit = Math.min(options.seedLimit ?? 10, 10);
+  const seedLimit = Math.min(options.seedLimit ?? 50, 50);
   const resultLimit = Math.min(options.resultLimit ?? 10, 20);
   const selectedSeedSlugs = Array.from(
     new Set((options.seedSlugs || []).map((slug) => slug.trim().toLowerCase()).filter(Boolean))
@@ -712,7 +712,7 @@ export async function findCollectorsInOrbit(
     heldCount: c.heldCount,
   }));
 
-  const showMoreCollections: OrbitCollection[] = allCollections.slice(5, 15).map((c) => ({
+  const showMoreCollections: OrbitCollection[] = allCollections.slice(5, 50).map((c) => ({
     slug: c.slug,
     name: c.name || c.contractAddress,
     contractAddress: c.contractAddress,

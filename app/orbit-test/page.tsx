@@ -745,7 +745,7 @@ export default function OrbitTestPage() {
     setRoomStates(buildDefaultRoomStates(availableRooms));
   }
 
-  async function findCollectors() {
+  async function findCollectors(mode: "wallet" | "custom" = "wallet") {
     setLoading(true);
     setError("");
 
@@ -760,7 +760,7 @@ export default function OrbitTestPage() {
       return;
     }
 
-    if (availableRooms.length > 0 && focusedSlugs.length === 0) {
+    if (mode === "custom" && availableRooms.length > 0 && focusedSlugs.length === 0) {
       setError("Choose at least one focus room.");
       setLoading(false);
       return;
@@ -773,14 +773,14 @@ export default function OrbitTestPage() {
         resultLimit: "20",
       });
 
-      const currentFocusedSlugs = getFocusedSlugs(roomStates);
-      const currentExcludedSlugs = getExcludedSlugs(roomStates);
+      const currentFocusedSlugs = mode === "custom" ? getFocusedSlugs(roomStates) : [];
+      const currentExcludedSlugs = mode === "custom" ? getExcludedSlugs(roomStates) : [];
 
-      if (currentFocusedSlugs.length > 0) {
+      if (mode === "custom" && currentFocusedSlugs.length > 0) {
         params.set("seedSlugs", currentFocusedSlugs.join(","));
       }
 
-      if (currentExcludedSlugs.length > 0) {
+      if (mode === "custom" && currentExcludedSlugs.length > 0) {
         params.set("excludeSlugs", currentExcludedSlugs.join(","));
       }
 
@@ -886,7 +886,7 @@ export default function OrbitTestPage() {
             </h1>
 
             <p style={{ margin: 0, maxWidth: 760, color: "#bdb0bd", lineHeight: 1.55 }}>
-              Find nearby collectors who share your collecting rooms, then see exactly why each person surfaced.
+              Find nearby collectors surfaced from a broad read of your top 50 visible collection rooms, then see exactly why each person appeared.
             </p>
           </div>
         </div>
@@ -992,7 +992,7 @@ export default function OrbitTestPage() {
             </button>
 
             <button
-              onClick={findCollectors}
+              onClick={() => findCollectors("wallet")}
               disabled={loading}
               style={{
                 background: loading ? "#312636" : "#f4edf4",
@@ -1004,7 +1004,7 @@ export default function OrbitTestPage() {
                 cursor: loading ? "not-allowed" : "pointer",
               }}
             >
-              {loading ? "Finding…" : "Find nearby collectors"}
+              {loading ? "Reading…" : "Read my orbit"}
             </button>
           </div>
         </div>
@@ -1036,9 +1036,9 @@ export default function OrbitTestPage() {
               }}
             >
               <div style={{ marginBottom: 18 }}>
-                <h2 style={{ margin: 0, fontSize: 22 }}>Build your collector search</h2>
+                <h2 style={{ margin: 0, fontSize: 22 }}>Tune the signal</h2>
                 <p style={{ margin: "7px 0 0", color: "#a99daa", fontSize: 13 }}>
-                  Start from your wallet collections, then add more to shape who appears below.
+                  Optional: add or remove rooms to run a custom collector search.
                 </p>
               </div>
 
@@ -1103,7 +1103,7 @@ export default function OrbitTestPage() {
                         </span>
                       </div>
                       <p style={{ margin: "6px 0 0", color: "#a99daa", fontSize: 13 }}>
-                        We start with your top 15 visible collection rooms by holding count. Select up to 10 to shape who appears below.
+                        The default orbit read uses your top 50 visible collection rooms. Use this section only when you want to tune the signal manually.
                       </p>
                     </div>
 
@@ -1246,7 +1246,7 @@ export default function OrbitTestPage() {
                 <div style={{ marginBottom: 14 }}>
                   <h2 style={{ margin: 0, fontSize: 20 }}>Explore more collections</h2>
                   <p style={{ margin: "6px 0 0", color: "#a99daa", fontSize: 13 }}>
-                    Search any collection to add it to this search, whether or not it appears in your top holdings.
+                    Search any collection to add it to the tuned signal, whether or not it appears in your top holdings.
                   </p>
                 </div>
 
@@ -1393,13 +1393,13 @@ export default function OrbitTestPage() {
               >
                   <div>
                     <p style={{ margin: "5px 0 0", color: "#c8bdca", fontSize: 13 }}>
-                      Ready to search with these collections?
+                      Ready to tune the signal with these collections?
                     </p>
                   </div>
 
                   <button
                     type="button"
-                    onClick={findCollectors}
+                    onClick={() => findCollectors("custom")}
                     disabled={loading || focusedSlugs.length === 0}
                     style={{
                       background: loading || focusedSlugs.length === 0 ? "#312636" : "#f4edf4",
@@ -1413,7 +1413,7 @@ export default function OrbitTestPage() {
                       cursor: loading || focusedSlugs.length === 0 ? "not-allowed" : "pointer",
                     }}
                   >
-                    {loading ? "Finding…" : "Find nearby collectors"}
+                    {loading ? "Tuning…" : "Tune signal"}
                   </button>
               </div>
 
@@ -1431,7 +1431,7 @@ export default function OrbitTestPage() {
                   <h2 style={{ margin: 0, fontSize: 24 }}>Collectors in Your Orbit</h2>
                   <p style={{ margin: "7px 0 0", color: "#a99daa", fontSize: 13 }}>
                     {loading ? "Updating this scenario…" : focusedSlugs.length > 0
-                      ? `These collectors share your selected rooms. Signal reflects overlap breadth, holding depth, and how specific the match appears.`
+                      ? `Wallet orbit based on your top 50 visible collection rooms. Signal reflects repeated overlap, holding depth, and how specific the shared rooms are.`
                       : "Collectors who overlap with the rooms currently shaping this search."}
                   </p>
                 </div>
@@ -1474,8 +1474,8 @@ export default function OrbitTestPage() {
                   const score = displayOrbitPercent(index);
                   const institutional = looksInstitutional(candidate);
                   const sharedRooms = candidate.sharedSeedCollections || [];
-                  const visibleSharedRooms = sharedRooms;
-                  const hiddenSharedRoomCount = 0;
+                  const visibleSharedRooms = sharedRooms.slice(0, 10);
+                  const hiddenSharedRoomCount = Math.max(sharedRooms.length - visibleSharedRooms.length, 0);
                   const sharedCount = candidate.sharedSeedCount || sharedRooms.length;
                   const selectedCount = Math.max(focusedSlugs.length, activeFocusCount, sharedCount);
                   const signalStrength = signalStrengthLabel(sharedCount);
@@ -1780,23 +1780,7 @@ export default function OrbitTestPage() {
                             {signalStrength} · {signalType}
                           </p>
                           <p style={{ margin: "5px 0 0", color: "#b9adb9", fontSize: 12, lineHeight: 1.45 }}>
-                            Shares {sharedCount} / {selectedCount} selected collection{selectedCount === 1 ? "" : "s"}.
-                          </p>
-                        </div>
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                            gap: 10,
-                            margin: "0 0 8px",
-                          }}
-                        >
-                          <p style={{ margin: 0, color: "#817583", fontSize: 12 }}>
-                            Shared rooms
-                          </p>
-                          <p style={{ margin: 0, color: "#7d717f", fontSize: 11 }}>
-                            {candidate.sharedSeedCount || sharedRooms.length} total
+                            {sharedCount} shared collection{sharedCount === 1 ? "" : "s"}.
                           </p>
                         </div>
                         <div
@@ -1889,6 +1873,22 @@ export default function OrbitTestPage() {
                               </a>
                             );
                           })}
+
+                          {hiddenSharedRoomCount > 0 && (
+                            <div
+                              style={{
+                                border: "1px solid rgba(255,255,255,0.07)",
+                                background: "rgba(255,255,255,0.018)",
+                                borderRadius: 14,
+                                padding: "9px 10px",
+                                color: "#a99daa",
+                                fontSize: 12,
+                                textAlign: "center",
+                              }}
+                            >
+                              +{hiddenSharedRoomCount} more shared collection{hiddenSharedRoomCount === 1 ? "" : "s"}
+                            </div>
+                          )}
                         </div>
                       </div>
 
