@@ -52,6 +52,32 @@ export type OrbitCandidate = {
   proof: string;
 };
 
+type OrbitSeedDebugSource =
+  | "default_seed_inventory"
+  | "selected_seed_inventory"
+  | "selected_outside_room";
+
+type OrbitSeedCollectionDebug = {
+  slug: string;
+  contract: string;
+  source: OrbitSeedDebugSource;
+  requestedOwnerPages: number;
+  ownerPagesFetched: number;
+  fetchedOwnerCount: number;
+  specificityScore: number | null;
+  failed: boolean;
+  failureReason?: string;
+};
+
+type OrbitReturnedCandidateDebug = {
+  wallet: string;
+  sharedRoomCount: number;
+  serverScore: number;
+  sharedSlugs: string[];
+  sharedRoomHoldings: Record<string, number>;
+  rankingMode: "shared_count_then_specificity" | "outside_seed_priority";
+};
+
 export type OrbitDebug = {
   seedLimit: number;
   resultLimit: number;
@@ -64,6 +90,8 @@ export type OrbitDebug = {
   };
   failedCollections: string[];
   failedProfiles: string[];
+  seedCollections: OrbitSeedCollectionDebug[];
+  returnedCandidates: OrbitReturnedCandidateDebug[];
 };
 
 export type OrbitResponse = {
@@ -340,6 +368,17 @@ function computeCandidateStrength(sharedSeedCount: number): CandidateStrength | 
   return null;
 }
 
+function getSeedDebugSource(
+  collection: RawCollection,
+  selectedSeedSlugs: string[],
+  outsideSelectedSlugs: string[]
+): OrbitSeedDebugSource {
+  if (!selectedSeedSlugs.length) return "default_seed_inventory";
+  return outsideSelectedSlugs.includes(collection.slug)
+    ? "selected_outside_room"
+    : "selected_seed_inventory";
+}
+
 function getContractAddressFromNFT(nft: WalletOwnerNFT): string {
   const contract = nft.contract as { address?: string } | undefined;
   return String(contract?.address || "").toLowerCase();
@@ -493,10 +532,21 @@ async function fetchOwnersForContract(
   contractAddress: string,
   alchemyApiKey: string,
   maxPages = DEFAULT_OWNER_PAGES
-): Promise<{ owners: CollectionOwnerHolding[]; failed: boolean }> {
-  const fallback = { owners: [] as CollectionOwnerHolding[], failed: true };
+): Promise<{
+  owners: CollectionOwnerHolding[];
+  failed: boolean;
+  pagesFetched: number;
+  failureReason?: string;
+}> {
+  const fallback = {
+    owners: [] as CollectionOwnerHolding[],
+    failed: true,
+    pagesFetched: 0,
+    failureReason: "owner_fetch_failed",
+  };
   const ownerMap = new Map<string, CollectionOwnerHolding>();
   let pageKey: string | null = null;
+  let pagesFetched = 0;
 
   for (let page = 0; page < maxPages; page++) {
     const params = new URLSearchParams({
@@ -560,6 +610,8 @@ async function fetchOwnersForContract(
       });
 
       if (result.ok) {
+        pagesFetched += 1;
+
         for (const owner of result.owners) {
           const existing = ownerMap.get(owner.address);
           if (existing) {
@@ -575,14 +627,24 @@ async function fetchOwnersForContract(
       }
 
       const canRetry = attempt < 3 && (result.status === 0 || result.status === 429 || result.status >= 500);
-      if (!canRetry) return ownerMap.size ? { owners: [...ownerMap.values()], failed: false } : fallback;
+      if (!canRetry) {
+        const failureReason = result.status ? `http_${result.status}` : "owner_fetch_failed";
+        return ownerMap.size
+          ? { owners: [...ownerMap.values()], failed: false, pagesFetched }
+          : { ...fallback, pagesFetched, failureReason };
+      }
       await sleep(1000 * attempt);
     }
 
     if (!pageSucceeded || !pageKey) break;
   }
 
-  return { owners: [...ownerMap.values()], failed: ownerMap.size === 0 };
+  return {
+    owners: [...ownerMap.values()],
+    failed: ownerMap.size === 0,
+    pagesFetched,
+    failureReason: ownerMap.size === 0 ? "no_owners_returned" : undefined,
+  };
 }
 
 type OpenSeaAccountData = {
@@ -695,6 +757,8 @@ export async function findCollectorsInOrbit(
     timing: { walletFetchMs: 0, holderDiscoveryMs: 0, profileEnrichmentMs: 0, totalMs: 0 },
     failedCollections: [],
     failedProfiles: [],
+    seedCollections: [],
+    returnedCandidates: [],
   };
 
   // Step 1: Fetch merged wallet NFTs
@@ -769,6 +833,19 @@ export async function findCollectorsInOrbit(
 
   if (!alchemyApiKey || seedCollections.length === 0) {
     debugState.failedCollections = seedCollections.map((c) => c.contractAddress);
+    debugState.seedCollections = seedCollections.map((collection) => ({
+      slug: collection.slug,
+      contract: collection.contractAddress,
+      source: getSeedDebugSource(collection, selectedSeedSlugs, outsideSelectedSlugs),
+      requestedOwnerPages: outsideSelectedSlugs.includes(collection.slug)
+        ? OUTSIDE_OWNER_PAGES
+        : DEFAULT_OWNER_PAGES,
+      ownerPagesFetched: 0,
+      fetchedOwnerCount: 0,
+      specificityScore: null,
+      failed: true,
+      failureReason: alchemyApiKey ? "no_seed_collections" : "missing_alchemy_api_key",
+    }));
     debugState.timing.holderDiscoveryMs = Date.now() - holderDiscoveryStart;
     debugState.timing.totalMs = Date.now() - totalStart;
     return {
@@ -793,7 +870,14 @@ export async function findCollectorsInOrbit(
         maxOwnerPages
       );
 
-      return { collection, owners: result.owners, failed: result.failed };
+      return {
+        collection,
+        owners: result.owners,
+        failed: result.failed,
+        pagesFetched: result.pagesFetched,
+        requestedOwnerPages: maxOwnerPages,
+        failureReason: result.failureReason,
+      };
     })
   );
   debugState.timing.holderDiscoveryMs = Date.now() - holderDiscoveryStart;
@@ -809,17 +893,54 @@ export async function findCollectorsInOrbit(
     }
   >();
 
-  for (const result of ownerResults) {
-    if (result.status === "rejected") continue;
-    const { collection, owners, failed } = result.value;
+  for (let index = 0; index < ownerResults.length; index++) {
+    const result = ownerResults[index];
+    if (result.status === "rejected") {
+      const collection = seedCollections[index];
+      debugState.failedCollections.push(collection.contractAddress);
+      debugState.seedCollections.push({
+        slug: collection.slug,
+        contract: collection.contractAddress,
+        source: getSeedDebugSource(collection, selectedSeedSlugs, outsideSelectedSlugs),
+        requestedOwnerPages: outsideSelectedSlugs.includes(collection.slug)
+          ? OUTSIDE_OWNER_PAGES
+          : DEFAULT_OWNER_PAGES,
+        ownerPagesFetched: 0,
+        fetchedOwnerCount: 0,
+        specificityScore: null,
+        failed: true,
+        failureReason: "owner_fetch_rejected",
+      });
+      continue;
+    }
+    const {
+      collection,
+      owners,
+      failed,
+      pagesFetched,
+      requestedOwnerPages,
+      failureReason,
+    } = result.value;
+
+    const holderCount = owners.length;
+    const specificityScore = computeSpecificityScore(holderCount);
+
+    debugState.seedCollections.push({
+      slug: collection.slug,
+      contract: collection.contractAddress,
+      source: getSeedDebugSource(collection, selectedSeedSlugs, outsideSelectedSlugs),
+      requestedOwnerPages,
+      ownerPagesFetched: pagesFetched,
+      fetchedOwnerCount: holderCount,
+      specificityScore: failed ? null : specificityScore,
+      failed,
+      failureReason: failed ? failureReason || "owner_fetch_failed" : undefined,
+    });
 
     if (failed) {
       debugState.failedCollections.push(collection.contractAddress);
       continue;
     }
-
-    const holderCount = owners.length;
-    const specificityScore = computeSpecificityScore(holderCount);
 
     orbitSeedCollections.push({
       slug: collection.slug,
@@ -893,6 +1014,24 @@ export async function findCollectorsInOrbit(
       return b.score - a.score;
     })
     .slice(0, resultLimit);
+
+  const rankingMode: OrbitReturnedCandidateDebug["rankingMode"] = hasPriorityOutsideSeed
+    ? "outside_seed_priority"
+    : "shared_count_then_specificity";
+
+  const returnedCandidateDebugByWallet = new Map(
+    rankedCandidates.map((candidate) => [
+      candidate.wallet,
+      {
+        wallet: candidate.wallet,
+        sharedRoomCount: candidate.sharedSeedCount,
+        serverScore: Math.round(candidate.score * 10_000) / 10_000,
+        sharedSlugs: candidate.sharedSeedCollections,
+        sharedRoomHoldings: candidate.sharedRoomHoldings,
+        rankingMode,
+      },
+    ])
+  );
 
   // Step 6: Enrich with OpenSea account profile data
   const profileEnrichmentStart = Date.now();
@@ -1000,6 +1139,10 @@ export async function findCollectorsInOrbit(
       proof: `Appears across ${candidate.sharedSeedCount} of this wallet's top collection rooms.`,
     });
   }
+
+  debugState.returnedCandidates = enrichedCandidates
+    .map((candidate) => returnedCandidateDebugByWallet.get(candidate.wallet))
+    .filter((candidate): candidate is OrbitReturnedCandidateDebug => Boolean(candidate));
 
   const enrichedOrbitSeedCollections = await enrichOrbitCollections(
     orbitSeedCollections,
