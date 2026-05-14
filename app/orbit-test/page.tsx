@@ -121,7 +121,6 @@ function looksInstitutional(candidate: OrbitCandidate) {
   const hardInstitutionalTerms = [
     "marketplace",
     "exchange",
-    "opensea",
     "blur",
     "looksrare",
     "x2y2",
