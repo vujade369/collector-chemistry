@@ -859,26 +859,47 @@ export default function OrbitTestPage() {
       }}
     >
       <section style={{ maxWidth: 1180, margin: "0 auto" }}>
-        <p style={{ margin: "0 0 12px", color: "#a79aa8", fontSize: 13 }}>
-          Internal preview route
-        </p>
+        <div
+          style={{
+            position: "relative",
+            marginBottom: 30,
+            padding: "10px 0 4px",
+          }}
+        >
+          <div
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              inset: "-38px auto auto -80px",
+              width: 420,
+              height: 220,
+              background:
+                "radial-gradient(circle at 30% 30%, rgba(236,72,153,0.12), transparent 58%), radial-gradient(circle at 68% 42%, rgba(34,211,238,0.08), transparent 48%)",
+              filter: "blur(4px)",
+              opacity: 0.8,
+              pointerEvents: "none",
+            }}
+          />
+          <div style={{ position: "relative" }}>
+            <h1 style={{ margin: "0 0 12px", fontSize: 46, letterSpacing: "-0.055em", lineHeight: 0.95 }}>
+              Collectors in Your Orbit
+            </h1>
 
-        <h1 style={{ margin: "0 0 12px", fontSize: 42, letterSpacing: "-0.04em" }}>
-          Collectors in Your Orbit
-        </h1>
-
-        <p style={{ margin: "0 0 28px", maxWidth: 760, color: "#bdb0bd", lineHeight: 1.55 }}>
-          Find nearby collectors who share your collecting rooms, then see exactly why each person surfaced.
-        </p>
+            <p style={{ margin: 0, maxWidth: 760, color: "#bdb0bd", lineHeight: 1.55 }}>
+              Find nearby collectors who share your collecting rooms, then see exactly why each person surfaced.
+            </p>
+          </div>
+        </div>
 
         <div
           style={{
-            border: "1px solid rgba(255,255,255,0.1)",
+            border: "1px solid rgba(255,255,255,0.085)",
             background:
-              "linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.025))",
+              "radial-gradient(circle at 18% 0%, rgba(34,211,238,0.055), transparent 34%), linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.018))",
             borderRadius: 24,
             padding: 18,
             marginBottom: 32,
+            boxShadow: "0 18px 42px rgba(0,0,0,0.18)",
           }}
         >
           <div style={{ marginBottom: 14 }}>
@@ -913,9 +934,9 @@ export default function OrbitTestPage() {
                   onChange={(event) => updateWalletRow(index, event.target.value)}
                   placeholder={index === 0 ? "Wallet, ENS, or OpenSea handle" : "Additional wallet"}
                   style={{
-                    background: "#120f15",
+                    background: "rgba(8,7,10,0.72)",
                     color: "#f4edf4",
-                    border: "1px solid rgba(255,255,255,0.14)",
+                    border: "1px solid rgba(255,255,255,0.11)",
                     borderRadius: 14,
                     padding: "14px 16px",
                     fontSize: 14,
@@ -929,9 +950,9 @@ export default function OrbitTestPage() {
                     onClick={() => removeWalletRow(index)}
                     disabled={walletRows.length <= 1}
                     style={{
-                      background: "transparent",
+                      background: "rgba(255,255,255,0.026)",
                       color: "#b7aab8",
-                      border: "1px solid rgba(255,255,255,0.14)",
+                      border: "1px solid rgba(255,255,255,0.11)",
                       borderRadius: 14,
                       padding: "0 13px",
                       height: 46,
@@ -1032,11 +1053,13 @@ export default function OrbitTestPage() {
               {availableRooms.length > 0 && (
                 <section
                   style={{
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    background: "rgba(255,255,255,0.035)",
+                    border: "1px solid rgba(255,255,255,0.085)",
+                    background:
+                      "radial-gradient(circle at 24% 0%, rgba(236,72,153,0.075), transparent 38%), linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.018))",
                     borderRadius: 24,
                     padding: 18,
                     marginBottom: 0,
+                    boxShadow: "0 18px 42px rgba(0,0,0,0.18)",
                   }}
                 >
                   <div
@@ -1122,18 +1145,20 @@ export default function OrbitTestPage() {
                             borderRadius: 999,
                             padding: "8px 12px 8px 8px",
                             border: isFocus
-                              ? "1px solid rgba(164,139,255,0.62)"
+                              ? "1px solid rgba(196,171,255,0.42)"
                               : isExclude
-                                ? "1px solid rgba(255,255,255,0.16)"
-                                : "1px solid rgba(255,255,255,0.12)",
+                                ? "1px solid rgba(255,255,255,0.13)"
+                                : "1px solid rgba(255,255,255,0.09)",
                             background: isFocus
-                              ? "rgba(108,79,255,0.22)"
+                              ? "rgba(139,92,246,0.13)"
                               : isExclude
-                                ? "rgba(255,255,255,0.028)"
-                                : "rgba(255,255,255,0.035)",
-                            color: isFocus ? "#f1ecff" : isExclude ? "#a99daa" : "#8f8292",
+                                ? "rgba(255,255,255,0.022)"
+                                : "rgba(255,255,255,0.026)",
+                            color: isFocus ? "#f3edf8" : isExclude ? "#9c8f9f" : "#8d808f",
                             cursor: "pointer",
                             maxWidth: 340,
+                            outline: "none",
+                            boxShadow: isFocus ? "0 0 0 1px rgba(196,171,255,0.10)" : "none",
                           }}
                         >
                           <span
@@ -1209,11 +1234,13 @@ export default function OrbitTestPage() {
 
               <section
                 style={{
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  background: "rgba(255,255,255,0.026)",
+                  border: "1px solid rgba(255,255,255,0.075)",
+                  background:
+                    "linear-gradient(180deg, rgba(255,255,255,0.032), rgba(255,255,255,0.014))",
                   borderRadius: 24,
                   padding: 18,
                   marginBottom: 28,
+                  boxShadow: "0 14px 34px rgba(0,0,0,0.14)",
                 }}
               >
                 <div style={{ marginBottom: 14 }}>
