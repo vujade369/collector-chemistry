@@ -179,14 +179,17 @@ function signalStrengthLabel(sharedCount: number) {
   return "Single-Room Signal";
 }
 
-function signalTypeLabel(candidate: OrbitCandidate) {
+function signalTypeLabel(candidate: OrbitCandidate, selectedCount: number) {
   const sharedCount = candidate.sharedSeedCount || candidate.sharedSeedCollections?.length || 0;
   const holdings = Object.values(candidate.sharedRoomHoldings || {});
   const maxHolding = holdings.length ? Math.max(...holdings) : 0;
+  const shareRatio = selectedCount > 0 ? sharedCount / selectedCount : 0;
 
-  if (sharedCount >= 5) return "Broad Peer";
-  if (sharedCount >= 3) return "Specific Neighbor";
+  if (selectedCount > 0 && sharedCount === selectedCount) return "Full Orbit Match";
+  if (shareRatio >= 0.7) return "Broad Peer";
+  if (shareRatio >= 0.5) return "Nearby Peer";
   if (maxHolding >= 10) return "Deep Room Regular";
+  if (sharedCount >= 3) return "Specific Neighbor";
   return "Shared Room";
 }
 
@@ -1075,7 +1078,7 @@ export default function OrbitTestPage() {
                         </span>
                       </div>
                       <p style={{ margin: "6px 0 0", color: "#a99daa", fontSize: 13 }}>
-                        Selected from your wallet automatically. Add or remove collections to shape who appears below.
+                        We start with your top 15 visible collection rooms by holding count. Select up to 10 to shape who appears below.
                       </p>
                     </div>
 
@@ -1398,8 +1401,8 @@ export default function OrbitTestPage() {
                 <div>
                   <h2 style={{ margin: 0, fontSize: 24 }}>Collectors in Your Orbit</h2>
                   <p style={{ margin: "7px 0 0", color: "#a99daa", fontSize: 13 }}>
-                    {loading ? "Updating this scenario…" : activeFocusCount > 0
-                      ? `Showing collectors who overlap with ${activeFocusCount} selected collection${activeFocusCount === 1 ? "" : "s"}.`
+                    {loading ? "Updating this scenario…" : focusedSlugs.length > 0
+                      ? `These collectors share your selected rooms. Signal reflects overlap breadth, holding depth, and how specific the match appears.`
                       : "Collectors who overlap with the rooms currently shaping this search."}
                   </p>
                 </div>
@@ -1409,16 +1412,21 @@ export default function OrbitTestPage() {
                     display: "inline-flex",
                     alignItems: "center",
                     gap: 8,
-                    color: "#b7aab8",
+                    color: hideInstitutional ? "#f0d6ff" : "#b7aab8",
                     fontSize: 13,
                     cursor: "pointer",
                     userSelect: "none",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    background: hideInstitutional ? "rgba(126,87,194,0.18)" : "rgba(255,255,255,0.04)",
+                    borderRadius: 999,
+                    padding: "8px 11px",
                   }}
                 >
                   <input
                     type="checkbox"
                     checked={hideInstitutional}
                     onChange={(event) => setHideInstitutional(event.target.checked)}
+                    style={{ accentColor: "#8f6bea" }}
                   />
                   Hide vault-like wallets
                 </label>
@@ -1439,9 +1447,9 @@ export default function OrbitTestPage() {
                   const visibleSharedRooms = sharedRooms;
                   const hiddenSharedRoomCount = 0;
                   const sharedCount = candidate.sharedSeedCount || sharedRooms.length;
-                  const selectedCount = Math.max(activeFocusCount || 0, sharedCount);
+                  const selectedCount = Math.max(focusedSlugs.length, activeFocusCount, sharedCount);
                   const signalStrength = signalStrengthLabel(sharedCount);
-                  const signalType = signalTypeLabel(candidate);
+                  const signalType = signalTypeLabel(candidate, selectedCount);
                   return (
                     <article
                       key={candidate.wallet}
@@ -1689,6 +1697,7 @@ export default function OrbitTestPage() {
                       >
                         <div style={{ marginBottom: 14 }}>
                         <div
+                          title="Signal is a directional match score based on shared selected collections, holding depth, and collection specificity. It is not a ranking of taste, status, or wallet value."
                           style={{
                             border: "1px solid rgba(232,200,255,0.14)",
                             background: "rgba(232,200,255,0.045)",
@@ -1867,8 +1876,9 @@ export default function OrbitTestPage() {
                             textDecoration: "none",
                           }}
                         >
-                          Compare
-                        </a>                      </div>
+                          Compare with me
+                        </a>
+                      </div>
                     </article>
                   );
                 })}
