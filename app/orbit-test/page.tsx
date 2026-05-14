@@ -1483,6 +1483,7 @@ export default function OrbitTestPage() {
                   const selectedCount = Math.max(focusedSlugs.length, activeFocusCount, sharedCount);
                   const signalStrength = signalStrengthLabel(sharedCount);
                   const signalType = signalTypeLabel(candidate, selectedCount);
+                  const reason = candidateReason(candidate, collectionMap);
                   return (
                     <article
                       key={candidate.wallet}
@@ -1518,8 +1519,8 @@ export default function OrbitTestPage() {
                           position: "absolute",
                           top: -10,
                           right: -10,
-                          width: 70,
-                          height: 70,
+                          width: 54,
+                          height: 54,
                           borderRadius: "50%",
                           border: "1px solid rgba(232,200,255,0.32)",
                           background: "rgba(14,10,18,0.82)",
@@ -1532,8 +1533,8 @@ export default function OrbitTestPage() {
                         }}
                       >
                         <div style={{ textAlign: "center", lineHeight: 1 }}>
-                          <div style={{ fontWeight: 850, fontSize: 20 }}>{score}%</div>
-                          <div style={{ fontSize: 9, color: "#c8b7cf", marginTop: 5 }}>
+                          <div style={{ fontWeight: 850, fontSize: 16 }}>{score}%</div>
+                          <div style={{ fontSize: 8, color: "#c8b7cf", marginTop: 5 }}>
                             SIGNAL
                           </div>
                         </div>
@@ -1782,6 +1783,11 @@ export default function OrbitTestPage() {
                           >
                             {signalStrength} · {signalType}
                           </p>
+                          {reason && (
+                            <p style={{ margin: "6px 0 0", color: "#ded3e2", fontSize: 12, lineHeight: 1.45 }}>
+                              {reason}
+                            </p>
+                          )}
                           <p style={{ margin: "5px 0 0", color: "#b9adb9", fontSize: 12, lineHeight: 1.45 }}>
                             {sharedCount} shared collection{sharedCount === 1 ? "" : "s"}.
                           </p>
