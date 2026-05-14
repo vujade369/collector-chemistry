@@ -1474,8 +1474,11 @@ export default function OrbitTestPage() {
                   const score = displayOrbitPercent(index);
                   const institutional = looksInstitutional(candidate);
                   const sharedRooms = candidate.sharedSeedCollections || [];
-                  const visibleSharedRooms = sharedRooms.slice(0, 10);
-                  const hiddenSharedRoomCount = Math.max(sharedRooms.length - visibleSharedRooms.length, 0);
+                  const rankedSharedRooms = [...sharedRooms].sort(
+                    (a, b) => (candidate.sharedRoomHoldings?.[b] || 1) - (candidate.sharedRoomHoldings?.[a] || 1)
+                  );
+                  const visibleSharedRooms = rankedSharedRooms.slice(0, 10);
+                  const hiddenSharedRoomCount = Math.max(rankedSharedRooms.length - visibleSharedRooms.length, 0);
                   const sharedCount = candidate.sharedSeedCount || sharedRooms.length;
                   const selectedCount = Math.max(focusedSlugs.length, activeFocusCount, sharedCount);
                   const signalStrength = signalStrengthLabel(sharedCount);
