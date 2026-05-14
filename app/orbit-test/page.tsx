@@ -129,7 +129,6 @@ function looksInstitutional(candidate: OrbitCandidate) {
     "delegation",
     "escrow",
     "staking",
-    "transactional",
     "auction",
     "bulk",
     "museum",
@@ -1644,7 +1643,7 @@ export default function OrbitTestPage() {
                                 >
                                   {institutional && (
                                     <span
-                                      aria-label="Likely institutional or transactional wallet"
+                                      aria-label="Likely institutional wallet"
                                       tabIndex={0}
                                       onMouseEnter={() => setActiveVaultTooltipWallet(candidate.wallet)}
                                       onMouseLeave={() => setActiveVaultTooltipWallet(null)}
@@ -1689,7 +1688,7 @@ export default function OrbitTestPage() {
                                             textAlign: "left",
                                           }}
                                         >
-                                          Likely institutional or transactional wallet. Hide these with the filter above.
+                                          Likely institutional wallet. Hide these with the filter above.
                                         </span>
                                       )}
                                     </span>
