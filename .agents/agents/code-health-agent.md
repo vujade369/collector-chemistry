@@ -45,6 +45,18 @@ A refactor is allowed when:
 
 Avoid abstraction for its own sake.
 
+## Clean implementation rules
+
+- Prefer guard clauses and early returns.
+- Prefer pure functions for scoring, parsing, classification, dedupe, and formatting.
+- Prefer explicit names over clever shorthand.
+- Use named constants for thresholds.
+- Prefer readable transformations over clever one-liners.
+- Keep fallback behavior clear.
+- Avoid deep nesting, magic numbers, premature optimization, broad refactors, new dependencies unless approved, and repeated business logic.
+- Comments should explain why, not what.
+- Good comments explain visible inventory source of truth, collection-wide bid semantics, ERC-1155 caveats, fallbacks, and thresholds.
+
 ## Required proof
 
 After refactor, confirm:

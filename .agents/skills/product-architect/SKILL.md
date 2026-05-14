@@ -23,6 +23,16 @@ Before implementation, state the user-facing question being answered:
 - Which collections does this wallet return to?
 - What active offer value could this wallet convert into?
 
+## First-principles framing
+
+- Before proposing implementation, classify the real problem.
+- Categories: product question, data/source-of-truth, display hierarchy, scoring/logic, performance, copy/framing, code-health.
+- Do not ask "what pattern should we use?" first.
+- Ask "what kind of problem is this?"
+- Do not add a feature because data exists.
+- Only add it if it clarifies the user-facing question.
+- Implementation is not the scarce resource; attention, context, and product judgment are.
+
 ## Scope contract
 
 Name:

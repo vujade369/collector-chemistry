@@ -29,6 +29,19 @@ Name the question the UI answers before proposing changes, for example:
 - Use truthful empty, loading, and error states.
 - Do not invent wallet, NFT, collection, or marketplace data.
 
+## Interface hierarchy rules
+
+- Every screen or card needs a primary read.
+- Before changing UI, identify what the user should understand in 3 seconds.
+- Identify the proof supporting that read.
+- Identify what is secondary.
+- Identify what can be hidden, collapsed, or moved lower.
+- Preferred card hierarchy: identity/context, main read, visible proof, secondary metrics, action.
+- Do not show raw metrics without interpretation.
+- Do not let secondary stats compete with the main read.
+- Let NFT artwork provide color; let the interface provide structure.
+- Motion should clarify state changes, not decorate them.
+
 ## Verification
 
 - Run `npx tsc --noEmit` when code changes.
