@@ -129,22 +129,25 @@ function looksInstitutional(candidate: OrbitCandidate) {
     "delegation",
     "escrow",
     "staking",
+    "transactional",
+    "auction",
+    "bulk",
+    "museum",
   ];
 
-  const softVaultTerms = [
-    "vault",
+  const softInstitutionalTerms = [
     "treasury",
     "fund",
-    "safe",
-    "cold wallet",
-    "storage",
     "multisig",
     "multi-sig",
     "dao",
+    "team wallet",
+    "project wallet",
+    "official wallet",
   ];
 
   const hasHardInstitutionalTerm = hardInstitutionalTerms.some((term) => allText.includes(term));
-  const hasSoftVaultTerm = softVaultTerms.some((term) => allText.includes(term));
+  const hasSoftInstitutionalTerm = softInstitutionalTerms.some((term) => allText.includes(term));
 
   const hasHumanProfile =
     Boolean(candidate.avatarUrl) &&
@@ -156,12 +159,12 @@ function looksInstitutional(candidate: OrbitCandidate) {
   let score = 0;
 
   if (hasHardInstitutionalTerm) score += 2;
-  if (hasSoftVaultTerm) score += 1;
+  if (hasSoftInstitutionalTerm) score += 1;
   if (looksNamedLikeAddress && !hasHumanProfile) score += 1;
   if (!hasHumanProfile && !hasSocialPresence) score += 1;
 
   // A hard marketplace/delegate signal is enough.
-  // Softer vault-like language needs another signal before hiding.
+  // Softer institutional language needs another signal before hiding.
   return score >= 2;
 }
 
@@ -533,6 +536,7 @@ export default function OrbitTestPage() {
   const [collectionSearchMessage, setCollectionSearchMessage] = useState("");
   const [activeFocusCount, setActiveFocusCount] = useState(0);
   const [activeExcludeCount, setActiveExcludeCount] = useState(0);
+  const [activeVaultTooltipWallet, setActiveVaultTooltipWallet] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -1422,13 +1426,14 @@ export default function OrbitTestPage() {
                     padding: "8px 11px",
                   }}
                 >
+                  <span aria-hidden="true" style={{ fontSize: 11, lineHeight: 1 }}>🏛</span>
+                  <span>Hide institutional wallets</span>
                   <input
                     type="checkbox"
                     checked={hideInstitutional}
                     onChange={(event) => setHideInstitutional(event.target.checked)}
-                    style={{ accentColor: "#8f6bea" }}
+                    style={{ accentColor: "#8f6bea", margin: 0 }}
                   />
-                  Hide vault-like wallets
                 </label>
               </div>
 
@@ -1639,23 +1644,54 @@ export default function OrbitTestPage() {
                                 >
                                   {institutional && (
                                     <span
-                                      title="Likely institutional or transactional wallet"
                                       aria-label="Likely institutional or transactional wallet"
+                                      tabIndex={0}
+                                      onMouseEnter={() => setActiveVaultTooltipWallet(candidate.wallet)}
+                                      onMouseLeave={() => setActiveVaultTooltipWallet(null)}
+                                      onFocus={() => setActiveVaultTooltipWallet(candidate.wallet)}
+                                      onBlur={() => setActiveVaultTooltipWallet(null)}
                                       style={{
                                         display: "inline-flex",
                                         alignItems: "center",
                                         justifyContent: "center",
-                                        width: 20,
-                                        height: 20,
+                                        width: 22,
+                                        height: 22,
                                         borderRadius: 999,
-                                        background: "rgba(255,255,255,0.055)",
-                                        border: "1px solid rgba(255,255,255,0.14)",
+                                        background: "rgba(255,255,255,0.065)",
+                                        border: "1px solid rgba(255,255,255,0.16)",
                                         color: "#cbbfd0",
                                         fontSize: 11,
                                         lineHeight: 1,
+                                        cursor: "help",
+                                        position: "relative",
                                       }}
                                     >
                                       🏛
+                                      {activeVaultTooltipWallet === candidate.wallet && (
+                                        <span
+                                          role="tooltip"
+                                          style={{
+                                            position: "absolute",
+                                            left: "50%",
+                                            bottom: "calc(100% + 8px)",
+                                            transform: "translateX(-50%)",
+                                            width: 220,
+                                            padding: "8px 10px",
+                                            borderRadius: 10,
+                                            border: "1px solid rgba(255,255,255,0.14)",
+                                            background: "rgba(18,15,21,0.96)",
+                                            color: "#f0e7f1",
+                                            fontSize: 11,
+                                            lineHeight: 1.35,
+                                            boxShadow: "0 12px 28px rgba(0,0,0,0.35)",
+                                            zIndex: 20,
+                                            pointerEvents: "none",
+                                            textAlign: "left",
+                                          }}
+                                        >
+                                          Likely institutional or transactional wallet. Hide these with the filter above.
+                                        </span>
+                                      )}
                                     </span>
                                   )}
 
