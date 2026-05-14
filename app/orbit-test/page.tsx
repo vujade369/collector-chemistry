@@ -1457,9 +1457,9 @@ export default function OrbitTestPage() {
                     <article
                       key={candidate.wallet}
                       style={{
-                        border: "1px solid rgba(255,255,255,0.11)",
+                        border: "1px solid rgba(255,255,255,0.085)",
                         background:
-                          "linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.025))",
+                          "radial-gradient(circle at 50% 0%, rgba(142, 99, 255, 0.12), transparent 34%), linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.018))",
                         borderRadius: 24,
                         padding: 0,
                         position: "relative",
@@ -1467,6 +1467,7 @@ export default function OrbitTestPage() {
                         display: "flex",
                         flexDirection: "column",
                         minHeight: 520,
+                        boxShadow: "0 18px 42px rgba(0,0,0,0.28)",
                       }}
                     >
                       <div
@@ -1796,8 +1797,8 @@ export default function OrbitTestPage() {
                                   alignItems: "center",
                                   gap: 9,
                                   minHeight: 36,
-                                  border: "1px solid rgba(255,255,255,0.12)",
-                                  background: "rgba(255,255,255,0.035)",
+                                  border: "1px solid rgba(255,255,255,0.085)",
+                                  background: "rgba(255,255,255,0.026)",
                                   borderRadius: 14,
                                   padding: "5px 8px 5px 6px",
                                   color: "#eee5ef",
