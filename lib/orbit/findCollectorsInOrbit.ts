@@ -1,4 +1,4 @@
-import { fetchAndMergeWalletNFTsWithDebug, WalletOwnerNFT } from "@/lib/fetchWalletNFTs";
+import { fetchAndMergeWalletNFTsWithDebug, WalletMergeFetchDebug, WalletOwnerNFT } from "@/lib/fetchWalletNFTs";
 
 const ALCHEMY_API_KEY_ENV = process.env.ALCHEMY_API_KEY;
 const OPENSEA_API_KEY_ENV = process.env.OPENSEA_API_KEY;
@@ -84,14 +84,17 @@ export type OrbitDebug = {
   maxOwnerPages: number;
   timing: {
     walletFetchMs: number;
+    collectionEnrichmentMs: number;
     holderDiscoveryMs: number;
     profileEnrichmentMs: number;
+    seedEnrichmentMs: number;
     totalMs: number;
   };
   failedCollections: string[];
   failedProfiles: string[];
   seedCollections: OrbitSeedCollectionDebug[];
   returnedCandidates: OrbitReturnedCandidateDebug[];
+  walletFetchDetail?: WalletMergeFetchDebug;
 };
 
 export type OrbitResponse = {
@@ -754,7 +757,7 @@ export async function findCollectorsInOrbit(
     seedLimit,
     resultLimit,
     maxOwnerPages: MAX_OWNER_PAGES,
-    timing: { walletFetchMs: 0, holderDiscoveryMs: 0, profileEnrichmentMs: 0, totalMs: 0 },
+    timing: { walletFetchMs: 0, collectionEnrichmentMs: 0, holderDiscoveryMs: 0, profileEnrichmentMs: 0, seedEnrichmentMs: 0, totalMs: 0 },
     failedCollections: [],
     failedProfiles: [],
     seedCollections: [],
@@ -763,8 +766,9 @@ export async function findCollectorsInOrbit(
 
   // Step 1: Fetch merged wallet NFTs
   const walletFetchStart = Date.now();
-  const { mergedNFTs } = await fetchAndMergeWalletNFTsWithDebug(wallets, alchemyApiKey);
+  const { mergedNFTs, debug: walletFetchDebug } = await fetchAndMergeWalletNFTsWithDebug(wallets, alchemyApiKey);
   debugState.timing.walletFetchMs = Date.now() - walletFetchStart;
+  debugState.walletFetchDetail = walletFetchDebug;
 
   // Step 2: Build top collections from merged inventory
   const allCollections = buildTopCollectionsFromNFTs(mergedNFTs);
@@ -819,14 +823,12 @@ export async function findCollectorsInOrbit(
     .filter((collection) => !excludedSlugSet.has(collection.slug))
     .slice(0, seedLimit);
 
-  const enrichedDisplayTopCollections = await enrichOrbitCollections(
-    displayTopCollections,
-    openseaApiKey
-  );
-  const enrichedShowMoreCollections = await enrichOrbitCollections(
-    showMoreCollections,
-    openseaApiKey
-  );
+  const collectionEnrichmentStart = Date.now();
+  const [enrichedDisplayTopCollections, enrichedShowMoreCollections] = await Promise.all([
+    enrichOrbitCollections(displayTopCollections, openseaApiKey),
+    enrichOrbitCollections(showMoreCollections, openseaApiKey),
+  ]);
+  debugState.timing.collectionEnrichmentMs = Date.now() - collectionEnrichmentStart;
 
   // Step 3: Fetch owners for each seed collection
   const holderDiscoveryStart = Date.now();
@@ -1144,10 +1146,12 @@ export async function findCollectorsInOrbit(
     .map((candidate) => returnedCandidateDebugByWallet.get(candidate.wallet))
     .filter((candidate): candidate is OrbitReturnedCandidateDebug => Boolean(candidate));
 
+  const seedEnrichmentStart = Date.now();
   const enrichedOrbitSeedCollections = await enrichOrbitCollections(
     orbitSeedCollections,
     openseaApiKey
   );
+  debugState.timing.seedEnrichmentMs = Date.now() - seedEnrichmentStart;
 
   debugState.timing.totalMs = Date.now() - totalStart;
 
