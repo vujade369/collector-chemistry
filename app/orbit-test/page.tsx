@@ -521,11 +521,17 @@ function getExcludedSlugs(roomStates: RoomStateMap) {
     .map(([slug]) => slug);
 }
 
+function candidateCardKey(candidate: OrbitCandidate) {
+  return candidate.wallet || candidate.openseaUrl || candidate.username || candidate.displayName || "unknown";
+}
+
 export default function OrbitTestPage() {
   const [walletRows, setWalletRows] = useState<string[]>(DEFAULT_WALLET_ROWS);
   const [data, setData] = useState<OrbitResponse | null>(null);
   const [expandedCollections, setExpandedCollections] = useState(false);
   const [hideInstitutional, setHideInstitutional] = useState(false);
+  const [signalEditorOpen, setSignalEditorOpen] = useState(false);
+  const [expandedSharedRoomCards, setExpandedSharedRoomCards] = useState<Record<string, boolean>>({});
   const [roomStates, setRoomStates] = useState<RoomStateMap>({});
   const [outsideRooms, setOutsideRooms] = useState<OrbitCollection[]>([]);
   const [collectionSearchQuery, setCollectionSearchQuery] = useState("");
@@ -846,6 +852,15 @@ export default function OrbitTestPage() {
   });
 
   const visibleCandidates = candidates.slice(0, 10);
+  const totalCandidateCount = data?.candidates?.length || 0;
+  const hasTunedSignal = activeFocusCount > 0 || activeExcludeCount > 0;
+  const signalModeLabel = hasTunedSignal
+    ? `Tuned signal · ${activeFocusCount || focusedSlugs.length} focused${activeExcludeCount > 0 ? ` · ${activeExcludeCount} excluded` : ""}`
+    : "Default orbit";
+  const institutionalModeLabel = hideInstitutional
+    ? "Institutional wallets hidden"
+    : "Institutional wallets included";
+  const collectorCountLabel = `${visibleCandidates.length}${totalCandidateCount > 0 ? ` of ${totalCandidateCount}` : ""} collectors surfaced`;
 
   return (
     <main
@@ -1028,20 +1043,51 @@ export default function OrbitTestPage() {
           <>
             <section
               style={{
-                border: "1px solid rgba(255,255,255,0.1)",
-                background: "rgba(255,255,255,0.035)",
-                borderRadius: 24,
-                padding: 22,
-                marginBottom: 28,
+                border: "1px solid rgba(255,255,255,0.055)",
+                background: "rgba(255,255,255,0.012)",
+                borderRadius: 18,
+                padding: signalEditorOpen ? 16 : 12,
+                marginBottom: 22,
               }}
             >
-              <div style={{ marginBottom: 18 }}>
-                <h2 style={{ margin: 0, fontSize: 22 }}>Tune the signal</h2>
-                <p style={{ margin: "7px 0 0", color: "#a99daa", fontSize: 13 }}>
-                  Optional: add or remove rooms to run a custom collector search.
-                </p>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  flexWrap: "wrap",
+                  marginBottom: signalEditorOpen ? 14 : 0,
+                }}
+              >
+                <div>
+                  <h2 style={{ margin: 0, fontSize: 16 }}>Edit signal</h2>
+                  <p style={{ margin: "5px 0 0", color: "#8f8292", fontSize: 12 }}>
+                    Optional tuning for custom collection rooms.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setSignalEditorOpen((open) => !open)}
+                  aria-expanded={signalEditorOpen}
+                  style={{
+                    background: signalEditorOpen ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.035)",
+                    color: "#eee5ef",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    borderRadius: 999,
+                    padding: "8px 12px",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  {signalEditorOpen ? "Hide tuning" : "Tune signal"}
+                </button>
               </div>
 
+              {signalEditorOpen && (
+                <>
               <div
                 style={{
                   display: "grid",
@@ -1053,13 +1099,13 @@ export default function OrbitTestPage() {
               {availableRooms.length > 0 && (
                 <section
                   style={{
-                    border: "1px solid rgba(255,255,255,0.085)",
+                    border: "1px solid rgba(255,255,255,0.07)",
                     background:
-                      "radial-gradient(circle at 24% 0%, rgba(236,72,153,0.075), transparent 38%), linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.018))",
-                    borderRadius: 24,
-                    padding: 18,
+                      "linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.012))",
+                    borderRadius: 18,
+                    padding: 16,
                     marginBottom: 0,
-                    boxShadow: "0 18px 42px rgba(0,0,0,0.18)",
+                    boxShadow: "none",
                   }}
                 >
                   <div
@@ -1073,7 +1119,7 @@ export default function OrbitTestPage() {
                   >
                     <div>
                       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                        <h2 style={{ margin: 0, fontSize: 20 }}>Your search collections</h2>
+                        <h2 style={{ margin: 0, fontSize: 17 }}>Search collections</h2>
                         <span
                           style={{
                             display: "inline-flex",
@@ -1234,17 +1280,17 @@ export default function OrbitTestPage() {
 
               <section
                 style={{
-                  border: "1px solid rgba(255,255,255,0.075)",
+                  border: "1px solid rgba(255,255,255,0.06)",
                   background:
-                    "linear-gradient(180deg, rgba(255,255,255,0.032), rgba(255,255,255,0.014))",
-                  borderRadius: 24,
-                  padding: 18,
+                    "linear-gradient(180deg, rgba(255,255,255,0.024), rgba(255,255,255,0.01))",
+                  borderRadius: 18,
+                  padding: 16,
                   marginBottom: 28,
-                  boxShadow: "0 14px 34px rgba(0,0,0,0.14)",
+                  boxShadow: "none",
                 }}
               >
                 <div style={{ marginBottom: 14 }}>
-                  <h2 style={{ margin: 0, fontSize: 20 }}>Explore more collections</h2>
+                  <h2 style={{ margin: 0, fontSize: 17 }}>Add a collection</h2>
                   <p style={{ margin: "6px 0 0", color: "#a99daa", fontSize: 13 }}>
                     Search any collection to add it to the tuned signal, whether or not it appears in your top holdings.
                   </p>
@@ -1386,7 +1432,7 @@ export default function OrbitTestPage() {
                   marginTop: 18,
                   padding: "14px 16px",
                   border: "1px solid rgba(255,255,255,0.1)",
-                  background: "rgba(255,255,255,0.026)",
+                  background: "rgba(255,255,255,0.018)",
                   borderRadius: 18,
                   flexWrap: "wrap",
                 }}
@@ -1416,6 +1462,8 @@ export default function OrbitTestPage() {
                     {loading ? "Tuning…" : "Tune signal"}
                   </button>
               </div>
+                </>
+              )}
 
               <div
                 style={{
@@ -1428,11 +1476,11 @@ export default function OrbitTestPage() {
                 }}
               >
                 <div>
-                  <h2 style={{ margin: 0, fontSize: 24 }}>Collectors in Your Orbit</h2>
+                  <h2 style={{ margin: 0, fontSize: 24 }}>Collectors surfaced</h2>
                   <p style={{ margin: "7px 0 0", color: "#a99daa", fontSize: 13 }}>
                     {loading ? "Updating this scenario…" : focusedSlugs.length > 0
-                      ? `Wallet orbit based on your top 50 visible collection rooms. Signal reflects repeated overlap, holding depth, and how specific the shared rooms are.`
-                      : "Collectors who overlap with the rooms currently shaping this search."}
+                      ? "Wallet behavior surfaced these collectors through shared visible rooms, holding depth, and room specificity."
+                      : "Collectors surfaced through the rooms currently shaping this search."}
                   </p>
                 </div>
 
@@ -1462,6 +1510,15 @@ export default function OrbitTestPage() {
                 </label>
               </div>
 
+              <div style={{ marginBottom: 16 }}>
+                <p style={{ margin: 0, color: "#eee5ef", fontSize: 14, fontWeight: 750 }}>
+                  {collectorCountLabel} · {signalModeLabel} · {institutionalModeLabel}
+                </p>
+                <p style={{ margin: "5px 0 0", color: "#a99daa", fontSize: 12, lineHeight: 1.45 }}>
+                  Signal favors shared rooms, holding depth, and specificity.
+                </p>
+              </div>
+
               <div
                 style={{
                   display: "grid",
@@ -1470,89 +1527,75 @@ export default function OrbitTestPage() {
                 }}
               >
                 {visibleCandidates.map((candidate, index) => {
-                  const rawScore = orbitScore(candidate);
                   const score = displayOrbitPercent(index);
                   const institutional = looksInstitutional(candidate);
                   const sharedRooms = candidate.sharedSeedCollections || [];
                   const rankedSharedRooms = [...sharedRooms].sort(
                     (a, b) => (candidate.sharedRoomHoldings?.[b] || 1) - (candidate.sharedRoomHoldings?.[a] || 1)
                   );
-                  const visibleSharedRooms = rankedSharedRooms.slice(0, 10);
-                  const hiddenSharedRoomCount = Math.max(rankedSharedRooms.length - visibleSharedRooms.length, 0);
+                  const cardKey = candidateCardKey(candidate);
+                  const isSharedRoomExpanded = Boolean(expandedSharedRoomCards[cardKey]);
+                  const visibleSharedRooms = isSharedRoomExpanded
+                    ? rankedSharedRooms
+                    : rankedSharedRooms.slice(0, 3);
+                  const hiddenSharedRoomCount = Math.max(rankedSharedRooms.length - 3, 0);
                   const sharedCount = candidate.sharedSeedCount || sharedRooms.length;
-                  const selectedCount = Math.max(focusedSlugs.length, activeFocusCount, sharedCount);
-                  const signalStrength = signalStrengthLabel(sharedCount);
-                  const signalType = signalTypeLabel(candidate, selectedCount);
                   const reason = candidateReason(candidate, collectionMap);
+                  const topSharedRoomNames = rankedSharedRooms.slice(0, 3).map((slug) => {
+                    const collection = collectionMap.get(slug);
+                    return collection?.name || label(collection?.slug || slug);
+                  });
+                  const compactReason = topSharedRoomNames.length >= 3
+                    ? `Led by ${topSharedRoomNames[0]}, ${topSharedRoomNames[1]}, and ${topSharedRoomNames[2]}.`
+                    : topSharedRoomNames.length === 2
+                      ? `Led by ${topSharedRoomNames[0]} and ${topSharedRoomNames[1]}.`
+                      : topSharedRoomNames.length === 1
+                        ? `Led by ${topSharedRoomNames[0]}.`
+                        : reason;
                   return (
                     <article
-                      key={candidate.wallet}
+                      key={cardKey}
                       style={{
-                        border: "1px solid rgba(255,255,255,0.085)",
+                        border: "1px solid rgba(255,255,255,0.065)",
                         background:
-                          "radial-gradient(circle at 50% 0%, rgba(142, 99, 255, 0.12), transparent 34%), linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.018))",
-                        borderRadius: 24,
+                          "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.014))",
+                        borderRadius: 20,
                         padding: 0,
                         position: "relative",
-                        overflow: "visible",
+                        overflow: "hidden",
                         display: "flex",
                         flexDirection: "column",
-                        minHeight: 520,
-                        boxShadow: "0 18px 42px rgba(0,0,0,0.28)",
+                        minHeight: 390,
+                        boxShadow: "0 12px 30px rgba(0,0,0,0.2)",
                       }}
                     >
                       <div
                         style={{
-                          height: 84,
+                          height: 46,
                           background: candidate.bannerUrl
                             ? undefined
                             : "linear-gradient(135deg, rgba(73,54,86,0.42), rgba(12,10,15,0.96))",
                           backgroundImage: candidate.bannerUrl ? `url(${candidate.bannerUrl})` : undefined,
                           backgroundSize: "cover",
                           backgroundPosition: "center",
+                          opacity: 0.72,
                           borderBottom: "1px solid rgba(255,255,255,0.08)",
                         }}
                       />
 
                       <div
                         style={{
-                          position: "absolute",
-                          top: -10,
-                          right: -10,
-                          width: 54,
-                          height: 54,
-                          borderRadius: "50%",
-                          border: "1px solid rgba(232,200,255,0.32)",
-                          background: "rgba(14,10,18,0.82)",
-                          boxShadow: "0 16px 38px rgba(0,0,0,0.42)",
-                          backdropFilter: "blur(8px)",
-                          display: "grid",
-                          placeItems: "center",
-                          color: "#f0d6ff",
-                          zIndex: 2,
-                        }}
-                      >
-                        <div style={{ textAlign: "center", lineHeight: 1 }}>
-                          <div style={{ fontWeight: 850, fontSize: 16 }}>{score}%</div>
-                          <div style={{ fontSize: 8, color: "#c8b7cf", marginTop: 5 }}>
-                            SIGNAL
-                          </div>
-                        </div>
-                      </div>
-
-                      <div
-                        style={{
                           display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "flex-start",
-                          gap: 14,
-                          minHeight: 84,
-                          padding: "10px 16px 8px",
+                          flexDirection: "column",
+                          alignItems: "stretch",
+                          gap: 10,
+                          minHeight: 76,
+                          padding: "12px 14px 11px",
                           background: "rgba(16,12,20,0.92)",
-                          borderBottom: "1px solid rgba(255,255,255,0.1)",
+                          borderBottom: "1px solid rgba(255,255,255,0.075)",
                         }}
                       >
-                        <div style={{ display: "flex", gap: 13, alignItems: "flex-start", minWidth: 0, flex: 1 }}>
+                        <div style={{ display: "flex", gap: 13, alignItems: "flex-start", minWidth: 0, width: "100%" }}>
                           <div
                             style={{
                               display: "flex",
@@ -1751,51 +1794,75 @@ export default function OrbitTestPage() {
                           </div>
                         </div>
 
+                        <div
+                          title="Signal is directional: shared selected rooms, holding depth, and room specificity. It is not a ranking of taste, status, or wallet value."
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: 12,
+                            width: "100%",
+                            border: "1px solid rgba(255,255,255,0.055)",
+                            background: "rgba(255,255,255,0.018)",
+                            borderRadius: 14,
+                            padding: "8px 10px",
+                            textAlign: "left",
+                            color: "#f0d6ff",
+                          }}
+                        >
+                          <div>
+                            <div
+                              style={{
+                                marginBottom: 3,
+                                color: "#a99daa",
+                                fontSize: 9,
+                                letterSpacing: "0.16em",
+                                textTransform: "uppercase",
+                              }}
+                            >
+                              Signal
+                            </div>
+                            <div style={{ color: "#a99daa", fontSize: 11, lineHeight: 1.25 }}>
+                              from {sharedCount} room{sharedCount === 1 ? "" : "s"}
+                            </div>
+                          </div>
+                          <div style={{ fontSize: 30, lineHeight: 0.95, fontWeight: 500, flexShrink: 0 }}>
+                            {score}<span style={{ fontSize: 14, color: "#c8b7cf" }}>%</span>
+                          </div>
+                        </div>
                       </div>
 
                       <div
                         style={{
-                          padding: "10px 16px 0",
+                          padding: "13px 14px 0",
                           display: "flex",
                           flexDirection: "column",
                           flex: 1,
                         }}
                       >
-                        <div style={{ marginBottom: 14 }}>
-                        <div
-                          title="Signal is a directional match score based on shared selected collections, holding depth, and collection specificity. It is not a ranking of taste, status, or wallet value."
-                          style={{
-                            border: "1px solid rgba(232,200,255,0.14)",
-                            background: "rgba(232,200,255,0.045)",
-                            borderRadius: 16,
-                            padding: "11px 12px",
-                            marginBottom: 12,
-                          }}
-                        >
+                        <div style={{ marginBottom: 10 }}>
+                        <div>
                           <p
                             style={{
                               margin: 0,
-                              color: "#f0d6ff",
-                              fontSize: 13,
-                              fontWeight: 800,
+                              color: "#eee5ef",
+                              fontSize: 15,
+                              fontWeight: 750,
                               letterSpacing: "0.01em",
                             }}
                           >
-                            {signalStrength} · {signalType}
+                            {sharedCount} shared room{sharedCount === 1 ? "" : "s"}
                           </p>
-                          {reason && (
-                            <p style={{ margin: "6px 0 0", color: "#ded3e2", fontSize: 12, lineHeight: 1.45 }}>
-                              {reason}
+                          {compactReason && (
+                            <p style={{ margin: "5px 0 0", color: "#a99daa", fontSize: 12, lineHeight: 1.45 }}>
+                              {compactReason}
                             </p>
                           )}
-                          <p style={{ margin: "5px 0 0", color: "#b9adb9", fontSize: 12, lineHeight: 1.45 }}>
-                            {sharedCount} shared collection{sharedCount === 1 ? "" : "s"}.
-                          </p>
                         </div>
                         <div
                           style={{
                             display: "grid",
-                            gap: 9,
+                            gap: 7,
                           }}
                         >
                           {visibleSharedRooms.map((slug) => {
@@ -1806,21 +1873,21 @@ export default function OrbitTestPage() {
 
                             return (
                               <a
-                                key={`${candidate.wallet}-${slug}`}
+                                key={`${cardKey}-${slug}`}
                                 href={collectionUrl(collection, slug)}
                                 target="_blank"
                                 rel="noreferrer"
                                 title={`${roomName} · ${count} held`}
                                 style={{
                                   display: "grid",
-                                  gridTemplateColumns: "44px 22px minmax(0, 1fr)",
+                                  gridTemplateColumns: "42px 22px minmax(0, 1fr)",
                                   alignItems: "center",
                                   gap: 9,
-                                  minHeight: 36,
-                                  border: "1px solid rgba(255,255,255,0.085)",
-                                  background: "rgba(255,255,255,0.026)",
-                                  borderRadius: 14,
-                                  padding: "5px 8px 5px 6px",
+                                  minHeight: 34,
+                                  border: "1px solid rgba(255,255,255,0.045)",
+                                  background: "rgba(255,255,255,0.01)",
+                                  borderRadius: 12,
+                                  padding: "5px 8px 5px 5px",
                                   color: "#eee5ef",
                                   fontSize: 12,
                                   textDecoration: "none",
@@ -1831,13 +1898,13 @@ export default function OrbitTestPage() {
                                     display: "inline-flex",
                                     alignItems: "center",
                                     justifyContent: "center",
-                                    height: 26,
-                                    minWidth: 38,
-                                    borderRadius: 10,
-                                    background: "rgba(164,139,255,0.2)",
-                                    border: "1px solid rgba(164,139,255,0.34)",
+                                    height: 24,
+                                    minWidth: 34,
+                                    borderRadius: 9,
+                                    background: "rgba(164,139,255,0.11)",
+                                    border: "1px solid rgba(164,139,255,0.18)",
                                     color: "#f1ecff",
-                                    fontSize: 14,
+                                    fontSize: 13,
                                     fontWeight: 850,
                                     lineHeight: 1,
                                   }}
@@ -1847,8 +1914,8 @@ export default function OrbitTestPage() {
 
                                 <span
                                   style={{
-                                    width: 22,
-                                    height: 22,
+                                    width: 20,
+                                    height: 20,
                                     borderRadius: "50%",
                                     overflow: "hidden",
                                     background: "#1b1520",
@@ -1875,6 +1942,7 @@ export default function OrbitTestPage() {
                                     textOverflow: "ellipsis",
                                     whiteSpace: "nowrap",
                                     fontSize: 12,
+                                    color: "#ddd4df",
                                   }}
                                 >
                                   {roomName}
@@ -1884,8 +1952,17 @@ export default function OrbitTestPage() {
                           })}
 
                           {hiddenSharedRoomCount > 0 && (
-                            <div
+                            <button
+                              type="button"
+                              aria-expanded={isSharedRoomExpanded}
+                              onClick={() =>
+                                setExpandedSharedRoomCards((current) => ({
+                                  ...current,
+                                  [cardKey]: !current[cardKey],
+                                }))
+                              }
                               style={{
+                                width: "100%",
                                 border: "1px solid rgba(255,255,255,0.07)",
                                 background: "rgba(255,255,255,0.018)",
                                 borderRadius: 14,
@@ -1893,10 +1970,13 @@ export default function OrbitTestPage() {
                                 color: "#a99daa",
                                 fontSize: 12,
                                 textAlign: "center",
+                                cursor: "pointer",
                               }}
                             >
-                              +{hiddenSharedRoomCount} more shared collection{hiddenSharedRoomCount === 1 ? "" : "s"}
-                            </div>
+                              {isSharedRoomExpanded
+                                ? "Show fewer"
+                                : `+${hiddenSharedRoomCount} more shared collection${hiddenSharedRoomCount === 1 ? "" : "s"}`}
+                            </button>
                           )}
                         </div>
                       </div>
