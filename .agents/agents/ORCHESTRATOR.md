@@ -125,6 +125,20 @@ Guardrails:
 
 Use skills for targeted work, not as a reason to load the whole repo.
 
+### Preferred core skills
+
+These skills are the preferred routing layer for new Constellate work. Existing specialist agents and legacy skills remain valid supplemental guidance.
+
+- `.agents/skills/constellate-agent-handoff/SKILL.md` — turn product intent into scoped Codex-ready prompts with files, constraints, definition of done, and proof
+- `.agents/skills/constellate-production-architecture/SKILL.md` — protect routing, API contracts, response shapes, route boundaries, runtime data flow, and architecture-sensitive changes
+- `.agents/skills/constellate-data-reliability/SKILL.md` — protect OpenSea, Alchemy, MCP/debug discovery, converter math, pagination, dedupe, visible inventory, fallback behavior, and debug proof
+- `.agents/skills/constellate-interface-craft/SKILL.md` — protect UI hierarchy, copy, product soul, proof-near-claim display, empty states, accessibility, and display/link behavior
+- `.agents/skills/constellate-clean-implementation/SKILL.md` — keep implementation small, scoped, dependency-light, and verifiable
+
+Conflict rule:
+
+When a preferred core skill and a legacy skill overlap, use the preferred core skill for routing and the legacy skill only as supplemental detail. If guidance conflicts, stop and report the conflict instead of silently choosing.
+
 Known active Constellate skills:
 - `.agents/skills/constellate-data-sources/SKILL.md` — source boundaries, Alchemy/OpenSea responsibilities, converter data boundaries, link rules, debug expectations
 - `.agents/skills/constellate-verification/SKILL.md` — task-specific proof commands, governance checks, UI/API/converter verification recipes
@@ -137,17 +151,17 @@ Use the matching skill only when the task calls for it. Do not assume generic do
 
 | Task | Route as | Read | Guardrail |
 |---|---|---|---|
-| Profile/compare layout, visual hierarchy, module ordering | Product UI | UI agent + product/design/display docs + page spec | No API edits during visual passes. |
-| Profile API fields, category groups, acquisition data, traits, current attention | Data / API | Data API agent + Constellate data sources + architecture/data/source docs | No UI edits unless explicitly scoped. |
-| OpenSea offer/listing/floor/search bug | Data / API | Constellate data sources + OpenSea integration + data model | Verify endpoint/schema; avoid broad fetch refactors. |
-| Alchemy ownership/transfer bug | Data / API | Constellate data sources + Alchemy capabilities + data sources + API patterns | Preserve pagination safety and visibility filtering. |
-| Converter math or debug output | Converter | Constellate data sources + Constellate verification + converter spec | Preserve active ETH/WETH offer question; dedupe unique NFTs. |
-| Wallet address/ENS/OpenSea URL resolution | Resolver / Search | data API agent + API patterns + component map if UI changes | Prefer shared resolver helpers; do not invent identities. |
-| Copy/error language only | Product UI or Copy | product soul + canon + relevant spec | Do not change API error contracts unless scoped. |
-| Interpretation prompt/archetype/AI-generated claims | Interpretation / AI Copy | product soul + insight engine + ethical AI | Evidence first; no unsupported claims. |
-| Refactor/extraction/file size cleanup | Code Health | code-health agent + architecture + component map | No behavior, API, visual, or copy changes. |
-| Agent/docs workflow | Docs / Agents | AGENTS + registry + orchestrator + changed files + Constellate verification | Docs-only. No app behavior changes. |
-| CI failure | Code Health | failure logs + relevant docs + Constellate verification | Diagnose first; implement only approved fix. |
+| Profile/compare layout, visual hierarchy, module ordering | Product UI | UI agent + `constellate-interface-craft` + product/design/display docs + page spec | No API edits during visual passes. |
+| Profile API fields, category groups, acquisition data, traits, current attention | Data / API | Data API agent + `constellate-production-architecture` + `constellate-data-reliability` + architecture/data/source docs | No UI edits unless explicitly scoped. |
+| OpenSea offer/listing/floor/search bug | Data / API | `constellate-data-reliability` + Constellate data sources + OpenSea integration + data model | Verify endpoint/schema; avoid broad fetch refactors. |
+| Alchemy ownership/transfer bug | Data / API | `constellate-data-reliability` + Constellate data sources + Alchemy capabilities + data sources + API patterns | Preserve pagination safety and visibility filtering. |
+| Converter math or debug output | Converter | `constellate-data-reliability` + Constellate data sources + Constellate verification + converter spec | Preserve active ETH/WETH offer question; dedupe unique NFTs. |
+| Wallet address/ENS/OpenSea URL resolution | Resolver / Search | `constellate-production-architecture` + data API agent + API patterns + component map if UI changes | Prefer shared resolver helpers; do not invent identities. |
+| Copy/error language only | Product UI or Copy | `constellate-interface-craft` + product soul + canon + relevant spec | Do not change API error contracts unless scoped. |
+| Interpretation prompt/archetype/AI-generated claims | Interpretation / AI Copy | `constellate-interface-craft` + product soul + insight engine + ethical AI | Evidence first; no unsupported claims. |
+| Refactor/extraction/file size cleanup | Code Health | `constellate-clean-implementation` + code-health agent + architecture + component map | No behavior, API, visual, or copy changes. |
+| Agent/docs workflow | Docs / Agents | `constellate-agent-handoff` + `constellate-clean-implementation` + AGENTS + registry + orchestrator + changed files + Constellate verification | Docs-only. No app behavior changes. |
+| CI failure | Code Health | `constellate-clean-implementation` + failure logs + relevant docs + Constellate verification | Diagnose first; implement only approved fix. |
 
 ---
 
@@ -162,6 +176,7 @@ Use when the task changes:
 - component composition
 
 Read only what is needed:
+- `.agents/skills/constellate-interface-craft/SKILL.md`
 - `.agents/agents/product-ui-agent.md`
 - `docs/PRODUCT_SOUL.md`
 - `docs/DESIGN_SYSTEM.md`
@@ -186,6 +201,8 @@ Use when the task changes:
 - wallet profile logic
 
 Read only what is needed:
+- `.agents/skills/constellate-production-architecture/SKILL.md`
+- `.agents/skills/constellate-data-reliability/SKILL.md`
 - `.agents/agents/data-api-agent.md`
 - `.agents/skills/constellate-data-sources/SKILL.md`
 - `docs/ARCHITECTURE.md`
@@ -210,6 +227,7 @@ Use when the task changes:
 - converter result presentation or error copy
 
 Read:
+- `.agents/skills/constellate-data-reliability/SKILL.md`
 - `.agents/skills/constellate-data-sources/SKILL.md`
 - `.agents/skills/constellate-verification/SKILL.md`
 - relevant converter spec/docs
@@ -249,6 +267,7 @@ Use when the task changes:
 - labels that sound like judgments
 
 Read:
+- `.agents/skills/constellate-interface-craft/SKILL.md`
 - `docs/PRODUCT_SOUL.md`
 - `docs/INSIGHT_ENGINE.md`
 - `docs/ETHICAL_AI_BUILDING.md`
@@ -273,6 +292,7 @@ Use when the task changes:
 - logic relocation
 
 Read:
+- `.agents/skills/constellate-clean-implementation/SKILL.md`
 - `.agents/agents/code-health-agent.md`
 - `.agents/skills/constellate-verification/SKILL.md`
 - `docs/ARCHITECTURE.md`
@@ -296,6 +316,8 @@ Use when the task changes:
 Read:
 - `AGENTS.md`
 - `.agents/registry.yaml`
+- `.agents/skills/constellate-agent-handoff/SKILL.md`
+- `.agents/skills/constellate-clean-implementation/SKILL.md`
 - `.agents/skills/constellate-verification/SKILL.md`
 - changed agent/doc files
 - `docs/README.md` when doc structure changes

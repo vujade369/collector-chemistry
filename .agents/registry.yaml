@@ -29,6 +29,107 @@ required_task_contract:
     - known_issues
     - outside_scope_changes
 
+core_skills:
+  constellate_agent_handoff:
+    path: .agents/skills/constellate-agent-handoff/SKILL.md
+    when_to_use:
+      - turning product intent into Codex-ready prompts
+      - scoping tasks before implementation
+      - preparing file, constraint, definition-of-done, and verification handoffs
+    related_task_types:
+      - docs
+      - mixed
+      - product_ui
+      - data_api
+      - code_health
+    forbidden_behavior:
+      - broad_scope_without_product_question
+      - implementation_without_files_to_touch
+      - missing_verification_plan
+    recommended_checks:
+      - npm run agents:check
+      - npm run docs:check
+
+  constellate_production_architecture:
+    path: .agents/skills/constellate-production-architecture/SKILL.md
+    when_to_use:
+      - API response shape changes
+      - backend or route changes
+      - route boundary or runtime data flow changes
+      - mixed API/UI work
+      - large page-file changes
+    related_task_types:
+      - data_api
+      - mixed
+      - code_health
+    forbidden_behavior:
+      - casual_api_contract_change
+      - unscoped_route_change
+      - runtime_shell_out_to_cli_or_mcp
+    recommended_checks:
+      - npx tsc --noEmit
+      - focused curl/debug check when API behavior changes
+
+  constellate_data_reliability:
+    path: .agents/skills/constellate-data-reliability/SKILL.md
+    when_to_use:
+      - OpenSea, Alchemy, MCP, or converter work
+      - owner discovery, pagination, dedupe, or visible inventory work
+      - offers, floors, fallback behavior, or debug proof changes
+    related_task_types:
+      - data_api
+      - mixed
+    forbidden_behavior:
+      - mutating_opensea_action
+      - capped_ownership_without_approval
+      - floor_value_as_converter_offer_value
+      - missing_debug_proof
+    recommended_checks:
+      - npx tsc --noEmit
+      - npm run skills:check
+      - focused curl/debug check when data behavior changes
+
+  constellate_interface_craft:
+    path: .agents/skills/constellate-interface-craft/SKILL.md
+    when_to_use:
+      - UI hierarchy, copy, labels, and empty states
+      - profile or compare presentation changes
+      - display/link behavior or proof-near-claim work
+    related_task_types:
+      - product_ui
+      - mixed
+    forbidden_behavior:
+      - generic_dashboard_framing
+      - ranking_or_status_language
+      - interface_only_api_contract_change
+      - invented_opensea_links
+    recommended_checks:
+      - npx tsc --noEmit
+      - browser check when layout risk exists
+
+  constellate_clean_implementation:
+    path: .agents/skills/constellate-clean-implementation/SKILL.md
+    when_to_use:
+      - implementation discipline and verification
+      - code health or refactor work
+      - harness, docs, or agent changes
+      - final reporting
+    related_task_types:
+      - code_health
+      - docs
+      - mixed
+      - product_ui
+      - data_api
+    forbidden_behavior:
+      - broad_refactor_without_scope
+      - dependency_addition_without_approval
+      - unverified_claim
+      - committing_without_request
+    recommended_checks:
+      - git diff --name-only
+      - npx tsc --noEmit when code changes
+      - npm run governance:check when harness/docs change
+
 task_types:
   product_ui:
     agent: .agents/agents/product-ui-agent.md
