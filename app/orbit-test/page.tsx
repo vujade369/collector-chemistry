@@ -926,7 +926,8 @@ export default function OrbitTestPage() {
     <main
       style={{
         minHeight: "100vh",
-        background: "#08070a",
+        background:
+          "radial-gradient(ellipse at 18% 12%, rgba(255,51,153,0.045) 0%, transparent 50%), radial-gradient(ellipse at 80% 45%, rgba(149,117,255,0.05) 0%, transparent 46%), radial-gradient(ellipse at 50% 88%, rgba(34,211,238,0.025) 0%, transparent 42%), #09070d",
         color: "#f4edf4",
         padding: "48px",
         fontFamily:
@@ -1652,13 +1653,16 @@ export default function OrbitTestPage() {
                         ? `Led by ${topSharedRoomNames[0]}.`
                         : reason;
                   const candidateWallet = candidate.wallet?.trim();
+                  const signalTier = candidate.strength === "strong" ? "strong"
+                    : candidate.strength === "nearby" ? "nearby"
+                    : "light";
                   return (
                     <article
                       key={cardKey}
                       style={{
                         border: "1px solid rgba(255,255,255,0.065)",
                         background:
-                          "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.014))",
+                          "linear-gradient(160deg, rgba(110,70,160,0.055), rgba(255,255,255,0.01))",
                         borderRadius: 20,
                         padding: 0,
                         position: "relative",
@@ -1674,7 +1678,7 @@ export default function OrbitTestPage() {
                           height: 46,
                           background: candidate.bannerUrl
                             ? undefined
-                            : "linear-gradient(135deg, rgba(73,54,86,0.42), rgba(12,10,15,0.96))",
+                            : "linear-gradient(135deg, rgba(95,55,120,0.48), rgba(14,8,20,0.98))",
                           backgroundImage: candidate.bannerUrl ? `url(${candidate.bannerUrl})` : undefined,
                           backgroundSize: "cover",
                           backgroundPosition: "center",
@@ -1691,7 +1695,7 @@ export default function OrbitTestPage() {
                           gap: 10,
                           minHeight: 76,
                           padding: "12px 14px 11px",
-                          background: "rgba(16,12,20,0.92)",
+                          background: "rgba(20,11,28,0.96)",
                           borderBottom: "1px solid rgba(255,255,255,0.075)",
                         }}
                       >
@@ -1882,8 +1886,16 @@ export default function OrbitTestPage() {
                             justifyContent: "space-between",
                             gap: 12,
                             width: "100%",
-                            border: "1px solid rgba(183,155,255,0.16)",
-                            background: "linear-gradient(135deg, rgba(143,107,234,0.13), rgba(255,255,255,0.026))",
+                            border: signalTier === "strong"
+                              ? "1px solid rgba(255,51,153,0.22)"
+                              : signalTier === "nearby"
+                                ? "1px solid rgba(149,117,255,0.22)"
+                                : "1px solid rgba(149,117,255,0.12)",
+                            background: signalTier === "strong"
+                              ? "rgba(255,51,153,0.07)"
+                              : signalTier === "nearby"
+                                ? "rgba(149,117,255,0.07)"
+                                : "rgba(255,255,255,0.024)",
                             boxShadow: "inset 0 1px 0 rgba(255,255,255,0.045)",
                             borderRadius: 14,
                             padding: "8px 10px",
@@ -1901,8 +1913,17 @@ export default function OrbitTestPage() {
                           >
                             Signal
                           </div>
-                          <div style={{ fontSize: 30, lineHeight: 0.95, fontWeight: 500, flexShrink: 0, color: "#f3d8ff" }}>
-                            {score}<span style={{ fontSize: 14, color: "#d3bfd9" }}>%</span>
+                          <div style={{
+                            fontSize: 30,
+                            lineHeight: 0.95,
+                            fontWeight: 500,
+                            flexShrink: 0,
+                            color: signalTier === "strong" ? "#ffd6ec" : signalTier === "nearby" ? "#e4d4ff" : "#e8dce8",
+                          }}>
+                            {score}<span style={{
+                              fontSize: 14,
+                              color: signalTier === "strong" ? "rgba(255,51,153,0.7)" : signalTier === "nearby" ? "rgba(149,117,255,0.7)" : "#c8b7cf",
+                            }}>%</span>
                           </div>
                         </div>
                       </div>
@@ -1976,9 +1997,9 @@ export default function OrbitTestPage() {
                                     height: 24,
                                     minWidth: 34,
                                     borderRadius: 9,
-                                    background: "rgba(164,139,255,0.11)",
-                                    border: "1px solid rgba(164,139,255,0.18)",
-                                    color: "#f1ecff",
+                                    background: "rgba(149,117,255,0.14)",
+                                    border: "1px solid rgba(149,117,255,0.24)",
+                                    color: "#ede3ff",
                                     fontSize: 13,
                                     fontWeight: 850,
                                     lineHeight: 1,
