@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 type OrbitSocialLink = {
   label: string;
@@ -54,6 +54,10 @@ type OrbitResponse = {
   error?: string;
 };
 
+type OrbitSeedLoadOptions = {
+  updateUrl?: boolean;
+};
+
 const DEFAULT_WALLET_ROWS = [
   "0x5ffd8de19910efff95df729c54699aebcee8f747",
 ];
@@ -70,18 +74,6 @@ function label(slug?: string | null) {
 function shortWallet(wallet?: string | null) {
   if (!wallet) return "Unknown wallet";
   return `${wallet.slice(0, 6)}...${wallet.slice(-4)}`;
-}
-
-function formatJoinedDate(value?: string | null) {
-  if (!value) return null;
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-
-  return `Joined ${date.toLocaleDateString("en-US", {
-    month: "short",
-    year: "numeric",
-  })}`;
 }
 
 function collectionUrl(collection?: OrbitCollection | null, slug?: string | null) {
@@ -525,6 +517,27 @@ function candidateCardKey(candidate: OrbitCandidate) {
   return candidate.wallet || candidate.openseaUrl || candidate.username || candidate.displayName || "unknown";
 }
 
+function walletFromLocationSearch() {
+  if (typeof window === "undefined") return "";
+  return (new URLSearchParams(window.location.search).get("wallet") || "").trim();
+}
+
+function storedWalletRows() {
+  try {
+    const saved = window.localStorage.getItem(WALLET_ROWS_STORAGE_KEY);
+    if (!saved) return DEFAULT_WALLET_ROWS;
+
+    const parsed = JSON.parse(saved);
+    if (Array.isArray(parsed) && parsed.some((value) => String(value || "").trim())) {
+      return parsed.map((value) => String(value || ""));
+    }
+  } catch {
+    // Ignore invalid local cache.
+  }
+
+  return DEFAULT_WALLET_ROWS;
+}
+
 export default function OrbitTestPage() {
   const [walletRows, setWalletRows] = useState<string[]>(DEFAULT_WALLET_ROWS);
   const [data, setData] = useState<OrbitResponse | null>(null);
@@ -541,24 +554,19 @@ export default function OrbitTestPage() {
   const [activeFocusCount, setActiveFocusCount] = useState(0);
   const [activeExcludeCount, setActiveExcludeCount] = useState(0);
   const [activeVaultTooltipWallet, setActiveVaultTooltipWallet] = useState<string | null>(null);
+  const [lastUrlWalletSeed, setLastUrlWalletSeed] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem(WALLET_ROWS_STORAGE_KEY);
-      if (!saved) return;
+    if (walletFromLocationSearch()) return;
 
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.some((value) => String(value || "").trim())) {
-        setWalletRows(parsed.map((value) => String(value || "")));
-      }
-    } catch {
-      // Ignore invalid local cache.
-    }
+    setWalletRows(storedWalletRows());
   }, []);
 
   useEffect(() => {
+    if (walletFromLocationSearch()) return;
+
     try {
       window.localStorage.setItem(WALLET_ROWS_STORAGE_KEY, JSON.stringify(walletRows));
     } catch {
@@ -751,11 +759,15 @@ export default function OrbitTestPage() {
     setRoomStates(buildDefaultRoomStates(availableRooms));
   }
 
-  async function findCollectors(mode: "wallet" | "custom" = "wallet") {
+  const findCollectors = useCallback(async (
+    mode: "wallet" | "custom" = "wallet",
+    explicitWalletRows?: string[]
+  ) => {
     setLoading(true);
     setError("");
 
-    const queryWallets = walletRows
+    const sourceWalletRows = explicitWalletRows || walletRows;
+    const queryWallets = sourceWalletRows
       .map((value) => value.trim())
       .filter(Boolean)
       .join(",");
@@ -807,7 +819,55 @@ export default function OrbitTestPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [availableRooms, focusedSlugs, outsideRooms, roomStates, walletRows]);
+
+  const loadOrbitSeed = useCallback((wallet: string, options: OrbitSeedLoadOptions = {}) => {
+    const seedWallet = wallet.trim();
+    if (!seedWallet) return;
+
+    if (options.updateUrl) {
+      const nextUrl = `/orbit-test?wallet=${encodeURIComponent(seedWallet)}`;
+      const currentUrl = `${window.location.pathname}${window.location.search}`;
+      if (currentUrl !== nextUrl) {
+        window.history.pushState(null, "", nextUrl);
+      }
+    }
+
+    setLastUrlWalletSeed(seedWallet);
+    setWalletRows([seedWallet]);
+    setData(null);
+    setExpandedSharedRoomCards({});
+    setSignalEditorOpen(false);
+    void findCollectors("wallet", [seedWallet]);
+  }, [findCollectors]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    function syncWalletFromUrl() {
+      const walletFromQuery = walletFromLocationSearch();
+      if (!walletFromQuery) {
+        if (!lastUrlWalletSeed) return;
+        setLastUrlWalletSeed("");
+        setWalletRows(storedWalletRows());
+        setData(null);
+        setExpandedSharedRoomCards({});
+        return;
+      }
+
+      if (walletFromQuery === lastUrlWalletSeed) return;
+
+      loadOrbitSeed(walletFromQuery, { updateUrl: false });
+    }
+
+    if (!cancelled) syncWalletFromUrl();
+
+    window.addEventListener("popstate", syncWalletFromUrl);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("popstate", syncWalletFromUrl);
+    };
+  }, [lastUrlWalletSeed, loadOrbitSeed]);
 
   const collectionMap = useMemo(() => {
     const map = new Map<string, OrbitCollection>();
@@ -901,7 +961,7 @@ export default function OrbitTestPage() {
             </h1>
 
             <p style={{ margin: 0, maxWidth: 760, color: "#bdb0bd", lineHeight: 1.55 }}>
-              Find nearby collectors surfaced from a broad read of your top 50 visible collection rooms, then see exactly why each person appeared.
+              Find nearby collectors whose wallets move through the same rooms as yours.
             </p>
           </div>
         </div>
@@ -929,7 +989,7 @@ export default function OrbitTestPage() {
               Start with your wallet
             </p>
             <p style={{ margin: 0, color: "#a99daa", fontSize: 13 }}>
-              Add one or more wallets. The search uses their visible collection rooms as the starting point.
+              Add one or more wallets. Their visible collection rooms shape the search.
             </p>
           </div>
 
@@ -1006,21 +1066,28 @@ export default function OrbitTestPage() {
               + Add another wallet
             </button>
 
-            <button
-              onClick={() => findCollectors("wallet")}
-              disabled={loading}
-              style={{
-                background: loading ? "#312636" : "#f4edf4",
-                color: loading ? "#978a99" : "#08070a",
-                border: "none",
-                borderRadius: 999,
-                padding: "11px 18px",
-                fontWeight: 700,
-                cursor: loading ? "not-allowed" : "pointer",
-              }}
-            >
-              {loading ? "Reading…" : "Read my orbit"}
-            </button>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+              <button
+                onClick={() => findCollectors("wallet")}
+                disabled={loading}
+                style={{
+                  background: loading ? "#312636" : "#f4edf4",
+                  color: loading ? "#978a99" : "#08070a",
+                  border: "none",
+                  borderRadius: 999,
+                  padding: "11px 18px",
+                  fontWeight: 700,
+                  cursor: loading ? "not-allowed" : "pointer",
+                }}
+              >
+                {loading ? "Reading…" : "Read my orbit"}
+              </button>
+              {loading && (
+                <p style={{ margin: 0, color: "#8f8292", fontSize: 12, textAlign: "right" }}>
+                  Reading up to 50 rooms — may take 20–60s for large wallets.
+                </p>
+              )}
+            </div>
           </div>
         </div>
 
@@ -1061,7 +1128,7 @@ export default function OrbitTestPage() {
                 }}
               >
                 <div>
-                  <h2 style={{ margin: 0, fontSize: 16 }}>Edit signal</h2>
+                  <h2 style={{ margin: 0, fontSize: 16 }}>Refine the search</h2>
                   <p style={{ margin: "5px 0 0", color: "#8f8292", fontSize: 12 }}>
                     Optional tuning for custom collection rooms.
                   </p>
@@ -1072,17 +1139,58 @@ export default function OrbitTestPage() {
                   onClick={() => setSignalEditorOpen((open) => !open)}
                   aria-expanded={signalEditorOpen}
                   style={{
-                    background: signalEditorOpen ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.035)",
+                    position: "relative",
+                    display: "inline-grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    alignItems: "center",
+                    minWidth: 148,
+                    background: "rgba(255,255,255,0.035)",
                     color: "#eee5ef",
                     border: "1px solid rgba(255,255,255,0.12)",
                     borderRadius: 999,
-                    padding: "8px 12px",
-                    fontSize: 12,
-                    fontWeight: 700,
+                    padding: 3,
+                    fontSize: 11,
+                    fontWeight: 750,
                     cursor: "pointer",
+                    overflow: "hidden",
                   }}
                 >
-                  {signalEditorOpen ? "Hide tuning" : "Tune signal"}
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      position: "absolute",
+                      top: 3,
+                      bottom: 3,
+                      left: signalEditorOpen ? "50%" : 3,
+                      width: "calc(50% - 3px)",
+                      borderRadius: 999,
+                      background: "rgba(255,255,255,0.1)",
+                      boxShadow: signalEditorOpen ? "0 0 18px rgba(143,107,234,0.22)" : "none",
+                      transition: "left 180ms ease, box-shadow 180ms ease",
+                    }}
+                  />
+                  <span
+                    style={{
+                      position: "relative",
+                      zIndex: 1,
+                      padding: "6px 10px",
+                      color: signalEditorOpen ? "#8f8292" : "#f3edf4",
+                      textAlign: "center",
+                    }}
+                  >
+                    Signal
+                  </span>
+                  <span
+                    style={{
+                      position: "relative",
+                      zIndex: 1,
+                      padding: "6px 10px",
+                      color: signalEditorOpen ? "#f3edf4" : "#8f8292",
+                      textAlign: "center",
+                    }}
+                  >
+                    Refine
+                  </span>
                 </button>
               </div>
 
@@ -1459,7 +1567,7 @@ export default function OrbitTestPage() {
                       cursor: loading || focusedSlugs.length === 0 ? "not-allowed" : "pointer",
                     }}
                   >
-                    {loading ? "Tuning…" : "Tune signal"}
+                    {loading ? "Refining…" : "Refine search"}
                   </button>
               </div>
                 </>
@@ -1479,8 +1587,8 @@ export default function OrbitTestPage() {
                   <h2 style={{ margin: 0, fontSize: 24 }}>Collectors surfaced</h2>
                   <p style={{ margin: "7px 0 0", color: "#a99daa", fontSize: 13 }}>
                     {loading ? "Updating this scenario…" : focusedSlugs.length > 0
-                      ? "Wallet behavior surfaced these collectors through shared visible rooms, holding depth, and room specificity."
-                      : "Collectors surfaced through the rooms currently shaping this search."}
+                      ? "These collectors surfaced through shared visible rooms, holding depth, and room specificity."
+                      : "These collectors surfaced through your refined room selection."}
                   </p>
                 </div>
 
@@ -1508,15 +1616,6 @@ export default function OrbitTestPage() {
                     style={{ accentColor: "#8f6bea", margin: 0 }}
                   />
                 </label>
-              </div>
-
-              <div style={{ marginBottom: 16 }}>
-                <p style={{ margin: 0, color: "#eee5ef", fontSize: 14, fontWeight: 750 }}>
-                  {collectorCountLabel} · {signalModeLabel} · {institutionalModeLabel}
-                </p>
-                <p style={{ margin: "5px 0 0", color: "#a99daa", fontSize: 12, lineHeight: 1.45 }}>
-                  Signal favors shared rooms, holding depth, and specificity.
-                </p>
               </div>
 
               <div
@@ -1552,6 +1651,7 @@ export default function OrbitTestPage() {
                       : topSharedRoomNames.length === 1
                         ? `Led by ${topSharedRoomNames[0]}.`
                         : reason;
+                  const candidateWallet = candidate.wallet?.trim();
                   return (
                     <article
                       key={cardKey}
@@ -1644,7 +1744,7 @@ export default function OrbitTestPage() {
                               }}
                             >
                               <h3
-                                title={candidate.displayName || shortWallet(candidate.wallet)}
+                                title={candidate.displayName || shortWallet(candidateWallet)}
                                 style={{
                                   margin: 0,
                                   fontSize: 17,
@@ -1655,12 +1755,12 @@ export default function OrbitTestPage() {
                                   maxWidth: "100%",
                                 }}
                               >
-                                {candidate.displayName || shortWallet(candidate.wallet)}
+                                {candidate.displayName || shortWallet(candidateWallet)}
                               </h3>
 
                               <button
                                 type="button"
-                                onClick={() => navigator.clipboard?.writeText(candidate.wallet)}
+                                onClick={() => candidateWallet && navigator.clipboard?.writeText(candidateWallet)}
                                 title="Copy wallet address"
                                 aria-label="Copy wallet address"
                                 style={{
@@ -1682,7 +1782,7 @@ export default function OrbitTestPage() {
                               </button>
                             </div>
 
-                            {(candidate.socialLinks && candidate.socialLinks.length > 0) || formatJoinedDate(candidate.joinedDate) ? (
+                            {(candidate.socialLinks && candidate.socialLinks.length > 0) || institutional ? (
                               <div
                                 style={{
                                   display: "flex",
@@ -1719,9 +1819,9 @@ export default function OrbitTestPage() {
                                     <span
                                       aria-label="Likely institutional wallet"
                                       tabIndex={0}
-                                      onMouseEnter={() => setActiveVaultTooltipWallet(candidate.wallet)}
+                                      onMouseEnter={() => candidateWallet && setActiveVaultTooltipWallet(candidateWallet)}
                                       onMouseLeave={() => setActiveVaultTooltipWallet(null)}
-                                      onFocus={() => setActiveVaultTooltipWallet(candidate.wallet)}
+                                      onFocus={() => candidateWallet && setActiveVaultTooltipWallet(candidateWallet)}
                                       onBlur={() => setActiveVaultTooltipWallet(null)}
                                       style={{
                                         display: "inline-flex",
@@ -1740,7 +1840,7 @@ export default function OrbitTestPage() {
                                       }}
                                     >
                                       🏛
-                                      {activeVaultTooltipWallet === candidate.wallet && (
+                                      {activeVaultTooltipWallet === candidateWallet && (
                                         <span
                                           role="tooltip"
                                           style={{
@@ -1768,26 +1868,6 @@ export default function OrbitTestPage() {
                                     </span>
                                   )}
 
-                                  {formatJoinedDate(candidate.joinedDate) && (
-                                    <span
-                                      style={{
-                                        display: "inline-flex",
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                        borderRadius: 999,
-                                        padding: "4px 8px",
-                                        background: "rgba(108, 79, 255, 0.32)",
-                                        border: "1px solid rgba(164, 139, 255, 0.5)",
-                                        color: "#f1ecff",
-                                        fontSize: 10,
-                                        lineHeight: 1,
-                                        whiteSpace: "nowrap",
-                                        boxSizing: "border-box",
-                                      }}
-                                    >
-                                      {formatJoinedDate(candidate.joinedDate)}
-                                    </span>
-                                  )}
                                 </div>
                               </div>
                             ) : null}
@@ -1802,32 +1882,27 @@ export default function OrbitTestPage() {
                             justifyContent: "space-between",
                             gap: 12,
                             width: "100%",
-                            border: "1px solid rgba(255,255,255,0.055)",
-                            background: "rgba(255,255,255,0.018)",
+                            border: "1px solid rgba(183,155,255,0.16)",
+                            background: "linear-gradient(135deg, rgba(143,107,234,0.13), rgba(255,255,255,0.026))",
+                            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.045)",
                             borderRadius: 14,
                             padding: "8px 10px",
                             textAlign: "left",
                             color: "#f0d6ff",
                           }}
                         >
-                          <div>
-                            <div
-                              style={{
-                                marginBottom: 3,
-                                color: "#a99daa",
-                                fontSize: 9,
-                                letterSpacing: "0.16em",
-                                textTransform: "uppercase",
-                              }}
-                            >
-                              Signal
-                            </div>
-                            <div style={{ color: "#a99daa", fontSize: 11, lineHeight: 1.25 }}>
-                              from {sharedCount} room{sharedCount === 1 ? "" : "s"}
-                            </div>
+                          <div
+                            style={{
+                              color: "#b9a9c0",
+                              fontSize: 9,
+                              letterSpacing: "0.16em",
+                              textTransform: "uppercase",
+                            }}
+                          >
+                            Signal
                           </div>
-                          <div style={{ fontSize: 30, lineHeight: 0.95, fontWeight: 500, flexShrink: 0 }}>
-                            {score}<span style={{ fontSize: 14, color: "#c8b7cf" }}>%</span>
+                          <div style={{ fontSize: 30, lineHeight: 0.95, fontWeight: 500, flexShrink: 0, color: "#f3d8ff" }}>
+                            {score}<span style={{ fontSize: 14, color: "#d3bfd9" }}>%</span>
                           </div>
                         </div>
                       </div>
@@ -1884,9 +1959,9 @@ export default function OrbitTestPage() {
                                   alignItems: "center",
                                   gap: 9,
                                   minHeight: 34,
-                                  border: "1px solid rgba(255,255,255,0.045)",
-                                  background: "rgba(255,255,255,0.01)",
-                                  borderRadius: 12,
+                                  border: "1px solid rgba(255,255,255,0.028)",
+                                  background: "rgba(255,255,255,0.006)",
+                                  borderRadius: 11,
                                   padding: "5px 8px 5px 5px",
                                   color: "#eee5ef",
                                   fontSize: 12,
@@ -1963,11 +2038,11 @@ export default function OrbitTestPage() {
                               }
                               style={{
                                 width: "100%",
-                                border: "1px solid rgba(255,255,255,0.07)",
-                                background: "rgba(255,255,255,0.018)",
-                                borderRadius: 14,
-                                padding: "9px 10px",
-                                color: "#a99daa",
+                                border: "1px solid rgba(255,255,255,0.035)",
+                                background: "transparent",
+                                borderRadius: 12,
+                                padding: "8px 10px",
+                                color: "#8f8292",
                                 fontSize: 12,
                                 textAlign: "center",
                                 cursor: "pointer",
@@ -1980,28 +2055,37 @@ export default function OrbitTestPage() {
                           )}
                         </div>
                       </div>
-
-                      
-
                       </div>
 
                       <div
                         style={{
                           display: "flex",
-                          gap: 10,
+                          gap: 8,
                           flexWrap: "wrap",
                           alignItems: "center",
-                          padding: 16,
+                          padding: "12px 16px 16px",
                           marginTop: "auto",
-                          borderTop: "1px solid rgba(255,255,255,0.1)",
-                          background: "rgba(0,0,0,0.2)",
+                          borderTop: "1px solid rgba(255,255,255,0.055)",
+                          background: "rgba(0,0,0,0.08)",
                         }}
                       >
-                        {candidate.openseaUrl && (
+                        {candidateWallet && (
                           <a
-                            href={candidate.openseaUrl}
-                            target="_blank"
-                            rel="noreferrer"
+                            href={`/orbit-test?wallet=${encodeURIComponent(candidateWallet)}`}
+                            onClick={(event) => {
+                              if (
+                                event.button !== 0 ||
+                                event.metaKey ||
+                                event.ctrlKey ||
+                                event.shiftKey ||
+                                event.altKey
+                              ) {
+                                return;
+                              }
+
+                              event.preventDefault();
+                              loadOrbitSeed(candidateWallet, { updateUrl: true });
+                            }}
                             style={{
                               color: "#08070a",
                               background: "#f4edf4",
@@ -2012,23 +2096,25 @@ export default function OrbitTestPage() {
                               textDecoration: "none",
                             }}
                           >
-                            View profile
+                            View orbit
                           </a>
                         )}
 
-                        <a
-                          href={`/compare?a=${encodeURIComponent(joinedWallets)}&b=${candidate.wallet}`}
-                          style={{
-                            color: "#f4edf4",
-                            border: "1px solid rgba(255,255,255,0.16)",
-                            borderRadius: 999,
-                            padding: "9px 12px",
-                            fontSize: 13,
-                            textDecoration: "none",
-                          }}
-                        >
-                          Compare with me
-                        </a>
+                        {candidateWallet && (
+                          <a
+                            href={`/compare?a=${encodeURIComponent(joinedWallets)}&b=${encodeURIComponent(candidateWallet)}`}
+                            style={{
+                              color: "#f4edf4",
+                              border: "1px solid rgba(255,255,255,0.16)",
+                              borderRadius: 999,
+                              padding: "9px 12px",
+                              fontSize: 13,
+                              textDecoration: "none",
+                            }}
+                          >
+                            Compare
+                          </a>
+                        )}
                       </div>
                     </article>
                   );
