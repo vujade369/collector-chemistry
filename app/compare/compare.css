@@ -332,10 +332,10 @@
 
 .cc-score-summary {
   margin: 10px auto 0;
-  max-width: 28ch;
+  max-width: 46ch;
   color: #8f8a83;
-  font-size: 12px;
-  line-height: 1.55;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .cc-proof-row {
@@ -940,7 +940,11 @@
 
 /* ─── Overview / wallet cards ────────────────────────────────────── */
 
-.compare-overview { display: grid; gap: 12px; }
+.compare-overview {
+  display: grid;
+  gap: 12px;
+  opacity: 0.92;
+}
 .compare-overview-head { margin-bottom: 2px; }
 .compare-overview-grid,
 .compare-profile-grid { display: grid; gap: 12px; }

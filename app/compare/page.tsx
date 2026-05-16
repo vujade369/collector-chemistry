@@ -376,19 +376,19 @@ function buildRecognitionRead(
       const gap = Math.abs(Number(valueA) - Number(valueB));
       divergence.push(
         gap >= 15
-          ? `Both wallets lean toward ${labelA.toLowerCase()}, but one returns there with more visible weight.`
-          : `Both wallets share a ${labelA.toLowerCase()} center, while the surrounding signals separate them.`
+          ? `Both wallets lean toward ${labelA.toLowerCase()}, but the weight lands unevenly.`
+          : `Both wallets share a ${labelA.toLowerCase()} center, then separate in the surrounding signals.`
       );
     } else {
       divergence.push(
-        `One wallet leans toward ${labelA.toLowerCase()}, while the other leans toward ${labelB.toLowerCase()}.`
+        `One wallet leans more heavily into ${labelA.toLowerCase()}, while the other gives more weight to ${labelB.toLowerCase()}.`
       );
     }
   }
   if (depthSignal) {
     const depthName = humanizeCollectionName(depthSignal.name) || depthSignal.name;
     divergence.push(
-      `${depthName} is shared, but the depth is uneven: ${depthSignal.a} held on one side and ${depthSignal.b} on the other.`
+      `The shared rooms are present, but ${depthName} shows the depth clearly: ${depthSignal.a} held on one side and ${depthSignal.b} on the other.`
     );
   }
 
@@ -402,7 +402,7 @@ function buildRecognitionRead(
     return {
       label: "Deeply Aligned",
       summary:
-        "These wallets appear to move through the same cultural lanes with unusual consistency. The overlap shows up across collections, artist signals, and category shape.",
+        "These wallets appear to move through the same cultural lanes with unusual consistency, across collections, artist signals, and category shape.",
       proof: proof.slice(0, 4),
       divergence,
     };
@@ -413,7 +413,7 @@ function buildRecognitionRead(
     return {
       label: "Same Rooms, Different Depths",
       summary:
-        `These wallets enter several of the same collection rooms, but ${depthName} shows the relationship clearly: one returns with more depth while the other keeps a lighter signal.`,
+        `These wallets meet in several rooms, then separate in depth. ${depthName} carries the clearest proof: one wallet returns there with more weight.`,
       proof: proof.slice(0, 4),
       divergence,
     };
@@ -423,7 +423,7 @@ function buildRecognitionRead(
     return {
       label: "Adjacent Scenes",
       summary:
-        "These wallets surface real crossing points while keeping different centers of gravity. They seem to move through neighboring scenes rather than the same exact lane.",
+        "These wallets surface real crossing points while keeping different centers of gravity. They appear to move through neighboring scenes rather than one exact lane.",
       proof: proof.slice(0, 4),
       divergence,
     };
@@ -433,7 +433,7 @@ function buildRecognitionRead(
     return {
       label: "Mirror Signal",
       summary:
-        "The connection appears less literal than reflective. They do not share much directly, but artist signals or category shape suggest nearby instincts.",
+        "The connection appears less literal than reflective. They do not share much directly, but the artist signals or category shape suggest nearby instincts.",
       proof: proof.slice(0, 4),
       divergence,
     };
@@ -443,7 +443,7 @@ function buildRecognitionRead(
     return {
       label: "Different Constellations",
       summary:
-        "These wallets appear to be moving through different collecting worlds right now. The distance is part of the read, not a failure of the comparison.",
+        "These wallets appear to be moving through different collecting worlds right now. The distance gives the relationship its shape.",
       proof: proof.length ? proof.slice(0, 3) : ["minimal direct overlap surfaced"],
       divergence,
     };
@@ -453,11 +453,33 @@ function buildRecognitionRead(
   return {
     label: "Distant But Related",
     summary: anchor
-      ? `The overlap is limited, but ${anchor} gives the relationship a visible thread. It suggests recognition at the edge rather than full alignment.`
-      : "The overlap is light, but the comparison still surfaces useful distance between the two collecting patterns.",
+      ? `The overlap is limited, but ${anchor} gives the relationship a visible thread. The signal suggests recognition at the edge.`
+      : "The overlap is light, but the distance between the two collecting patterns is still legible.",
     proof: proof.length ? proof.slice(0, 4) : ["light overlap across visible signals"],
     divergence,
   };
+}
+
+function polishRelationshipRead(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+
+  if (
+    trimmed.includes("not enough reliable context") ||
+    trimmed.includes("full interpretation")
+  ) {
+    return [
+      "There is enough overlap here to suggest a real point of contact. The signal is less about one shared category and more about the way both wallets respond to nearby cultural cues.",
+      "That kind of relationship can be more interesting than simple sameness. It leaves room for difference, distance, and recognition without forcing the wallets into the same shape.",
+    ].join("\n\n");
+  }
+
+  return trimmed
+    .replace(
+      "There is enough overlap here to suggest a real point of contact, but not enough reliable context to turn that signal into a full interpretation.",
+      "There is enough overlap here to suggest a real point of contact."
+    )
+    .replace("cannot conclude", "does not need to overstate");
 }
 
 type TasteSlice = {
@@ -1555,7 +1577,7 @@ function ComparePageContent() {
                       <p className="cc-interpretation-headline">{interpretation.headline}</p>
                     )}
                     <div className="cc-interpretation-body">
-                      {interpretation.summary
+                      {polishRelationshipRead(interpretation.summary)
                         .split("\n\n")
                         .filter(Boolean)
                         .map((paragraph, i) => (
@@ -1568,7 +1590,9 @@ function ComparePageContent() {
                 )}
 
                 {!interpretationLoading && !interpretation?.summary && (
-                  <p className="cc-editorial-text">{data.scoring.pairInterpretation.summary}</p>
+                  <p className="cc-editorial-text">
+                    {polishRelationshipRead(data.scoring.pairInterpretation.summary)}
+                  </p>
                 )}
 
                 {recognition?.proof.length ? (
@@ -1991,7 +2015,7 @@ function ComparePageContent() {
                   <div className="eyebrow">Divergence</div>
                   <h2 className="compare-section-title">Where they diverge</h2>
                   <p className="compare-section-text">
-                    These wallets overlap in some rooms, but their weight falls differently.
+                    These wallets overlap in some rooms, then place their weight differently.
                   </p>
                 </div>
                 <div className="compare-divergence-list">
@@ -2007,10 +2031,10 @@ function ComparePageContent() {
             {/* Collector profiles */}
             <section className="compare-overview">
               <div className="compare-section-head compare-section-head-band compare-overview-head">
-                <div className="eyebrow">Collector profiles</div>
-                <h2 className="compare-section-title">How each collector moves</h2>
+                <div className="eyebrow">Supporting read</div>
+                <h2 className="compare-section-title">Collector movement</h2>
                 <p className="compare-section-text">
-                  Identity first. Context and proof follow from repeated attention.
+                  The wallet-level patterns behind the relationship.
                 </p>
               </div>
               <div className="compare-overview-grid">
@@ -2073,9 +2097,9 @@ function ComparePageContent() {
             <section className="panel compare-section compare-section-compact">
               <div className="compare-section-head compare-section-head-band">
                 <div className="eyebrow">Taste map</div>
-                <h2 className="compare-section-title">Where your taste lives</h2>
+                <h2 className="compare-section-title">Category shape</h2>
                 <p className="compare-section-text">
-                  Not how much you own. How each wallet tends to think.
+                  A quieter view of where each wallet places attention.
                 </p>
               </div>
               {tasteKeys.length > 0 ? (
