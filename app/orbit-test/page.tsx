@@ -1368,37 +1368,39 @@ export default function OrbitTestPage() {
       }}
     >
       <section style={{ maxWidth: 1180, margin: "0 auto" }}>
-        <div
-          style={{
-            position: "relative",
-            marginBottom: 30,
-            padding: "10px 0 4px",
-          }}
-        >
+        {!data && (
           <div
-            aria-hidden="true"
             style={{
-              position: "absolute",
-              inset: "-38px auto auto -80px",
-              width: 420,
-              height: 220,
-              background:
-                "radial-gradient(circle at 30% 30%, rgba(236,72,153,0.12), transparent 58%), radial-gradient(circle at 68% 42%, rgba(34,211,238,0.08), transparent 48%)",
-              filter: "blur(4px)",
-              opacity: 0.8,
-              pointerEvents: "none",
+              position: "relative",
+              marginBottom: 30,
+              padding: "10px 0 4px",
             }}
-          />
-          <div style={{ position: "relative" }}>
-            <h1 style={{ margin: "0 0 12px", fontSize: 46, letterSpacing: "-0.055em", lineHeight: 0.95 }}>
-              Collectors in Your Orbit
-            </h1>
+          >
+            <div
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                inset: "-38px auto auto -80px",
+                width: 420,
+                height: 220,
+                background:
+                  "radial-gradient(circle at 30% 30%, rgba(236,72,153,0.12), transparent 58%), radial-gradient(circle at 68% 42%, rgba(34,211,238,0.08), transparent 48%)",
+                filter: "blur(4px)",
+                opacity: 0.8,
+                pointerEvents: "none",
+              }}
+            />
+            <div style={{ position: "relative" }}>
+              <h1 style={{ margin: "0 0 12px", fontSize: 46, letterSpacing: "-0.055em", lineHeight: 0.95 }}>
+                Collectors in Your Orbit
+              </h1>
 
-            <p style={{ margin: 0, maxWidth: 760, color: "#bdb0bd", lineHeight: 1.55 }}>
-              Find nearby collectors whose wallets move through the same rooms as yours.
-            </p>
+              <p style={{ margin: 0, maxWidth: 760, color: "#bdb0bd", lineHeight: 1.55 }}>
+                Find nearby collectors whose wallets move through the same rooms as yours.
+              </p>
+            </div>
           </div>
-        </div>
+        )}
 
         <div
           style={{
@@ -1575,7 +1577,7 @@ export default function OrbitTestPage() {
                   >
                     {isNamedRemix ? "Named Orbit" : "From this wallet"}
                   </p>
-                  <h2
+                  <h1
                     style={{
                       margin: 0,
                       color: "#f4edf4",
@@ -1586,7 +1588,7 @@ export default function OrbitTestPage() {
                     }}
                   >
                     {orbitName}
-                  </h2>
+                  </h1>
                   {remixFromLabel && (
                     <p style={{ margin: "9px 0 0", color: "#c8bdca", fontSize: 14 }}>
                       Remixed from {remixFromLabel}
