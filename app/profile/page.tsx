@@ -964,7 +964,7 @@ export default function ProfilePage() {
         {/* Profile */}
         {profileReady && showResults && profile && (
           <>
-            {/* ── Hero ── */}
+            {/* ── Identity + Read ── */}
             <section className="profile-hero-composed">
               <article className="profile-panel profile-identity-block">
                 {topCollectionsWithImages.slice(0, 4).some((c) => c.resolvedImageUrl) && (
@@ -1012,9 +1012,6 @@ export default function ProfilePage() {
                   {identitySecondaryLine && (
                     <p className="profile-address">{identitySecondaryLine}</p>
                   )}
-                  {profile.patternLine && (
-                    <p className="profile-identity-summary">{profile.patternLine}</p>
-                  )}
 
                   <div className="profile-identity-stats" aria-label="Profile proof stats">
                     <div className="profile-identity-stat profile-identity-stat--holdings">
@@ -1027,14 +1024,44 @@ export default function ProfilePage() {
                     </div>
                   </div>
                 </div>
+              </article>
 
+              {hasInterpretation && (
+                <section className="profile-panel profile-interpretation-panel">
+                  <p className="profile-section-label">The Read</p>
+                  {profile.patternLine && (
+                    <p className="profile-pattern-quote">{profile.patternLine}</p>
+                  )}
+                  {profile.identityParagraph && (
+                    <p className="profile-interpretation-copy">
+                      {profile.identityParagraph}
+                    </p>
+                  )}
+                  {behavioralReads.length > 0 && (
+                    <div className="profile-tag-row">
+                      {behavioralReads.map((read, idx) => (
+                        <span key={`${read}-${idx}`} className="profile-tag">
+                          {read}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {profile.whatStandsOut && (
+                    <p className="profile-interpretation-standout">
+                      {profile.whatStandsOut}
+                    </p>
+                  )}
+                </section>
+              )}
+
+              <div className="profile-wallet-edit">
                 <WalletBanner
                   wallets={result?.wallets || initialWalletsFromQuery}
                   onAdd={addWallet}
                   onRemove={removeWallet}
                   variant="compact"
                 />
-              </article>
+              </div>
 
               {firstMint?.openseaUrl ? (
                 <a
@@ -1214,35 +1241,6 @@ export default function ProfilePage() {
                   </div>
                 </div>
               </article>
-            )}
-
-            {/* ── The Read ── */}
-            {hasInterpretation && (
-              <section className="profile-panel profile-interpretation-panel">
-                <p className="profile-section-label">The Read</p>
-                {profile.patternLine && (
-                  <p className="profile-pattern-quote">{profile.patternLine}</p>
-                )}
-                {profile.identityParagraph && (
-                  <p className="profile-interpretation-copy">
-                    {profile.identityParagraph}
-                  </p>
-                )}
-                {behavioralReads.length > 0 && (
-                  <div className="profile-tag-row">
-                    {behavioralReads.map((read, idx) => (
-                      <span key={`${read}-${idx}`} className="profile-tag">
-                        {read}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                {profile.whatStandsOut && (
-                  <p className="profile-interpretation-standout">
-                    {profile.whatStandsOut}
-                  </p>
-                )}
-              </section>
             )}
 
             {/* ── Signal Points ── */}
