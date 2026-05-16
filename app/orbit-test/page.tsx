@@ -62,6 +62,13 @@ type OrbitSeedLoadOptions = {
   seedSlugs?: string[];
 };
 
+type OrbitUrlState = {
+  wallet: string;
+  seedSlugs: string[];
+  name: string;
+  from: string;
+};
+
 const DEFAULT_WALLET_ROWS = [
   "0x5ffd8de19910efff95df729c54699aebcee8f747",
 ];
@@ -614,14 +621,21 @@ function cleanOrbitName(value?: string | null) {
   return String(value || "").trim().replace(/\s+/g, " ");
 }
 
-function orbitNameFromLocationSearch() {
-  if (typeof window === "undefined") return "";
-  return cleanOrbitName(new URLSearchParams(window.location.search).get("name"));
-}
+function readOrbitUrlState(): OrbitUrlState {
+  if (typeof window === "undefined") {
+    return { wallet: "", seedSlugs: [], name: "", from: "" };
+  }
 
-function remixFromLocationSearch() {
-  if (typeof window === "undefined") return "";
-  return (new URLSearchParams(window.location.search).get("from") || "").trim();
+  const params = new URLSearchParams(window.location.search);
+  const primarySeedSlugs = parseSeedSlugsParam(params.get("seed"));
+  const legacySeedSlugs = parseSeedSlugsParam(params.get("seedSlugs"));
+
+  return {
+    wallet: (params.get("wallet") || "").trim(),
+    seedSlugs: primarySeedSlugs.length ? primarySeedSlugs : legacySeedSlugs,
+    name: cleanOrbitName(params.get("name")),
+    from: (params.get("from") || "").trim(),
+  };
 }
 
 function seedCollectionsForDisplay(
@@ -634,6 +648,28 @@ function seedCollectionsForDisplay(
     : collections;
 
   return mergeUniqueRooms(selected.length ? selected : collections).slice(0, 10);
+}
+
+function mergeUrlSeedCollectionsForDisplay(
+  collections: OrbitCollection[],
+  urlSeedSlugs: string[]
+) {
+  const normalizedUrlSlugs = urlSeedSlugs.map(normalizeSeedSlug).filter(Boolean);
+  if (normalizedUrlSlugs.length === 0) return collections;
+
+  const collectionBySlug = new Map<string, OrbitCollection>();
+  for (const collection of collections) {
+    const slug = normalizeSeedSlug(collection.slug);
+    if (slug && !collectionBySlug.has(slug)) collectionBySlug.set(slug, collection);
+  }
+
+  return normalizedUrlSlugs.map((slug) => (
+    collectionBySlug.get(slug) || {
+      slug,
+      name: label(slug),
+      heldCount: 0,
+    }
+  ));
 }
 
 function cleanCollectionNameForOrbit(value?: string | null) {
@@ -751,16 +787,11 @@ function candidateCardKey(candidate: OrbitCandidate) {
 }
 
 function walletFromLocationSearch() {
-  if (typeof window === "undefined") return "";
-  return (new URLSearchParams(window.location.search).get("wallet") || "").trim();
+  return readOrbitUrlState().wallet;
 }
 
 function seedSlugsFromLocationSearch() {
-  if (typeof window === "undefined") return [];
-  const params = new URLSearchParams(window.location.search);
-  const primary = parseSeedSlugsParam(params.get("seed"));
-  const legacy = parseSeedSlugsParam(params.get("seedSlugs"));
-  return primary.length ? primary : legacy;
+  return readOrbitUrlState().seedSlugs;
 }
 
 function buildOrbitUrl(
@@ -1182,8 +1213,9 @@ export default function OrbitTestPage() {
     const seedWallet = wallet.trim();
     if (!seedWallet) return;
     const seedSlugs = (options.seedSlugs || []).map(normalizeSeedSlug).filter(Boolean);
-    const orbitName = orbitNameFromLocationSearch();
-    const remixFrom = remixFromLocationSearch();
+    const urlState = readOrbitUrlState();
+    const orbitName = urlState.name;
+    const remixFrom = urlState.from;
 
     if (options.updateUrl) {
       const nextUrl = buildOrbitUrl(seedWallet, seedSlugs, {
@@ -1284,23 +1316,20 @@ export default function OrbitTestPage() {
     let cancelled = false;
 
     function syncWalletFromUrl() {
-      const walletFromQuery = walletFromLocationSearch();
-      const seedSlugsFromQuery = seedSlugsFromLocationSearch();
-      const orbitNameFromQuery = orbitNameFromLocationSearch();
-      const remixFromQuery = remixFromLocationSearch();
-      const urlSeedKey = walletFromQuery
-        ? buildOrbitUrl(walletFromQuery, seedSlugsFromQuery, {
-            name: orbitNameFromQuery,
-            from: remixFromQuery,
+      const urlState = readOrbitUrlState();
+      const urlSeedKey = urlState.wallet
+        ? buildOrbitUrl(urlState.wallet, urlState.seedSlugs, {
+            name: urlState.name,
+            from: urlState.from,
           })
-        : seedSlugsFromQuery.length > 0
-          ? buildOrbitUrl("", seedSlugsFromQuery, {
-              name: orbitNameFromQuery,
-              from: remixFromQuery,
+        : urlState.seedSlugs.length > 0
+          ? buildOrbitUrl("", urlState.seedSlugs, {
+              name: urlState.name,
+              from: urlState.from,
             })
           : "";
 
-      if (!walletFromQuery && seedSlugsFromQuery.length === 0) {
+      if (!urlState.wallet && urlState.seedSlugs.length === 0) {
         if (!lastUrlWalletSeed) return;
         setLastUrlWalletSeed("");
         setOrbitNameParam("");
@@ -1315,10 +1344,10 @@ export default function OrbitTestPage() {
 
       if (urlSeedKey === lastUrlWalletSeed) return;
 
-      if (walletFromQuery) {
-        loadOrbitSeed(walletFromQuery, { updateUrl: false, seedSlugs: seedSlugsFromQuery });
+      if (urlState.wallet) {
+        loadOrbitSeed(urlState.wallet, { updateUrl: false, seedSlugs: urlState.seedSlugs });
       } else {
-        void loadSeedOnlyOrbit(seedSlugsFromQuery, { name: orbitNameFromQuery, from: remixFromQuery });
+        void loadSeedOnlyOrbit(urlState.seedSlugs, { name: urlState.name, from: urlState.from });
       }
     }
 
@@ -1383,8 +1412,9 @@ export default function OrbitTestPage() {
     ? "Institutional wallets hidden"
     : "Institutional wallets included";
   const collectorCountLabel = `${visibleCandidates.length}${totalCandidateCount > 0 ? ` of ${totalCandidateCount}` : ""} collectors surfaced`;
-  const urlWallet = typeof window === "undefined" ? "" : walletFromLocationSearch();
-  const urlSeedSlugs = typeof window === "undefined" ? [] : seedSlugsFromLocationSearch();
+  const orbitUrlState = readOrbitUrlState();
+  const urlWallet = orbitUrlState.wallet;
+  const urlSeedSlugs = orbitUrlState.seedSlugs;
   const urlSeedCollections: OrbitCollection[] = urlSeedSlugs.map((slug) => ({
     slug,
     name: label(slug),
@@ -1395,9 +1425,12 @@ export default function OrbitTestPage() {
     ...(data?.showMoreCollections || []),
     ...outsideRooms,
   ];
-  const activeSeedCollections = seedCollectionsForDisplay(
-    sourceSeedCollections.length ? sourceSeedCollections : urlSeedCollections,
-    focusedSlugs.length ? focusedSlugs : urlSeedSlugs
+  const displaySeedSourceCollections = urlSeedSlugs.length
+    ? mergeUrlSeedCollectionsForDisplay(sourceSeedCollections, urlSeedSlugs)
+    : sourceSeedCollections;
+  const identitySeedCollections = seedCollectionsForDisplay(
+    displaySeedSourceCollections.length ? displaySeedSourceCollections : urlSeedCollections,
+    focusedSlugs.length && !urlSeedSlugs.length ? focusedSlugs : urlSeedSlugs
   );
   const displayMode = resolveOrbitDisplayMode({
     wallet: urlSeedSlugs.length > 0 && !urlWallet ? "" : urlWallet || joinedWallets,
@@ -1409,13 +1442,13 @@ export default function OrbitTestPage() {
   const isNamedRemix = displayMode === "named-remix";
   const showOrbitIdentity = Boolean(data) || (!urlWallet && urlSeedSlugs.length > 0);
   const orbitName = isNamedRemix
-    ? orbitNameParam || generateFallbackOrbitName(activeSeedCollections)
+    ? orbitNameParam || generateFallbackOrbitName(identitySeedCollections)
     : "Collectors near this wallet";
   const remixFromLabel = remixFromParam ? titleizeSlug(remixFromParam) : "";
   const orbitSummary = isNamedRemix
-    ? buildOrbitSummary(activeSeedCollections, visibleCandidates.length, totalCandidateCount)
+    ? buildOrbitSummary(identitySeedCollections, visibleCandidates.length, totalCandidateCount)
     : "Built from this wallet's strongest collection rooms. These collectors surfaced through shared rooms and holding depth.";
-  const shareSeedNames = activeSeedCollections
+  const shareSeedNames = identitySeedCollections
     .map((collection) => cleanOrbitName(collection.name || label(collection.slug)))
     .filter(Boolean);
   const shareCollectorCount = totalCandidateCount || visibleCandidates.length;
@@ -1697,7 +1730,7 @@ export default function OrbitTestPage() {
                 </div>
               </div>
 
-              {activeSeedCollections.length > 0 && (
+              {identitySeedCollections.length > 0 && (
                 <div
                   style={{
                     display: "flex",
@@ -1707,7 +1740,7 @@ export default function OrbitTestPage() {
                   }}
                   aria-label="Seed collections"
                 >
-                  {activeSeedCollections.map((collection) => (
+                  {identitySeedCollections.map((collection) => (
                     <RoomChip
                       key={collection.slug || collection.name}
                       slug={collection.slug}
@@ -1729,33 +1762,33 @@ export default function OrbitTestPage() {
                 {orbitSummary}
               </p>
 
-              {isNamedRemix && (
-                <div
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: 9,
+                  marginTop: 16,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => void copyText(currentOrbitShareUrl(), "copied-link")}
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    flexWrap: "wrap",
-                    gap: 9,
-                    marginTop: 16,
+                    background: "#f4edf4",
+                    color: "#08070a",
+                    border: "none",
+                    borderRadius: 999,
+                    padding: "8px 12px",
+                    fontSize: 12,
+                    fontWeight: 750,
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
                   }}
                 >
-                  <button
-                    type="button"
-                    onClick={() => void copyText(currentOrbitShareUrl(), "copied-link")}
-                    style={{
-                      background: "#f4edf4",
-                      color: "#08070a",
-                      border: "none",
-                      borderRadius: 999,
-                      padding: "8px 12px",
-                      fontSize: 12,
-                      fontWeight: 750,
-                      cursor: "pointer",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    Copy orbit link
-                  </button>
+                  Copy orbit link
+                </button>
+                {isNamedRemix && (
                   <button
                     type="button"
                     onClick={() => void copyText(orbitCaption, "copied-caption")}
@@ -1772,21 +1805,21 @@ export default function OrbitTestPage() {
                   >
                     Copy caption
                   </button>
-                  {shareFeedback && (
-                    <p
-                      aria-live="polite"
-                      style={{
-                        margin: 0,
-                        color: shareStatus === "error" ? "#ff9ab0" : "#a99daa",
-                        fontSize: 11,
-                        lineHeight: 1.35,
-                      }}
-                    >
-                      {shareFeedback}
-                    </p>
-                  )}
-                </div>
-              )}
+                )}
+                {shareFeedback && (
+                  <p
+                    aria-live="polite"
+                    style={{
+                      margin: 0,
+                      color: shareStatus === "error" ? "#ff9ab0" : "#a99daa",
+                      fontSize: 11,
+                      lineHeight: 1.35,
+                    }}
+                  >
+                    {shareFeedback}
+                  </p>
+                )}
+              </div>
             </section>
         )}
 
