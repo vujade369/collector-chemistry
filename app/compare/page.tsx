@@ -2,7 +2,8 @@
 "use client";
 
 import { FormEvent, Suspense, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import WalletTypeaheadInput from "@/components/shared/WalletTypeaheadInput";
 import "./compare.css";
 
@@ -1032,6 +1033,7 @@ function TasteSignature({
 }
 
 function ComparePageContent() {
+  const router = useRouter();
   const [walletA, setWalletA] = useState("");
   const [walletB, setWalletB] = useState("");
   const [submittedA, setSubmittedA] = useState("");
@@ -1237,6 +1239,9 @@ function ComparePageContent() {
         return;
       }
 
+      router.push(
+        `/compare?a=${encodeURIComponent(resolvedA.address)}&b=${encodeURIComponent(resolvedB.address)}`
+      );
       await runCompareWith(resolvedA.address, resolvedB.address);
     } catch {
       setError("Couldn’t resolve that wallet.");
@@ -1351,6 +1356,14 @@ function ComparePageContent() {
                     <p className="cc-identity-address">{collectorSecondaryA}</p>
                   ) : null}
                   <p className="cc-identity-sub">{data.walletA.profile.archetype}</p>
+                  {submittedA && (
+                    <Link
+                      href={`/profile?wallet=${encodeURIComponent(submittedA)}`}
+                      className="cc-identity-read-link"
+                    >
+                      Read wallet
+                    </Link>
+                  )}
                 </div>
 
                 <div className="cc-score-center">
@@ -1365,6 +1378,14 @@ function ComparePageContent() {
                     <p className="cc-identity-address">{collectorSecondaryB}</p>
                   ) : null}
                   <p className="cc-identity-sub">{data.walletB.profile.archetype}</p>
+                  {submittedB && (
+                    <Link
+                      href={`/profile?wallet=${encodeURIComponent(submittedB)}`}
+                      className="cc-identity-read-link"
+                    >
+                      Read wallet
+                    </Link>
+                  )}
                 </div>
               </div>
 

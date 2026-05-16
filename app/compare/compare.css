@@ -226,6 +226,21 @@
   margin: 0;
 }
 
+.cc-identity-read-link {
+  margin-top: -2px;
+  color: #8f8b84;
+  font-size: 11px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color 150ms ease;
+}
+
+.cc-identity-read-link:hover,
+.cc-identity-read-link:focus-visible {
+  color: #d8d5ce;
+  outline: none;
+}
+
 .cc-score-center {
   text-align: center;
   padding: 0 8px;
