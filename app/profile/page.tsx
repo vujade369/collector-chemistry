@@ -215,6 +215,13 @@ function normalizeCollectionKey(value?: string | null): string {
     .replace(/\s+/g, " ");
 }
 
+function normalizeSeedSlug(value?: string | null): string {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "");
+}
+
 function handleImageError(event: React.SyntheticEvent<HTMLImageElement>) {
   event.currentTarget.style.display = "none";
 }
@@ -257,6 +264,25 @@ function formatCollectorSince(timestamp?: string): string {
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return "Unknown";
   return date.toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
+}
+
+function buildOrbitBridgeUrl(walletQuery: string, topCollections: TopCollection[]): string {
+  const params = new URLSearchParams();
+  params.set("wallet", walletQuery);
+
+  const seedSlugs = Array.from(
+    new Set(
+      topCollections
+        .map((collection) => normalizeSeedSlug(collection.collectionSlug))
+        .filter(Boolean),
+    ),
+  ).slice(0, 5);
+
+  if (seedSlugs.length >= 2) {
+    params.set("seedSlugs", seedSlugs.join(","));
+  }
+
+  return `/orbit-test?${params.toString()}`;
 }
 
 function getEntryPatternRead(mintedPercent: number, purchasedPercent = 0): string {
@@ -657,6 +683,10 @@ export default function ProfilePage() {
 
   const topCollections = (profile?.topCollections || []).slice(0, 5);
   const collectionCount = profile?.totalCollections || profile?.topCollections?.length || 0;
+  const orbitBridgeUrl = buildOrbitBridgeUrl(
+    result?.wallets?.length ? result.wallets.join(",") : walletFromQuery,
+    topCollections,
+  );
   const canCompare = compareWallet.trim().length > 0 && !resolvingCompare;
   const identityArchetypeLabel =
     profile?.collectorIdentityLabel || profile?.focusLabel || "Collector";
@@ -1574,6 +1604,17 @@ export default function ProfilePage() {
                     </article>
                   );
                 })}
+              </div>
+              <div className="profile-orbit-bridge">
+                <div>
+                  <p className="profile-section-label">Find Collectors Near This Wallet</p>
+                  <p className="profile-muted-copy">
+                    Build an orbit from the collection signals this wallet returns to most.
+                  </p>
+                </div>
+                <Link className="profile-btn-primary profile-orbit-bridge-link" href={orbitBridgeUrl}>
+                  Build Orbit
+                </Link>
               </div>
             </section>
 

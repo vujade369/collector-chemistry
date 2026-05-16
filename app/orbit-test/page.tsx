@@ -56,6 +56,7 @@ type OrbitResponse = {
 
 type OrbitSeedLoadOptions = {
   updateUrl?: boolean;
+  seedSlugs?: string[];
 };
 
 const DEFAULT_WALLET_ROWS = [
@@ -513,6 +514,25 @@ function getExcludedSlugs(roomStates: RoomStateMap) {
     .map(([slug]) => slug);
 }
 
+function normalizeSeedSlug(value?: string | null) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "");
+}
+
+function parseSeedSlugsParam(value: string | null) {
+  if (!value) return [];
+  return Array.from(
+    new Set(
+      value
+        .split(",")
+        .map(normalizeSeedSlug)
+        .filter(Boolean)
+    )
+  ).slice(0, 10);
+}
+
 function candidateCardKey(candidate: OrbitCandidate) {
   return candidate.wallet || candidate.openseaUrl || candidate.username || candidate.displayName || "unknown";
 }
@@ -520,6 +540,18 @@ function candidateCardKey(candidate: OrbitCandidate) {
 function walletFromLocationSearch() {
   if (typeof window === "undefined") return "";
   return (new URLSearchParams(window.location.search).get("wallet") || "").trim();
+}
+
+function seedSlugsFromLocationSearch() {
+  if (typeof window === "undefined") return [];
+  return parseSeedSlugsParam(new URLSearchParams(window.location.search).get("seedSlugs"));
+}
+
+function buildOrbitTestUrl(wallet: string, seedSlugs: string[] = []) {
+  const params = new URLSearchParams();
+  params.set("wallet", wallet);
+  if (seedSlugs.length > 0) params.set("seedSlugs", seedSlugs.join(","));
+  return `/orbit-test?${params.toString()}`;
 }
 
 function storedWalletRows() {
@@ -668,8 +700,20 @@ export default function OrbitTestPage() {
     });
   }
 
-  function initializeRoomStatesFromData(nextData: OrbitResponse) {
+  function initializeRoomStatesFromData(nextData: OrbitResponse, preferredFocusedSlugs: string[] = []) {
     const rooms = mergeUniqueRooms([...buildAvailableRooms(nextData), ...outsideRooms]);
+    const preferredSet = new Set(preferredFocusedSlugs.map(normalizeSeedSlug).filter(Boolean));
+
+    if (preferredSet.size > 0) {
+      const next: RoomStateMap = {};
+      for (const room of rooms) {
+        const slug = normalizeSeedSlug(room.slug);
+        if (!slug) continue;
+        next[slug] = preferredSet.has(slug) ? "focus" : "ignore";
+      }
+      setRoomStates(next);
+      return;
+    }
 
     setRoomStates((current) => {
       if (Object.keys(current).length === 0) {
@@ -761,7 +805,8 @@ export default function OrbitTestPage() {
 
   const findCollectors = useCallback(async (
     mode: "wallet" | "custom" = "wallet",
-    explicitWalletRows?: string[]
+    explicitWalletRows?: string[],
+    explicitSeedSlugs: string[] = []
   ) => {
     setLoading(true);
     setError("");
@@ -791,10 +836,12 @@ export default function OrbitTestPage() {
         resultLimit: "20",
       });
 
-      const currentFocusedSlugs = mode === "custom" ? getFocusedSlugs(roomStates) : [];
+      const currentFocusedSlugs = mode === "custom"
+        ? getFocusedSlugs(roomStates)
+        : explicitSeedSlugs.map(normalizeSeedSlug).filter(Boolean);
       const currentExcludedSlugs = mode === "custom" ? getExcludedSlugs(roomStates) : [];
 
-      if (mode === "custom" && currentFocusedSlugs.length > 0) {
+      if (currentFocusedSlugs.length > 0) {
         params.set("seedSlugs", currentFocusedSlugs.join(","));
       }
 
@@ -813,7 +860,7 @@ export default function OrbitTestPage() {
       }
 
       setData(json);
-      initializeRoomStatesFromData(json);
+      initializeRoomStatesFromData(json, currentFocusedSlugs);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -824,21 +871,24 @@ export default function OrbitTestPage() {
   const loadOrbitSeed = useCallback((wallet: string, options: OrbitSeedLoadOptions = {}) => {
     const seedWallet = wallet.trim();
     if (!seedWallet) return;
+    const seedSlugs = (options.seedSlugs || []).map(normalizeSeedSlug).filter(Boolean);
 
     if (options.updateUrl) {
-      const nextUrl = `/orbit-test?wallet=${encodeURIComponent(seedWallet)}`;
+      const nextUrl = buildOrbitTestUrl(seedWallet, seedSlugs);
       const currentUrl = `${window.location.pathname}${window.location.search}`;
       if (currentUrl !== nextUrl) {
         window.history.pushState(null, "", nextUrl);
       }
     }
 
-    setLastUrlWalletSeed(seedWallet);
+    setLastUrlWalletSeed(buildOrbitTestUrl(seedWallet, seedSlugs));
     setWalletRows([seedWallet]);
     setData(null);
     setExpandedSharedRoomCards({});
     setSignalEditorOpen(false);
-    void findCollectors("wallet", [seedWallet]);
+    setActiveFocusCount(seedSlugs.length);
+    setActiveExcludeCount(0);
+    void findCollectors("wallet", [seedWallet], seedSlugs);
   }, [findCollectors]);
 
   useEffect(() => {
@@ -846,6 +896,8 @@ export default function OrbitTestPage() {
 
     function syncWalletFromUrl() {
       const walletFromQuery = walletFromLocationSearch();
+      const seedSlugsFromQuery = seedSlugsFromLocationSearch();
+      const urlSeedKey = walletFromQuery ? buildOrbitTestUrl(walletFromQuery, seedSlugsFromQuery) : "";
       if (!walletFromQuery) {
         if (!lastUrlWalletSeed) return;
         setLastUrlWalletSeed("");
@@ -855,9 +907,9 @@ export default function OrbitTestPage() {
         return;
       }
 
-      if (walletFromQuery === lastUrlWalletSeed) return;
+      if (urlSeedKey === lastUrlWalletSeed) return;
 
-      loadOrbitSeed(walletFromQuery, { updateUrl: false });
+      loadOrbitSeed(walletFromQuery, { updateUrl: false, seedSlugs: seedSlugsFromQuery });
     }
 
     if (!cancelled) syncWalletFromUrl();

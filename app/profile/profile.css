@@ -148,6 +148,8 @@
 .collection-rank-fill--2 { background: #29b6f6; }
 .collection-rank-fill--3 { background: #9575ff; }
 .collection-rank-fill--4 { background: #444; }
+.profile-orbit-bridge { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding-top: 16px; border-top: 0.5px solid #222; }
+.profile-orbit-bridge-link { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; text-decoration: none; }
 
 .profile-compare-cta { border-color: rgba(255,51,153,0.22); background: radial-gradient(circle at 80% 20%, rgba(149,117,255,0.09), transparent 45%), #111; }
 .profile-compare-cta h2 { margin: 0; font-size: 32px; font-weight: 300; color: #f0ede6; letter-spacing: -0.03em; }
@@ -278,6 +280,8 @@
   .profile-stats-grid { grid-template-columns: repeat(3, 1fr); }
   .profile-key-signals { grid-template-columns: 1fr; }
   .profile-compare-form { grid-template-columns: 1fr; }
+  .profile-orbit-bridge { align-items: stretch; flex-direction: column; }
+  .profile-orbit-bridge-link { width: 100%; }
   .category-preview-grid, .category-catalog-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
