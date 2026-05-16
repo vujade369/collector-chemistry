@@ -158,6 +158,77 @@ ol {
   color: var(--text);
 }
 
+/* ─── Top navigation ─────────────────────────────────── */
+
+.top-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  width: 100%;
+  background: rgba(14, 14, 14, 0.88);
+  border-bottom: var(--border-subtle);
+  backdrop-filter: blur(14px);
+}
+
+.top-nav-inner {
+  width: min(100% - 32px, 1180px);
+  min-height: 52px;
+  margin-inline: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.top-nav-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  transition: background 160ms ease, color 160ms ease, opacity 160ms ease;
+}
+
+.top-nav-link:hover {
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--text);
+}
+
+.top-nav-link:focus-visible {
+  outline: 2px solid rgba(255, 51, 153, 0.58);
+  outline-offset: 2px;
+}
+
+.top-nav-link-active {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+.top-nav-link-secondary {
+  font-weight: 500;
+  opacity: 0.78;
+}
+
+.top-nav-link-secondary.top-nav-link-active {
+  opacity: 1;
+}
+
+@media (max-width: 520px) {
+  .top-nav-inner {
+    justify-content: center;
+    gap: 4px;
+  }
+
+  .top-nav-link {
+    flex: 1 1 0;
+    padding-inline: 8px;
+  }
+}
+
 /* ─── Cards and panels ───────────────────────────────── */
 
 .panel {
