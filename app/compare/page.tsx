@@ -105,6 +105,15 @@ type SharedBucket = {
   enteredDateB?: string | null;
 };
 
+type SharedBucketEntry = [string, SharedBucket];
+
+type RecognitionRead = {
+  label: string;
+  summary: string;
+  proof: string[];
+  divergence: string[];
+};
+
 type CompareResponse = {
   walletA: WalletSummary;
   walletB: WalletSummary;
@@ -282,6 +291,173 @@ function sortTasteKeys(a: Record<string, number>, b: Record<string, number>) {
     const closenessX = Math.abs((a?.[x] || 0) - (b?.[x] || 0));
     return closenessX - closenessY;
   });
+}
+
+function pluralize(count: number, singular: string, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function getTopTasteEntry(taste: Record<string, number>) {
+  return Object.entries(taste || {})
+    .filter(([key, value]) => key !== "Other" && Number(value) > 0)
+    .sort((a, b) => Number(b[1]) - Number(a[1]))[0] || null;
+}
+
+function getSharedTasteTags(a: Record<string, number>, b: Record<string, number>) {
+  return sortTasteKeys(a, b).filter((key) => {
+    const aValue = Number(a?.[key]) || 0;
+    const bValue = Number(b?.[key]) || 0;
+    return key !== "Other" && aValue > 0 && bValue > 0;
+  });
+}
+
+function getDepthSignal(sharedCollections: SharedBucketEntry[]) {
+  let strongest: {
+    name: string;
+    a: number;
+    b: number;
+    gap: number;
+    ratio: number;
+  } | null = null;
+
+  for (const [name, bucket] of sharedCollections) {
+    const a = bucket.walletACount || 0;
+    const b = bucket.walletBCount || 0;
+    const smaller = Math.max(1, Math.min(a, b));
+    const larger = Math.max(a, b);
+    const gap = Math.abs(a - b);
+    const ratio = larger / smaller;
+    if (!strongest || gap > strongest.gap || (gap === strongest.gap && ratio > strongest.ratio)) {
+      strongest = { name, a, b, gap, ratio };
+    }
+  }
+
+  if (!strongest || strongest.gap < 3 || strongest.ratio < 2.5) return null;
+  return strongest;
+}
+
+function buildRecognitionRead(
+  data: CompareResponse,
+  sharedCollections: SharedBucketEntry[],
+  sharedArtists: SharedBucketEntry[]
+): RecognitionRead {
+  const sharedCollectionCount = sharedCollections.length;
+  const sharedArtistCount = sharedArtists.length;
+  const exactCount = data.shared.exactCount || 0;
+  const sharedTasteTags = getSharedTasteTags(data.walletA.taste, data.walletB.taste);
+  const topA = getTopTasteEntry(data.walletA.taste);
+  const topB = getTopTasteEntry(data.walletB.taste);
+  const samePrimaryTaste = Boolean(topA && topB && topA[0] === topB[0]);
+  const depthSignal = getDepthSignal(sharedCollections);
+  const directSignals = sharedCollectionCount + sharedArtistCount + exactCount;
+  const connectiveSignals = directSignals + sharedTasteTags.length;
+  const score = data.scoring.chemistryScore || 0;
+  const strongestCollection = sharedCollections[0]?.[0]
+    ? humanizeCollectionName(sharedCollections[0][0]) || sharedCollections[0][0]
+    : "";
+  const strongestArtist = sharedArtists[0]?.[0] || "";
+  const sharedTasteLabel = sharedTasteTags[0] || "";
+
+  const proof: string[] = [];
+  if (sharedCollectionCount > 0) proof.push(pluralize(sharedCollectionCount, "shared collection"));
+  if (sharedArtistCount > 0) proof.push(pluralize(sharedArtistCount, "shared artist signal"));
+  if (exactCount > 0) proof.push(pluralize(exactCount, "same NFT"));
+  if (sharedTasteLabel) proof.push(`both show ${sharedTasteLabel.toLowerCase()} activity`);
+  if (depthSignal) {
+    const depthName = humanizeCollectionName(depthSignal.name) || depthSignal.name;
+    proof.push(`${depthName}: ${depthSignal.a} vs ${depthSignal.b} held`);
+  }
+
+  const divergence: string[] = [];
+  if (topA && topB) {
+    const [labelA, valueA] = topA;
+    const [labelB, valueB] = topB;
+    if (labelA === labelB) {
+      const gap = Math.abs(Number(valueA) - Number(valueB));
+      divergence.push(
+        gap >= 15
+          ? `Both wallets lean toward ${labelA.toLowerCase()}, but one returns there with more visible weight.`
+          : `Both wallets share a ${labelA.toLowerCase()} center, while the surrounding signals separate them.`
+      );
+    } else {
+      divergence.push(
+        `One wallet leans toward ${labelA.toLowerCase()}, while the other leans toward ${labelB.toLowerCase()}.`
+      );
+    }
+  }
+  if (depthSignal) {
+    const depthName = humanizeCollectionName(depthSignal.name) || depthSignal.name;
+    divergence.push(
+      `${depthName} is shared, but the depth is uneven: ${depthSignal.a} held on one side and ${depthSignal.b} on the other.`
+    );
+  }
+
+  if (
+    sharedCollectionCount >= 4 &&
+    sharedArtistCount >= 2 &&
+    sharedTasteTags.length >= 2 &&
+    samePrimaryTaste &&
+    score >= 70
+  ) {
+    return {
+      label: "Deeply Aligned",
+      summary:
+        "These wallets appear to move through the same cultural lanes with unusual consistency. The overlap shows up across collections, artist signals, and category shape.",
+      proof: proof.slice(0, 4),
+      divergence,
+    };
+  }
+
+  if (sharedCollectionCount >= 3 && depthSignal) {
+    const depthName = humanizeCollectionName(depthSignal.name) || depthSignal.name;
+    return {
+      label: "Same Rooms, Different Depths",
+      summary:
+        `These wallets enter several of the same collection rooms, but ${depthName} shows the relationship clearly: one returns with more depth while the other keeps a lighter signal.`,
+      proof: proof.slice(0, 4),
+      divergence,
+    };
+  }
+
+  if (connectiveSignals >= 2 && topA && topB && !samePrimaryTaste) {
+    return {
+      label: "Adjacent Scenes",
+      summary:
+        "These wallets surface real crossing points while keeping different centers of gravity. They seem to move through neighboring scenes rather than the same exact lane.",
+      proof: proof.slice(0, 4),
+      divergence,
+    };
+  }
+
+  if (exactCount === 0 && sharedCollectionCount <= 1 && (sharedArtistCount >= 2 || sharedTasteTags.length >= 2)) {
+    return {
+      label: "Mirror Signal",
+      summary:
+        "The connection appears less literal than reflective. They do not share much directly, but artist signals or category shape suggest nearby instincts.",
+      proof: proof.slice(0, 4),
+      divergence,
+    };
+  }
+
+  if (exactCount === 0 && sharedArtistCount === 0 && sharedCollectionCount === 0 && sharedTasteTags.length <= 1 && score < 40) {
+    return {
+      label: "Different Constellations",
+      summary:
+        "These wallets appear to be moving through different collecting worlds right now. The distance is part of the read, not a failure of the comparison.",
+      proof: proof.length ? proof.slice(0, 3) : ["minimal direct overlap surfaced"],
+      divergence,
+    };
+  }
+
+  const anchor = strongestArtist || strongestCollection || sharedTasteLabel;
+  return {
+    label: "Distant But Related",
+    summary: anchor
+      ? `The overlap is limited, but ${anchor} gives the relationship a visible thread. It suggests recognition at the edge rather than full alignment.`
+      : "The overlap is light, but the comparison still surfaces useful distance between the two collecting patterns.",
+    proof: proof.length ? proof.slice(0, 4) : ["light overlap across visible signals"],
+    divergence,
+  };
 }
 
 type TasteSlice = {
@@ -1083,7 +1259,11 @@ function ComparePageContent() {
   );
 
   const sharedExact = data?.shared?.exact || [];
-  const exactCount = data?.shared?.exactCount || 0;
+
+  const recognition = useMemo(
+    () => (data ? buildRecognitionRead(data, sharedCollections, sharedArtists) : null),
+    [data, sharedCollections, sharedArtists]
+  );
 
   const overlapTasteTags = useMemo(() => {
     if (!data) return [];
@@ -1356,6 +1536,52 @@ function ComparePageContent() {
 
             {/* Hero card */}
             <section className="cc-hero-card">
+              <div className="cc-recognition-header">
+                <p className="cc-score-eyebrow">recognition</p>
+                <h2 className="cc-score-label">{recognition?.label || data.scoring.label}</h2>
+                {recognition?.summary ? (
+                  <p className="cc-score-summary">{recognition.summary}</p>
+                ) : null}
+              </div>
+
+              <div className="cc-editorial-footer cc-editorial-footer-primary">
+                {interpretationLoading && (
+                  <p className="cc-editorial-text cc-editorial-muted">Reading the relationship...</p>
+                )}
+
+                {!interpretationLoading && interpretation?.summary && (
+                  <div className="cc-interpretation">
+                    {interpretation.headline && (
+                      <p className="cc-interpretation-headline">{interpretation.headline}</p>
+                    )}
+                    <div className="cc-interpretation-body">
+                      {interpretation.summary
+                        .split("\n\n")
+                        .filter(Boolean)
+                        .map((paragraph, i) => (
+                          <p key={i} className="cc-editorial-text">
+                            {paragraph}
+                          </p>
+                        ))}
+                    </div>
+                  </div>
+                )}
+
+                {!interpretationLoading && !interpretation?.summary && (
+                  <p className="cc-editorial-text">{data.scoring.pairInterpretation.summary}</p>
+                )}
+
+                {recognition?.proof.length ? (
+                  <div className="cc-proof-row" aria-label="Recognition proof">
+                    {recognition.proof.map((item) => (
+                      <span key={item} className="cc-proof-pill">
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
               <div className="cc-identity-row">
                 <div className="cc-identity cc-identity-a">
                   <Avatar address={submittedA} tone="a" pfpUrl={data.walletA.pfpUrl} />
@@ -1372,11 +1598,6 @@ function ComparePageContent() {
                       Read wallet
                     </Link>
                   )}
-                </div>
-
-                <div className="cc-score-center">
-                  <p className="cc-score-eyebrow">recognition</p>
-                  <p className="cc-score-label">{data.scoring.label}</p>
                 </div>
 
                 <div className="cc-identity cc-identity-b">
@@ -1464,31 +1685,6 @@ function ComparePageContent() {
               )}
 
               <div className="cc-editorial-footer">
-                {interpretationLoading && (
-                  <p className="cc-editorial-text cc-editorial-muted">Reading the overlap...</p>
-                )}
-
-                {!interpretationLoading && interpretation?.summary && (
-                  <div className="cc-interpretation">
-                    {interpretation.headline && (
-                      <p className="cc-interpretation-headline">{interpretation.headline}</p>
-                    )}
-                    <div className="cc-interpretation-body">
-                      {interpretation.summary
-                        .split("\n\n")
-                        .filter(Boolean)
-                        .map((paragraph, i) => (
-                          <p key={i} className="cc-editorial-text">
-                            {paragraph}
-                          </p>
-                        ))}
-                    </div>
-                  </div>
-                )}
-
-                {!interpretationLoading && !interpretation?.summary && (
-                  <p className="cc-editorial-text">{data.scoring.pairInterpretation.summary}</p>
-                )}
                 {overlapTasteTags.length > 0 && (
                   <div className="cc-tag-row">
                     {overlapTasteTags.map((tag, i) => {
@@ -1508,124 +1704,134 @@ function ComparePageContent() {
               </div>
             </section>
 
-            {/* Collector profiles */}
-            <section className="compare-overview">
-              <div className="compare-section-head compare-section-head-band compare-overview-head">
-                <div className="eyebrow">Collector profiles</div>
-                <h2 className="compare-section-title">How each collector moves</h2>
-                <p className="compare-section-text">
-                  Identity first. Context and proof follow from repeated attention.
-                </p>
-              </div>
-              <div className="compare-overview-grid">
-                <article className="panel compare-wallet-card wallet-tone-a">
-                  <div className="compare-wallet-top">
-                    <div className="compare-wallet-id">
-                      <WalletLabel
-                        address={submittedA}
-                        tone="a"
-                        pfpUrl={data.walletA.pfpUrl}
-                        displayName={collectorNameA}
-                        secondaryAddress={collectorSecondaryA}
-                      />
-                    </div>
-                    <div className="compare-wallet-count">
-                      <div className="compare-wallet-count-value compare-mono">{data.walletA.totalNFTs}</div>
-                      <div className="compare-wallet-count-label">Holdings indexed</div>
-                    </div>
-                  </div>
-                </article>
-                <article className="panel compare-wallet-card wallet-tone-b">
-                  <div className="compare-wallet-top">
-                    <div className="compare-wallet-id">
-                      <WalletLabel
-                        address={submittedB}
-                        tone="b"
-                        pfpUrl={data.walletB.pfpUrl}
-                        displayName={collectorNameB}
-                        secondaryAddress={collectorSecondaryB}
-                      />
-                    </div>
-                    <div className="compare-wallet-count">
-                      <div className="compare-wallet-count-value compare-mono">{data.walletB.totalNFTs}</div>
-                      <div className="compare-wallet-count-label">Holdings indexed</div>
-                    </div>
-                  </div>
-                </article>
-              </div>
-              <div className="compare-profile-grid">
-                <CollectorProfileCard
-                  wallet={data.walletA}
-                  address={submittedA}
-                  displayName={collectorNameA}
-                  secondaryAddress={collectorSecondaryA}
-                  tone="a"
-                  pfpUrl={data.walletA.pfpUrl}
-                />
-                <CollectorProfileCard
-                  wallet={data.walletB}
-                  address={submittedB}
-                  displayName={collectorNameB}
-                  secondaryAddress={collectorSecondaryB}
-                  tone="b"
-                  pfpUrl={data.walletB.pfpUrl}
-                />
-              </div>
-            </section>
-
-            {/* Taste map */}
-            <section className="panel compare-section compare-section-compact">
-              <div className="compare-section-head compare-section-head-band">
-                <div className="eyebrow">Taste map</div>
-                <h2 className="compare-section-title">Where your taste lives</h2>
-                <p className="compare-section-text">
-                  Not how much you own. How each wallet tends to think.
-                </p>
-              </div>
-              {tasteKeys.length > 0 ? (
-                <div className="compare-signatures">
-                  <TasteSignature
-                    title="Collector one"
-                    tone="a"
-                    address={submittedA}
-                    pfpUrl={data.walletA.pfpUrl}
-                    displayName={collectorNameA}
-                    secondaryAddress={collectorSecondaryA}
-                    slices={walletATasteSlices}
-                  />
-                  <TasteSignature
-                    title="Collector two"
-                    tone="b"
-                    address={submittedB}
-                    pfpUrl={data.walletB.pfpUrl}
-                    displayName={collectorNameB}
-                    secondaryAddress={collectorSecondaryB}
-                    slices={walletBTasteSlices}
-                  />
-                </div>
-              ) : (
-                <div className="compare-empty">No taste profile available yet.</div>
-              )}
-            </section>
-
-            {/* Exact overlap */}
-            {sharedExact.length > 0 && (
+            {/* Shared artists */}
+            {sharedArtists.length > 0 && (
               <section className="panel compare-section">
                 <div className="compare-section-head compare-section-head-band">
-                  <div className="eyebrow">Exact overlap</div>
-                  <h2 className="compare-section-title">You both chose this</h2>
-                  <p className="compare-section-text">The clearest direct intersection.</p>
+                  <div className="eyebrow">Shared artists</div>
+                  <h2 className="compare-section-title">Drawn to the same artists</h2>
+                  <p className="compare-section-text">
+                    Sometimes the strongest overlap sits beneath the collection name.
+                  </p>
                 </div>
-                <div className={`compare-exact-grid ${sharedExact.length === 1 ? "single" : ""}`}>
-                  {sharedExact.slice(0, 8).map((nft) => (
-                    <SpotlightCard
-                      key={`${nft.contract.address}-${nft.tokenId}`}
-                      nft={nft}
-                      submittedA={submittedA}
-                      submittedB={submittedB}
-                    />
-                  ))}
+                <div className="compare-group-list">
+                  {sharedArtists
+                    .slice(0, isArtistsExpanded ? sharedArtists.length : 2)
+                    .map(([name, bucket]) => {
+                      const enteredDateA = sanitizeDisplayDate(bucket.enteredDateA);
+                      const enteredDateB = sanitizeDisplayDate(bucket.enteredDateB);
+                      const groupAvatar = getGroupOfficialAvatar(
+                        [...bucket.walletA, ...bucket.walletB],
+                        "artist"
+                      );
+
+                      return (
+                        <article key={name} className="panel-subtle compare-group-card">
+                          <div className="compare-group-head">
+                            <div className="compare-group-title-wrap">
+                              <div className="compare-group-title-row">
+                                {groupAvatar.url ? (
+                                  <img
+                                    className={`compare-group-avatar ${groupAvatar.source === "fallback" ? "is-fallback" : ""}`}
+                                    src={groupAvatar.url}
+                                    alt={`${name} avatar`}
+                                    loading="lazy"
+                                  />
+                                ) : null}
+                                <h3 className="compare-group-title compare-group-title-lower">{name}</h3>
+                              </div>
+                              <div className="compare-group-meta">Shared artist signal</div>
+                              {enteredDateA || enteredDateB ? (
+                                <div className="compare-group-entry-pills compare-mono">
+                                  {enteredDateA ? (
+                                    <span className="compare-group-entry-pill compare-group-entry-pill-a">
+                                      {entryPillNameA} entered {enteredDateA}
+                                    </span>
+                                  ) : null}
+                                  {enteredDateB ? (
+                                    <span className="compare-group-entry-pill compare-group-entry-pill-b">
+                                      {entryPillNameB} entered {enteredDateB}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                          <div className="compare-group-columns">
+                            <div className="compare-column compare-column-a">
+                              <div className="compare-column-head">
+                                <WalletLabel
+                                  address={submittedA}
+                                  tone="a"
+                                  pfpUrl={data.walletA.pfpUrl}
+                                  displayName={collectorNameA}
+                                  secondaryAddress={collectorSecondaryA}
+                                />
+                                <div className="compare-column-meta compare-mono">
+                                  {bucket.walletA.length} shown · {bucket.walletACount} total
+                                </div>
+                              </div>
+                              {bucket.walletA.length > 0 ? (
+                                <>
+                                  <div className="compare-nft-grid">
+                                    {bucket.walletA.map((nft) => (
+                                      <NFTCard key={`${nft.contract.address}-${nft.tokenId}-artist-a`} nft={nft} walletTone="a" />
+                                    ))}
+                                  </div>
+                                  {bucket.walletACount > bucket.walletA.length && (
+                                    <div className="compare-more-pill compare-mono">
+                                      +{bucket.walletACount - bucket.walletA.length} more
+                                    </div>
+                                  )}
+                                </>
+                              ) : (
+                                <div className="compare-empty">No NFTs to show.</div>
+                              )}
+                            </div>
+                            <div className="compare-column compare-column-b">
+                              <div className="compare-column-head">
+                                <WalletLabel
+                                  address={submittedB}
+                                  tone="b"
+                                  pfpUrl={data.walletB.pfpUrl}
+                                  displayName={collectorNameB}
+                                  secondaryAddress={collectorSecondaryB}
+                                />
+                                <div className="compare-column-meta compare-mono">
+                                  {bucket.walletB.length} shown · {bucket.walletBCount} total
+                                </div>
+                              </div>
+                              {bucket.walletB.length > 0 ? (
+                                <>
+                                  <div className="compare-nft-grid">
+                                    {bucket.walletB.map((nft) => (
+                                      <NFTCard key={`${nft.contract.address}-${nft.tokenId}-artist-b`} nft={nft} walletTone="b" />
+                                    ))}
+                                  </div>
+                                  {bucket.walletBCount > bucket.walletB.length && (
+                                    <div className="compare-more-pill compare-mono">
+                                      +{bucket.walletBCount - bucket.walletB.length} more
+                                    </div>
+                                  )}
+                                </>
+                              ) : (
+                                <div className="compare-empty">No NFTs to show.</div>
+                              )}
+                            </div>
+                          </div>
+                        </article>
+                      );
+                    })}
                 </div>
+                {sharedArtists.length > 2 && !isArtistsExpanded && (
+                  <button
+                    type="button"
+                    className="btn compare-btn-secondary compare-show-more"
+                    onClick={() => setIsArtistsExpanded(true)}
+                  >
+                    {`Show more (${sharedArtists.length - 2})`}
+                  </button>
+                )}
               </section>
             )}
 
@@ -1757,136 +1963,146 @@ function ComparePageContent() {
               </section>
             )}
 
-            {/* Shared artists */}
-            {sharedArtists.length > 0 && (
+            {/* Same NFTs */}
+            {sharedExact.length > 0 && (
               <section className="panel compare-section">
                 <div className="compare-section-head compare-section-head-band">
-                  <div className="eyebrow">Shared artists</div>
-                  <h2 className="compare-section-title">Drawn to the same artists</h2>
-                  <p className="compare-section-text">
-                    Sometimes the strongest overlap sits beneath the collection name.
-                  </p>
+                  <div className="eyebrow">Same NFTs</div>
+                  <h2 className="compare-section-title">A rare direct signal</h2>
+                  <p className="compare-section-text">A rarer overlap: both wallets hold the same piece.</p>
                 </div>
-                <div className="compare-group-list">
-                  {sharedArtists
-                    .slice(0, isArtistsExpanded ? sharedArtists.length : 2)
-                    .map(([name, bucket]) => {
-                      const enteredDateA = sanitizeDisplayDate(bucket.enteredDateA);
-                      const enteredDateB = sanitizeDisplayDate(bucket.enteredDateB);
-                      const groupAvatar = getGroupOfficialAvatar(
-                        [...bucket.walletA, ...bucket.walletB],
-                        "artist"
-                      );
-
-                      return (
-                        <article key={name} className="panel-subtle compare-group-card">
-                          <div className="compare-group-head">
-                            <div className="compare-group-title-wrap">
-                              <div className="compare-group-title-row">
-                                {groupAvatar.url ? (
-                                  <img
-                                    className={`compare-group-avatar ${groupAvatar.source === "fallback" ? "is-fallback" : ""}`}
-                                    src={groupAvatar.url}
-                                    alt={`${name} avatar`}
-                                    loading="lazy"
-                                  />
-                                ) : null}
-                                <h3 className="compare-group-title compare-group-title-lower">{name}</h3>
-                              </div>
-                              <div className="compare-group-meta">Shared artist</div>
-                              {enteredDateA || enteredDateB ? (
-                                <div className="compare-group-entry-pills compare-mono">
-                                  {enteredDateA ? (
-                                    <span className="compare-group-entry-pill compare-group-entry-pill-a">
-                                      {entryPillNameA} entered {enteredDateA}
-                                    </span>
-                                  ) : null}
-                                  {enteredDateB ? (
-                                    <span className="compare-group-entry-pill compare-group-entry-pill-b">
-                                      {entryPillNameB} entered {enteredDateB}
-                                    </span>
-                                  ) : null}
-                                </div>
-                              ) : null}
-                            </div>
-                          </div>
-                          <div className="compare-group-columns">
-                            <div className="compare-column compare-column-a">
-                              <div className="compare-column-head">
-                                <WalletLabel
-                                  address={submittedA}
-                                  tone="a"
-                                  pfpUrl={data.walletA.pfpUrl}
-                                  displayName={collectorNameA}
-                                  secondaryAddress={collectorSecondaryA}
-                                />
-                                <div className="compare-column-meta compare-mono">
-                                  {bucket.walletA.length} shown · {bucket.walletACount} total
-                                </div>
-                              </div>
-                              {bucket.walletA.length > 0 ? (
-                                <>
-                                  <div className="compare-nft-grid">
-                                    {bucket.walletA.map((nft) => (
-                                      <NFTCard key={`${nft.contract.address}-${nft.tokenId}-artist-a`} nft={nft} walletTone="a" />
-                                    ))}
-                                  </div>
-                                  {bucket.walletACount > bucket.walletA.length && (
-                                    <div className="compare-more-pill compare-mono">
-                                      +{bucket.walletACount - bucket.walletA.length} more
-                                    </div>
-                                  )}
-                                </>
-                              ) : (
-                                <div className="compare-empty">No NFTs to show.</div>
-                              )}
-                            </div>
-                            <div className="compare-column compare-column-b">
-                              <div className="compare-column-head">
-                                <WalletLabel
-                                  address={submittedB}
-                                  tone="b"
-                                  pfpUrl={data.walletB.pfpUrl}
-                                  displayName={collectorNameB}
-                                  secondaryAddress={collectorSecondaryB}
-                                />
-                                <div className="compare-column-meta compare-mono">
-                                  {bucket.walletB.length} shown · {bucket.walletBCount} total
-                                </div>
-                              </div>
-                              {bucket.walletB.length > 0 ? (
-                                <>
-                                  <div className="compare-nft-grid">
-                                    {bucket.walletB.map((nft) => (
-                                      <NFTCard key={`${nft.contract.address}-${nft.tokenId}-artist-b`} nft={nft} walletTone="b" />
-                                    ))}
-                                  </div>
-                                  {bucket.walletBCount > bucket.walletB.length && (
-                                    <div className="compare-more-pill compare-mono">
-                                      +{bucket.walletBCount - bucket.walletB.length} more
-                                    </div>
-                                  )}
-                                </>
-                              ) : (
-                                <div className="compare-empty">No NFTs to show.</div>
-                              )}
-                            </div>
-                          </div>
-                        </article>
-                      );
-                    })}
+                <div className={`compare-exact-grid ${sharedExact.length === 1 ? "single" : ""}`}>
+                  {sharedExact.slice(0, 8).map((nft) => (
+                    <SpotlightCard
+                      key={`${nft.contract.address}-${nft.tokenId}`}
+                      nft={nft}
+                      submittedA={submittedA}
+                      submittedB={submittedB}
+                    />
+                  ))}
                 </div>
-                {sharedArtists.length > 2 && !isArtistsExpanded && (
-                  <button
-                    type="button"
-                    className="btn compare-btn-secondary compare-show-more"
-                    onClick={() => setIsArtistsExpanded(true)}
-                  >
-                    {`Show more (${sharedArtists.length - 2})`}
-                  </button>
-                )}
               </section>
             )}
+
+            {/* Divergence */}
+            {recognition?.divergence.length ? (
+              <section className="panel compare-section">
+                <div className="compare-section-head compare-section-head-band">
+                  <div className="eyebrow">Divergence</div>
+                  <h2 className="compare-section-title">Where they diverge</h2>
+                  <p className="compare-section-text">
+                    These wallets overlap in some rooms, but their weight falls differently.
+                  </p>
+                </div>
+                <div className="compare-divergence-list">
+                  {recognition.divergence.map((item) => (
+                    <p key={item} className="compare-divergence-item">
+                      {item}
+                    </p>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+
+            {/* Collector profiles */}
+            <section className="compare-overview">
+              <div className="compare-section-head compare-section-head-band compare-overview-head">
+                <div className="eyebrow">Collector profiles</div>
+                <h2 className="compare-section-title">How each collector moves</h2>
+                <p className="compare-section-text">
+                  Identity first. Context and proof follow from repeated attention.
+                </p>
+              </div>
+              <div className="compare-overview-grid">
+                <article className="panel compare-wallet-card wallet-tone-a">
+                  <div className="compare-wallet-top">
+                    <div className="compare-wallet-id">
+                      <WalletLabel
+                        address={submittedA}
+                        tone="a"
+                        pfpUrl={data.walletA.pfpUrl}
+                        displayName={collectorNameA}
+                        secondaryAddress={collectorSecondaryA}
+                      />
+                    </div>
+                    <div className="compare-wallet-count">
+                      <div className="compare-wallet-count-value compare-mono">{data.walletA.totalNFTs}</div>
+                      <div className="compare-wallet-count-label">Holdings indexed</div>
+                    </div>
+                  </div>
+                </article>
+                <article className="panel compare-wallet-card wallet-tone-b">
+                  <div className="compare-wallet-top">
+                    <div className="compare-wallet-id">
+                      <WalletLabel
+                        address={submittedB}
+                        tone="b"
+                        pfpUrl={data.walletB.pfpUrl}
+                        displayName={collectorNameB}
+                        secondaryAddress={collectorSecondaryB}
+                      />
+                    </div>
+                    <div className="compare-wallet-count">
+                      <div className="compare-wallet-count-value compare-mono">{data.walletB.totalNFTs}</div>
+                      <div className="compare-wallet-count-label">Holdings indexed</div>
+                    </div>
+                  </div>
+                </article>
+              </div>
+              <div className="compare-profile-grid">
+                <CollectorProfileCard
+                  wallet={data.walletA}
+                  address={submittedA}
+                  displayName={collectorNameA}
+                  secondaryAddress={collectorSecondaryA}
+                  tone="a"
+                  pfpUrl={data.walletA.pfpUrl}
+                />
+                <CollectorProfileCard
+                  wallet={data.walletB}
+                  address={submittedB}
+                  displayName={collectorNameB}
+                  secondaryAddress={collectorSecondaryB}
+                  tone="b"
+                  pfpUrl={data.walletB.pfpUrl}
+                />
+              </div>
+            </section>
+
+            {/* Taste map */}
+            <section className="panel compare-section compare-section-compact">
+              <div className="compare-section-head compare-section-head-band">
+                <div className="eyebrow">Taste map</div>
+                <h2 className="compare-section-title">Where your taste lives</h2>
+                <p className="compare-section-text">
+                  Not how much you own. How each wallet tends to think.
+                </p>
+              </div>
+              {tasteKeys.length > 0 ? (
+                <div className="compare-signatures">
+                  <TasteSignature
+                    title="Collector one"
+                    tone="a"
+                    address={submittedA}
+                    pfpUrl={data.walletA.pfpUrl}
+                    displayName={collectorNameA}
+                    secondaryAddress={collectorSecondaryA}
+                    slices={walletATasteSlices}
+                  />
+                  <TasteSignature
+                    title="Collector two"
+                    tone="b"
+                    address={submittedB}
+                    pfpUrl={data.walletB.pfpUrl}
+                    displayName={collectorNameB}
+                    secondaryAddress={collectorSecondaryB}
+                    slices={walletBTasteSlices}
+                  />
+                </div>
+              ) : (
+                <div className="compare-empty">No taste profile available yet.</div>
+              )}
+            </section>
 
           </div>
         )}
