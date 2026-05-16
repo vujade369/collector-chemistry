@@ -43,9 +43,16 @@ export async function GET(request: NextRequest) {
     .map((w) => w.trim())
     .filter(Boolean);
 
-  if (walletInputs.length === 0) {
+  const seedLimit = parseIntParam(searchParams.get("seedLimit"), 50, 50);
+  const resultLimit = parseIntParam(searchParams.get("resultLimit"), 10, 20);
+  const seedSlugs = parseSlugListParam(
+    searchParams.get("seedSlugs") ?? searchParams.get("seed")
+  );
+  const excludeSlugs = parseSlugListParam(searchParams.get("excludeSlugs"));
+
+  if (walletInputs.length === 0 && seedSlugs.length === 0) {
     return NextResponse.json(
-      { error: "Missing wallet parameter. Provide one or more comma-separated Ethereum addresses or ENS names." },
+      { error: "Provide a wallet address or seed collections." },
       { status: 400 }
     );
   }
@@ -57,11 +64,6 @@ export async function GET(request: NextRequest) {
       { status: 400 }
     );
   }
-
-  const seedLimit = parseIntParam(searchParams.get("seedLimit"), 50, 50);
-  const resultLimit = parseIntParam(searchParams.get("resultLimit"), 10, 20);
-  const seedSlugs = parseSlugListParam(searchParams.get("seedSlugs"));
-  const excludeSlugs = parseSlugListParam(searchParams.get("excludeSlugs"));
 
   try {
     const result = await findCollectorsInOrbit(walletInputs, {

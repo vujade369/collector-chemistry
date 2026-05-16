@@ -758,9 +758,9 @@ function walletFromLocationSearch() {
 function seedSlugsFromLocationSearch() {
   if (typeof window === "undefined") return [];
   const params = new URLSearchParams(window.location.search);
-  const primary = parseSeedSlugsParam(params.get("seedSlugs"));
-  const alias = parseSeedSlugsParam(params.get("seed"));
-  return primary.length ? primary : alias;
+  const primary = parseSeedSlugsParam(params.get("seed"));
+  const legacy = parseSeedSlugsParam(params.get("seedSlugs"));
+  return primary.length ? primary : legacy;
 }
 
 function buildOrbitUrl(
@@ -770,7 +770,7 @@ function buildOrbitUrl(
 ) {
   const params = new URLSearchParams();
   if (wallet) params.set("wallet", wallet);
-  if (seedSlugs.length > 0) params.set("seedSlugs", seedSlugs.join(","));
+  if (seedSlugs.length > 0) params.set("seed", seedSlugs.join(","));
   const name = cleanOrbitName(options.name);
   const from = String(options.from || "").trim();
   if (name) params.set("name", name);
@@ -1212,6 +1212,74 @@ export default function OrbitTestPage() {
     void findCollectors("wallet", [seedWallet], seedSlugs);
   }, [findCollectors]);
 
+  const loadSeedOnlyOrbit = useCallback(async (
+    seedSlugs: string[],
+    options: { name?: string; from?: string } = {}
+  ) => {
+    const normalizedSlugs = seedSlugs.map(normalizeSeedSlug).filter(Boolean);
+    if (normalizedSlugs.length === 0) return;
+
+    const orbitName = cleanOrbitName(options.name);
+    const remixFrom = String(options.from || "").trim();
+    const seedKey = buildOrbitUrl("", normalizedSlugs, { name: orbitName, from: remixFrom });
+
+    setLastUrlWalletSeed(seedKey);
+    setOrbitNameParam(orbitName);
+    setRemixFromParam(remixFrom);
+    setHasRunRemix(false);
+    setWalletRows(DEFAULT_WALLET_ROWS);
+    setData(null);
+    setExpandedSharedRoomCards({});
+    setSignalEditorOpen(false);
+    setActiveFocusCount(normalizedSlugs.length);
+    setActiveExcludeCount(0);
+    setLoading(true);
+    setLoadingSource("custom");
+    setError("");
+    setShareStatus("idle");
+
+    try {
+      const params = new URLSearchParams({ resultLimit: "20" });
+      params.set("seed", normalizedSlugs.join(","));
+      const res = await fetch(`/api/profile/orbit?${params.toString()}`);
+      const json = (await res.json()) as OrbitResponse;
+
+      if (!res.ok) {
+        throw new Error(json.error || "Orbit request failed");
+      }
+
+      setData(json);
+
+      const rooms = buildAvailableRooms(json);
+      const preferredSet = new Set(normalizedSlugs);
+      const nextRoomStates: RoomStateMap = {};
+      for (const room of rooms) {
+        const slug = normalizeSeedSlug(room.slug);
+        if (!slug) continue;
+        nextRoomStates[slug] = preferredSet.has(slug) ? "focus" : "ignore";
+      }
+      setRoomStates(nextRoomStates);
+
+      const nextSeedCollections = seedCollectionsForDisplay(
+        [
+          ...(json.orbitSeedCollections || []),
+          ...(json.displayTopCollections || []),
+          ...(json.showMoreCollections || []),
+        ],
+        normalizedSlugs
+      );
+      const nextOrbitName = orbitName || generateFallbackOrbitName(nextSeedCollections);
+      setLastSuccessfulOrbitName(nextOrbitName);
+      if (!orbitName) setOrbitNameParam(nextOrbitName);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setLoading(false);
+      setLoadingSource(null);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -1225,8 +1293,14 @@ export default function OrbitTestPage() {
             name: orbitNameFromQuery,
             from: remixFromQuery,
           })
-        : "";
-      if (!walletFromQuery) {
+        : seedSlugsFromQuery.length > 0
+          ? buildOrbitUrl("", seedSlugsFromQuery, {
+              name: orbitNameFromQuery,
+              from: remixFromQuery,
+            })
+          : "";
+
+      if (!walletFromQuery && seedSlugsFromQuery.length === 0) {
         if (!lastUrlWalletSeed) return;
         setLastUrlWalletSeed("");
         setOrbitNameParam("");
@@ -1241,7 +1315,11 @@ export default function OrbitTestPage() {
 
       if (urlSeedKey === lastUrlWalletSeed) return;
 
-      loadOrbitSeed(walletFromQuery, { updateUrl: false, seedSlugs: seedSlugsFromQuery });
+      if (walletFromQuery) {
+        loadOrbitSeed(walletFromQuery, { updateUrl: false, seedSlugs: seedSlugsFromQuery });
+      } else {
+        void loadSeedOnlyOrbit(seedSlugsFromQuery, { name: orbitNameFromQuery, from: remixFromQuery });
+      }
     }
 
     if (!cancelled) syncWalletFromUrl();
@@ -1251,7 +1329,7 @@ export default function OrbitTestPage() {
       cancelled = true;
       window.removeEventListener("popstate", syncWalletFromUrl);
     };
-  }, [lastUrlWalletSeed, loadOrbitSeed]);
+  }, [lastUrlWalletSeed, loadOrbitSeed, loadSeedOnlyOrbit]);
 
   const collectionMap = useMemo(() => {
     const map = new Map<string, OrbitCollection>();
