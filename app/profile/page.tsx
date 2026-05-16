@@ -1023,6 +1023,15 @@ export default function ProfilePage() {
                       <p className="profile-section-label">Collections</p>
                     </div>
                   </div>
+
+                  <div className="profile-identity-wallets">
+                    <WalletBanner
+                      wallets={result?.wallets || initialWalletsFromQuery}
+                      onAdd={addWallet}
+                      onRemove={removeWallet}
+                      variant="compact"
+                    />
+                  </div>
                 </div>
               </article>
 
@@ -1053,15 +1062,6 @@ export default function ProfilePage() {
                   )}
                 </section>
               )}
-
-              <div className="profile-wallet-edit">
-                <WalletBanner
-                  wallets={result?.wallets || initialWalletsFromQuery}
-                  onAdd={addWallet}
-                  onRemove={removeWallet}
-                  variant="compact"
-                />
-              </div>
 
             </section>
 

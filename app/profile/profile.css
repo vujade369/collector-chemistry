@@ -368,3 +368,14 @@
   .profile-wallet-add-inline { max-width: none; }
   .profile-wallet-add-inline .profile-input { width: 100%; }
 }
+
+.profile-identity-wallets {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.profile-identity-wallets .wallet-banner,
+.profile-identity-wallets form {
+  max-width: 100%;
+}
