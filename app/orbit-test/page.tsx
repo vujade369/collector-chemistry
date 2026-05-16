@@ -547,11 +547,11 @@ function seedSlugsFromLocationSearch() {
   return parseSeedSlugsParam(new URLSearchParams(window.location.search).get("seedSlugs"));
 }
 
-function buildOrbitTestUrl(wallet: string, seedSlugs: string[] = []) {
+function buildOrbitUrl(wallet: string, seedSlugs: string[] = []) {
   const params = new URLSearchParams();
   params.set("wallet", wallet);
   if (seedSlugs.length > 0) params.set("seedSlugs", seedSlugs.join(","));
-  return `/orbit-test?${params.toString()}`;
+  return `/orbit?${params.toString()}`;
 }
 
 function storedWalletRows() {
@@ -874,14 +874,14 @@ export default function OrbitTestPage() {
     const seedSlugs = (options.seedSlugs || []).map(normalizeSeedSlug).filter(Boolean);
 
     if (options.updateUrl) {
-      const nextUrl = buildOrbitTestUrl(seedWallet, seedSlugs);
+      const nextUrl = buildOrbitUrl(seedWallet, seedSlugs);
       const currentUrl = `${window.location.pathname}${window.location.search}`;
       if (currentUrl !== nextUrl) {
         window.history.pushState(null, "", nextUrl);
       }
     }
 
-    setLastUrlWalletSeed(buildOrbitTestUrl(seedWallet, seedSlugs));
+    setLastUrlWalletSeed(buildOrbitUrl(seedWallet, seedSlugs));
     setWalletRows([seedWallet]);
     setData(null);
     setExpandedSharedRoomCards({});
@@ -897,7 +897,7 @@ export default function OrbitTestPage() {
     function syncWalletFromUrl() {
       const walletFromQuery = walletFromLocationSearch();
       const seedSlugsFromQuery = seedSlugsFromLocationSearch();
-      const urlSeedKey = walletFromQuery ? buildOrbitTestUrl(walletFromQuery, seedSlugsFromQuery) : "";
+      const urlSeedKey = walletFromQuery ? buildOrbitUrl(walletFromQuery, seedSlugsFromQuery) : "";
       if (!walletFromQuery) {
         if (!lastUrlWalletSeed) return;
         setLastUrlWalletSeed("");
@@ -2144,21 +2144,7 @@ export default function OrbitTestPage() {
                       >
                         {candidateWallet && (
                           <a
-                            href={`/orbit-test?wallet=${encodeURIComponent(candidateWallet)}`}
-                            onClick={(event) => {
-                              if (
-                                event.button !== 0 ||
-                                event.metaKey ||
-                                event.ctrlKey ||
-                                event.shiftKey ||
-                                event.altKey
-                              ) {
-                                return;
-                              }
-
-                              event.preventDefault();
-                              loadOrbitSeed(candidateWallet, { updateUrl: true });
-                            }}
+                            href={`/profile?wallet=${encodeURIComponent(candidateWallet)}`}
                             style={{
                               color: "#08070a",
                               background: "#f4edf4",
@@ -2169,7 +2155,7 @@ export default function OrbitTestPage() {
                               textDecoration: "none",
                             }}
                           >
-                            View orbit
+                            Read wallet
                           </a>
                         )}
 

@@ -282,7 +282,7 @@ function buildOrbitBridgeUrl(walletQuery: string, topCollections: TopCollection[
     params.set("seedSlugs", seedSlugs.join(","));
   }
 
-  return `/orbit-test?${params.toString()}`;
+  return `/orbit?${params.toString()}`;
 }
 
 function getEntryPatternRead(mintedPercent: number, purchasedPercent = 0): string {
