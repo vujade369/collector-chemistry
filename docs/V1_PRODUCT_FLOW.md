@@ -264,6 +264,8 @@ Compare is visually secondary in weight to Read and Orbit. It requires the most 
 
 ## Farcaster stance
 
+Detailed scope guardrail: see `docs/FARCASTER_V1_SCOPE.md`.
+
 V1 goal: Farcaster-shareable, not Farcaster-native.
 
 **Do in v1:**
