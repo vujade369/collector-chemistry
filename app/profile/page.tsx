@@ -1063,185 +1063,7 @@ export default function ProfilePage() {
                 />
               </div>
 
-              {firstMint?.openseaUrl ? (
-                <a
-                  className="profile-panel profile-first-mint-plaque profile-first-mint-plaque-link"
-                  href={firstMint.openseaUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <span className="profile-first-mint-external" aria-hidden="true">
-                    ↗
-                  </span>
-                  <div className="profile-first-mint-plaque-media">
-                    {originImageUrl ? (
-                      <img
-                        src={originImageUrl}
-                        alt={originTitle}
-                        className="profile-first-mint-image"
-                        onError={handleImageError}
-                      />
-                    ) : (
-                      <div className="profile-first-mint-empty" aria-hidden="true">
-                        ✦
-                      </div>
-                    )}
-                  </div>
-                  <div className="profile-first-mint-plaque-content">
-                    <p className="profile-eyebrow">Origin Point</p>
-                    <p className="profile-first-mint-date">
-                      {formatCollectorSince(firstMint?.timestamp)}
-                    </p>
-                    {originCollectionName && (
-                      <p className="profile-first-mint-meta">{originCollectionName}</p>
-                    )}
-                    <p className="profile-first-mint-meta">{originTitle}</p>
-                  </div>
-                </a>
-              ) : (
-                <div className="profile-panel profile-first-mint-plaque">
-                  <div className="profile-first-mint-plaque-media">
-                    {originImageUrl ? (
-                      <img
-                        src={originImageUrl}
-                        alt={originTitle}
-                        className="profile-first-mint-image"
-                        onError={handleImageError}
-                      />
-                    ) : (
-                      <div className="profile-first-mint-empty" aria-hidden="true">
-                        ✦
-                      </div>
-                    )}
-                  </div>
-                  <div className="profile-first-mint-plaque-content">
-                    <p className="profile-eyebrow">Origin Point</p>
-                    <p className="profile-first-mint-date">
-                      {formatCollectorSince(firstMint?.timestamp)}
-                    </p>
-                    {originCollectionName && (
-                      <p className="profile-first-mint-meta">{originCollectionName}</p>
-                    )}
-                    <p className="profile-first-mint-meta">{originTitle}</p>
-                  </div>
-                </div>
-              )}
             </section>
-
-            {/* ── Entry Pattern ── */}
-            {acquisitionDNA?.minted != null && Number.isFinite(acquisitionDNA.minted.percent) && (
-              <article className="profile-panel profile-entry-pattern">
-                <div className="entry-pattern-ring-col">
-                  <svg viewBox="0 0 64 64" className="entry-pattern-svg" aria-hidden="true">
-                    <circle cx="32" cy="32" r="24" fill="none" stroke="#1e1e1e" strokeWidth="2.5" />
-                    <circle
-                      cx="32" cy="32" r="24" fill="none"
-                      stroke="#9575ff"
-                      strokeWidth="2.5"
-                      strokeDasharray={`${((acquisitionDNA.minted.percent / 100) * (2 * Math.PI * 24)).toFixed(2)} 999`}
-                      strokeLinecap="round"
-                      transform="rotate(-90 32 32)"
-                    />
-                  </svg>
-                </div>
-                <div className="entry-pattern-body">
-                  <p className="profile-eyebrow">Entry Pattern</p>
-                  <p className="entry-pattern-main">{Math.round(acquisitionDNA.minted.percent)}% minted directly</p>
-                  <p className="entry-pattern-proof">{acquisitionDNA.minted.count} Ethereum mints matched to this wallet</p>
-                  {(acquisitionDNA.purchased?.count || 0) > 0 && (
-                    <div className="entry-pattern-secondary" aria-label="Additional entry pattern signals">
-                      <p>
-                        <span>{Math.round(acquisitionDNA.purchased?.percent || 0)}% bought after mint</span>
-                        <span>{acquisitionDNA.purchased?.count || 0} matched secondary buys</span>
-                      </p>
-                    </div>
-                  )}
-                  {acquisitionDNA.unknown.percent >= 30 && (
-                    <p className="entry-pattern-caveat">Based on the mint and sale history we could match.</p>
-                  )}
-                  <p className="entry-pattern-read">{getEntryPatternRead(acquisitionDNA.minted.percent, acquisitionDNA.purchased?.percent || 0)}</p>
-                </div>
-              </article>
-            )}
-
-            {/* ── Collecting Rhythm ── */}
-            {activityByQuarter.length > 0 && peakQuarter && peakCount > 0 && firstActivityQuarter && latestActivityQuarter && collectingRhythmChart && (
-              <article className="profile-panel profile-collecting-rhythm">
-                <div className="collecting-rhythm-head">
-                  <p className="profile-section-label">Collecting Rhythm</p>
-                  <p className="collecting-rhythm-title">
-                    The busiest stretch was {formatQuarterLabel(peakQuarter)}.
-                  </p>
-                  <p className="profile-muted-copy">
-                    A quarter-by-quarter read of matched visible collecting activity.
-                  </p>
-                  <p className="collecting-rhythm-note">
-                    Based on matched visible OpenSea activity for NFTs currently in this wallet. Older or hidden activity may be incomplete.
-                  </p>
-                </div>
-
-                <div
-                  className="collecting-rhythm-chart"
-                  role="img"
-                  aria-label={`Collecting activity from ${formatQuarterLabel(firstActivityQuarter)} to ${formatQuarterLabel(latestActivityQuarter)}. Peak was ${formatQuarterLabel(peakQuarter)} with ${peakCount} matched ${peakCount === 1 ? "item" : "items"}. Usual pace was ${formatAverageQuarterCount(averageActivityCount)} per quarter.`}
-                >
-                  <svg
-                    className="collecting-rhythm-svg"
-                    viewBox={`0 0 ${collectingRhythmChart.width} ${collectingRhythmChart.height}`}
-                    preserveAspectRatio="none"
-                    aria-hidden="true"
-                  >
-                    <line className="collecting-rhythm-gridline" x1="16" x2="344" y1="138" y2="138" />
-                    <line
-                      className="collecting-rhythm-average-line"
-                      x1="16"
-                      x2="344"
-                      y1={collectingRhythmChart.averageY}
-                      y2={collectingRhythmChart.averageY}
-                    />
-                    <path className="collecting-rhythm-area" d={collectingRhythmChart.areaPath} />
-                    <path className="collecting-rhythm-line" d={collectingRhythmChart.linePath} />
-                    {collectingRhythmChart.points
-                      .filter((point) => point.key === peakQuarter.key)
-                      .map((point) => (
-                        <g key={point.key} className="collecting-rhythm-peak-point">
-                          <circle cx={point.x} cy={point.y} r="8" />
-                          <circle cx={point.x} cy={point.y} r="3.6" />
-                        </g>
-                      ))}
-                  </svg>
-                  <div
-                    className="collecting-rhythm-average-label"
-                    style={{ "--average-y": `${(collectingRhythmChart.averageY / collectingRhythmChart.height) * 100}%` } as CSSProperties}
-                  >
-                    Usual pace
-                  </div>
-                </div>
-
-                <div className="collecting-rhythm-footer" aria-label="Collecting rhythm summary">
-                  <div className="collecting-rhythm-stat">
-                    <span className="collecting-rhythm-stat-label">Started</span>
-                    <span className="collecting-rhythm-stat-value">{formatQuarterLabel(firstActivityQuarter)}</span>
-                  </div>
-                  <div className="collecting-rhythm-stat">
-                    <span className="collecting-rhythm-stat-label">Peak</span>
-                    <span className="collecting-rhythm-stat-value">
-                      {formatQuarterLabel(peakQuarter)} · {peakCount} matched
-                    </span>
-                  </div>
-                  <div className="collecting-rhythm-stat">
-                    <span className="collecting-rhythm-stat-label">Latest</span>
-                    <span className="collecting-rhythm-stat-value">{formatQuarterLabel(latestActivityQuarter)}</span>
-                  </div>
-                  <div className="collecting-rhythm-stat">
-                    <span className="collecting-rhythm-stat-label">Usual pace</span>
-                    <span className="collecting-rhythm-stat-value">
-                      {formatAverageQuarterCount(averageActivityCount)} / quarter
-                    </span>
-                  </div>
-                </div>
-              </article>
-            )}
 
             {/* ── Signal Points ── */}
             {showKeySignals && (
@@ -1386,6 +1208,121 @@ export default function ProfilePage() {
               </section>
             )}
 
+
+            {/* ── Entry Pattern ── */}
+            {acquisitionDNA?.minted != null && Number.isFinite(acquisitionDNA.minted.percent) && (
+              <article className="profile-panel profile-entry-pattern">
+                <div className="entry-pattern-ring-col">
+                  <svg viewBox="0 0 64 64" className="entry-pattern-svg" aria-hidden="true">
+                    <circle cx="32" cy="32" r="24" fill="none" stroke="#1e1e1e" strokeWidth="2.5" />
+                    <circle
+                      cx="32" cy="32" r="24" fill="none"
+                      stroke="#9575ff"
+                      strokeWidth="2.5"
+                      strokeDasharray={`${((acquisitionDNA.minted.percent / 100) * (2 * Math.PI * 24)).toFixed(2)} 999`}
+                      strokeLinecap="round"
+                      transform="rotate(-90 32 32)"
+                    />
+                  </svg>
+                </div>
+                <div className="entry-pattern-body">
+                  <p className="profile-eyebrow">Entry Pattern</p>
+                  <p className="entry-pattern-main">{Math.round(acquisitionDNA.minted.percent)}% minted directly</p>
+                  <p className="entry-pattern-proof">{acquisitionDNA.minted.count} Ethereum mints matched to this wallet</p>
+                  {(acquisitionDNA.purchased?.count || 0) > 0 && (
+                    <div className="entry-pattern-secondary" aria-label="Additional entry pattern signals">
+                      <p>
+                        <span>{Math.round(acquisitionDNA.purchased?.percent || 0)}% bought after mint</span>
+                        <span>{acquisitionDNA.purchased?.count || 0} matched secondary buys</span>
+                      </p>
+                    </div>
+                  )}
+                  {acquisitionDNA.unknown.percent >= 30 && (
+                    <p className="entry-pattern-caveat">Based on the mint and sale history we could match.</p>
+                  )}
+                  <p className="entry-pattern-read">{getEntryPatternRead(acquisitionDNA.minted.percent, acquisitionDNA.purchased?.percent || 0)}</p>
+                </div>
+              </article>
+            )}
+
+            {/* ── Collecting Rhythm ── */}
+            {activityByQuarter.length > 0 && peakQuarter && peakCount > 0 && firstActivityQuarter && latestActivityQuarter && collectingRhythmChart && (
+              <article className="profile-panel profile-collecting-rhythm">
+                <div className="collecting-rhythm-head">
+                  <p className="profile-section-label">Collecting Rhythm</p>
+                  <p className="collecting-rhythm-title">
+                    The busiest stretch was {formatQuarterLabel(peakQuarter)}.
+                  </p>
+                  <p className="profile-muted-copy">
+                    A quarter-by-quarter read of matched visible collecting activity.
+                  </p>
+                  <p className="collecting-rhythm-note">
+                    Based on matched visible OpenSea activity for NFTs currently in this wallet. Older or hidden activity may be incomplete.
+                  </p>
+                </div>
+
+                <div
+                  className="collecting-rhythm-chart"
+                  role="img"
+                  aria-label={`Collecting activity from ${formatQuarterLabel(firstActivityQuarter)} to ${formatQuarterLabel(latestActivityQuarter)}. Peak was ${formatQuarterLabel(peakQuarter)} with ${peakCount} matched ${peakCount === 1 ? "item" : "items"}. Usual pace was ${formatAverageQuarterCount(averageActivityCount)} per quarter.`}
+                >
+                  <svg
+                    className="collecting-rhythm-svg"
+                    viewBox={`0 0 ${collectingRhythmChart.width} ${collectingRhythmChart.height}`}
+                    preserveAspectRatio="none"
+                    aria-hidden="true"
+                  >
+                    <line className="collecting-rhythm-gridline" x1="16" x2="344" y1="138" y2="138" />
+                    <line
+                      className="collecting-rhythm-average-line"
+                      x1="16"
+                      x2="344"
+                      y1={collectingRhythmChart.averageY}
+                      y2={collectingRhythmChart.averageY}
+                    />
+                    <path className="collecting-rhythm-area" d={collectingRhythmChart.areaPath} />
+                    <path className="collecting-rhythm-line" d={collectingRhythmChart.linePath} />
+                    {collectingRhythmChart.points
+                      .filter((point) => point.key === peakQuarter.key)
+                      .map((point) => (
+                        <g key={point.key} className="collecting-rhythm-peak-point">
+                          <circle cx={point.x} cy={point.y} r="8" />
+                          <circle cx={point.x} cy={point.y} r="3.6" />
+                        </g>
+                      ))}
+                  </svg>
+                  <div
+                    className="collecting-rhythm-average-label"
+                    style={{ "--average-y": `${(collectingRhythmChart.averageY / collectingRhythmChart.height) * 100}%` } as CSSProperties}
+                  >
+                    Usual pace
+                  </div>
+                </div>
+
+                <div className="collecting-rhythm-footer" aria-label="Collecting rhythm summary">
+                  <div className="collecting-rhythm-stat">
+                    <span className="collecting-rhythm-stat-label">Started</span>
+                    <span className="collecting-rhythm-stat-value">{formatQuarterLabel(firstActivityQuarter)}</span>
+                  </div>
+                  <div className="collecting-rhythm-stat">
+                    <span className="collecting-rhythm-stat-label">Peak</span>
+                    <span className="collecting-rhythm-stat-value">
+                      {formatQuarterLabel(peakQuarter)} · {peakCount} matched
+                    </span>
+                  </div>
+                  <div className="collecting-rhythm-stat">
+                    <span className="collecting-rhythm-stat-label">Latest</span>
+                    <span className="collecting-rhythm-stat-value">{formatQuarterLabel(latestActivityQuarter)}</span>
+                  </div>
+                  <div className="collecting-rhythm-stat">
+                    <span className="collecting-rhythm-stat-label">Usual pace</span>
+                    <span className="collecting-rhythm-stat-value">
+                      {formatAverageQuarterCount(averageActivityCount)} / quarter
+                    </span>
+                  </div>
+                </div>
+              </article>
+            )}
 
 
             {/* ── Taste System ── */}
