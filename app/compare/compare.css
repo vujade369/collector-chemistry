@@ -147,6 +147,52 @@
   letter-spacing: 0.01em;
 }
 
+.cc-loading-block {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 14px 16px;
+  border: 0.5px solid rgba(240, 237, 230, 0.08);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(255, 0, 128, 0.07), transparent 38%),
+    rgba(17, 17, 17, 0.72);
+}
+
+.cc-loading-primary {
+  margin: 0;
+  color: #f0ede6;
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.cc-loading-secondary {
+  margin: 0;
+  max-width: 52ch;
+  color: #8f8a83;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.cc-loading-phrases {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 2px;
+}
+
+.cc-loading-phrases span {
+  max-width: 100%;
+  padding: 5px 9px;
+  border: 0.5px solid rgba(240, 237, 230, 0.08);
+  border-radius: 999px;
+  background: rgba(20, 20, 20, 0.64);
+  color: #77716a;
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 /* ─── Results ────────────────────────────────────────────────────── */
 
 .cc-results {

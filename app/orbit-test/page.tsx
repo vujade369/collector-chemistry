@@ -256,6 +256,62 @@ function candidateReason(
   return "Surfaced through visible collector overlap around these rooms.";
 }
 
+function OrbitLoadingBlock({ align = "left" }: { align?: "left" | "right" }) {
+  return (
+    <div
+      aria-live="polite"
+      style={{
+        display: "grid",
+        justifyItems: align === "right" ? "end" : "start",
+        gap: 8,
+        width: "min(100%, 430px)",
+        maxWidth: 430,
+        boxSizing: "border-box",
+        padding: "13px 15px",
+        border: "1px solid rgba(255,255,255,0.1)",
+        borderRadius: 16,
+        background: "rgba(255,255,255,0.026)",
+        textAlign: align,
+      }}
+    >
+      <p style={{ margin: 0, color: "#f4edf4", fontSize: 15, lineHeight: 1.35 }}>
+        Reading the shared rooms…
+      </p>
+      <p style={{ margin: 0, color: "#a99daa", fontSize: 13, lineHeight: 1.5 }}>
+        We’re tracing the collections this wallet returns to, then looking for nearby collectors.
+      </p>
+      <div
+        aria-label="Orbit progress"
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          justifyContent: align === "right" ? "flex-end" : "flex-start",
+          gap: 7,
+        }}
+      >
+        {["Finding shared rooms", "Checking collection depth", "Surfacing nearby collectors"].map((phrase) => (
+          <span
+            key={phrase}
+            style={{
+              maxWidth: "100%",
+              padding: "5px 9px",
+              border: "1px solid rgba(255,255,255,0.09)",
+              borderRadius: 999,
+              background: "rgba(18,15,21,0.72)",
+              color: "#8f8292",
+              fontSize: 11,
+              lineHeight: 1.35,
+              overflowWrap: "anywhere",
+            }}
+          >
+            {phrase}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 
 function RoomChip({
   slug,
@@ -588,6 +644,7 @@ export default function OrbitTestPage() {
   const [activeVaultTooltipWallet, setActiveVaultTooltipWallet] = useState<string | null>(null);
   const [lastUrlWalletSeed, setLastUrlWalletSeed] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadingSource, setLoadingSource] = useState<"wallet" | "custom" | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -809,6 +866,7 @@ export default function OrbitTestPage() {
     explicitSeedSlugs: string[] = []
   ) => {
     setLoading(true);
+    setLoadingSource(mode);
     setError("");
 
     const sourceWalletRows = explicitWalletRows || walletRows;
@@ -820,12 +878,14 @@ export default function OrbitTestPage() {
     if (!queryWallets) {
       setError("Enter at least one wallet.");
       setLoading(false);
+      setLoadingSource(null);
       return;
     }
 
     if (mode === "custom" && availableRooms.length > 0 && focusedSlugs.length === 0) {
       setError("Choose at least one focus room.");
       setLoading(false);
+      setLoadingSource(null);
       return;
     }
 
@@ -865,6 +925,7 @@ export default function OrbitTestPage() {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setLoading(false);
+      setLoadingSource(null);
     }
   }, [availableRooms, focusedSlugs, outsideRooms, roomStates, walletRows]);
 
@@ -1135,10 +1196,8 @@ export default function OrbitTestPage() {
               >
                 {loading ? "Reading…" : "Read my orbit"}
               </button>
-              {loading && (
-                <p style={{ margin: 0, color: "#8f8292", fontSize: 12, textAlign: "right" }}>
-                  Reading up to 50 rooms — may take 20–60s for large wallets.
-                </p>
+              {loading && loadingSource === "wallet" && (
+                <OrbitLoadingBlock align="right" />
               )}
             </div>
           </div>
@@ -1622,6 +1681,7 @@ export default function OrbitTestPage() {
                   >
                     {loading ? "Refining…" : "Refine search"}
                   </button>
+                  {loading && loadingSource === "custom" && <OrbitLoadingBlock align="right" />}
               </div>
                 </>
               )}
@@ -1639,7 +1699,7 @@ export default function OrbitTestPage() {
                 <div>
                   <h2 style={{ margin: 0, fontSize: 24 }}>Collectors surfaced</h2>
                   <p style={{ margin: "7px 0 0", color: "#a99daa", fontSize: 13 }}>
-                    {loading ? "Updating this scenario…" : focusedSlugs.length > 0
+                    {loading ? "Reading the shared rooms…" : focusedSlugs.length > 0
                       ? "These collectors surfaced through shared visible rooms, holding depth, and room specificity."
                       : "These collectors surfaced through your refined room selection."}
                   </p>

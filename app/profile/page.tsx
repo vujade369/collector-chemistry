@@ -169,11 +169,6 @@ type WalletResolveResponse =
   | { ok: true; address: string; message?: string }
   | { ok: false; message?: string };
 
-const LOADING_ARTIFACT_IMAGE_URL =
-  "https://arweave.net/zdYyQZPXrMuLvbqFou8STWUkBP4mg6osCFud5wny0CQ";
-const LOADING_ARTIFACT_IFRAME_URL =
-  "https://ipfs.io/ipfs/bafkreifvup3adpgrazguszphfvhvuve7nmuchpkfxdgnkkcjfakgwxxrna";
-
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
 async function resolveWalletIdentity(value: string): Promise<WalletResolveResponse> {
@@ -542,7 +537,6 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<ProfileResponse | null>(null);
-  const [artifactFailed, setArtifactFailed] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const [compareWallet, setCompareWallet] = useState("");
   const [compareResolveError, setCompareResolveError] = useState("");
@@ -564,7 +558,6 @@ export default function ProfilePage() {
         inFlightProfileQueryRef.current = null;
         setError("Nothing found for this wallet.");
         setResult(null);
-        setArtifactFailed(false);
         setShowResults(false);
         return;
       }
@@ -579,7 +572,6 @@ export default function ProfilePage() {
       setLoading(true);
       setError("");
       setResult(null);
-      setArtifactFailed(false);
       setShowResults(false);
 
       try {
@@ -628,7 +620,7 @@ export default function ProfilePage() {
   const profile = result?.profile || null;
   const resolvedWallet = result?.wallet || walletFromQuery;
   const profileReady = !loading && !error && Boolean(profile);
-  const showLoadingArtifact = loading || (profileReady && !showResults);
+  const showLoadingRead = loading || (profileReady && !showResults);
 
   const fallbackDisplayName = useMemo(
     () => toDisplayName(resolvedWallet),
@@ -909,50 +901,26 @@ export default function ProfilePage() {
       <div className="profile-shell">
 
         {/* Loading */}
-        {showLoadingArtifact && (
+        {showLoadingRead && (
           <section className="profile-loading-panel" aria-live="polite">
-            <div className="loading-artifact-copy">
-              <p className="profile-eyebrow">Loading Artifact</p>
-              <h2>Watch a live cultural signal while your constellation forms.</h2>
+            <div className="loading-lens-copy">
+              <p className="profile-eyebrow">Wallet Read</p>
+              <h2>Reading the wallet…</h2>
+              <p className="loading-lens-secondary">
+                We’re tracing what this wallet keeps, where it returns, and which signals stand out.
+              </p>
             </div>
 
-            <article className="loading-artifact-card">
-              <div className="loading-artifact-frame">
-                {!artifactFailed ? (
-                  <iframe
-                    src={LOADING_ARTIFACT_IFRAME_URL}
-                    title="6529 NEWS by 6529 Collections"
-                    className="loading-artifact-preview"
-                    loading="eager"
-                    sandbox="allow-scripts"
-                    onError={() => setArtifactFailed(true)}
-                  />
-                ) : (
-                  <img
-                    src={LOADING_ARTIFACT_IMAGE_URL}
-                    alt="6529 NEWS by 6529 Collections"
-                    className="loading-artifact-preview"
-                    loading="eager"
-                    decoding="async"
-                  />
-                )}
-              </div>
-
-              <div className="loading-artifact-meta">
-                <div>
-                  <p className="loading-artifact-title">6529 NEWS</p>
-                  <p className="loading-artifact-creator">6529 Collections</p>
-                </div>
-                <p className="loading-artifact-context">
-                  A decentralized news protocol for the 6529 world. Governed by TDH.
-                </p>
-                {artifactFailed && (
-                  <p className="loading-artifact-fallback">
-                    Artifact animation unavailable. Continuing to read the wallet.
-                  </p>
-                )}
-              </div>
-            </article>
+            <div className="loading-constellation-mark" aria-hidden="true">
+              <span className="loading-constellation-line loading-constellation-line--one" />
+              <span className="loading-constellation-line loading-constellation-line--two" />
+              <span className="loading-constellation-line loading-constellation-line--three" />
+              <span className="loading-constellation-point loading-constellation-point--one" />
+              <span className="loading-constellation-point loading-constellation-point--two" />
+              <span className="loading-constellation-point loading-constellation-point--three" />
+              <span className="loading-constellation-point loading-constellation-point--four" />
+              <span className="loading-constellation-point loading-constellation-point--five" />
+            </div>
 
             <div className="loading-signal">
               {profileReady ? (
@@ -967,9 +935,11 @@ export default function ProfilePage() {
                   </button>
                 </div>
               ) : (
-                <p className="loading-status-line">
-                  Reading visible NFTs · Matching activity · Finding patterns
-                </p>
+                <div className="loading-progress-phrases" aria-label="Wallet read progress">
+                  <span>Finding signal points</span>
+                  <span>Mapping collection patterns</span>
+                  <span>Preparing the read</span>
+                </div>
               )}
             </div>
           </section>

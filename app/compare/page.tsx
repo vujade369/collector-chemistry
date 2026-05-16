@@ -1335,9 +1335,17 @@ function ComparePageContent() {
 
             {error && <p className="cc-error">{error}</p>}
             {loading && (
-              <p className="cc-loading">
-                Reading both wallets and mapping overlap...
-              </p>
+              <div className="cc-loading-block" aria-live="polite">
+                <p className="cc-loading-primary">Looking for recognition…</p>
+                <p className="cc-loading-secondary">
+                  We’re comparing shared collections, artists, depth, and where the two wallets diverge.
+                </p>
+                <div className="cc-loading-phrases" aria-label="Compare progress">
+                  <span>Finding overlap</span>
+                  <span>Checking shared artists</span>
+                  <span>Reading the distance</span>
+                </div>
+              </div>
             )}
           </form>
         </section>
