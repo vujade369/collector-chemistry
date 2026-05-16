@@ -542,6 +542,7 @@ export default function ProfilePage() {
   const [compareResolveError, setCompareResolveError] = useState("");
   const [resolvingCompare, setResolvingCompare] = useState(false);
   const [selectedCategoryKey, setSelectedCategoryKey] = useState("");
+  const [linkCopied, setLinkCopied] = useState(false);
   const inFlightProfileQueryRef = useRef<string | null>(null);
   const profileRequestIdRef = useRef(0);
 
@@ -1062,6 +1063,29 @@ export default function ProfilePage() {
                   )}
                 </section>
               )}
+
+              <div style={{ display: "flex", justifyContent: "flex-end", padding: "2px 4px 0" }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(window.location.href).then(() => {
+                      setLinkCopied(true);
+                      setTimeout(() => setLinkCopied(false), 2000);
+                    });
+                  }}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    fontSize: "11px",
+                    color: linkCopied ? "#7ab87a" : "#666",
+                    padding: "0",
+                    letterSpacing: "0.02em",
+                  }}
+                >
+                  {linkCopied ? "Copied" : "Copy link"}
+                </button>
+              </div>
 
             </section>
 

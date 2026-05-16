@@ -1259,6 +1259,7 @@ function ComparePageContent() {
   const [error, setError] = useState("");
   const [isCollectionsExpanded, setIsCollectionsExpanded] = useState(false);
   const [isArtistsExpanded, setIsArtistsExpanded] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   const searchParams = useSearchParams();
 
@@ -1268,7 +1269,9 @@ function ComparePageContent() {
     if (a && b) {
       setWalletA(a);
       setWalletB(b);
-      setTimeout(() => { runCompareWith(a, b); }, 0);
+      setTimeout(() => {
+        void runCompareFromInputs(a, b, { replaceUrl: true });
+      }, 0);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1445,9 +1448,12 @@ function ComparePageContent() {
     }
   }
 
-  async function runCompare(e?: FormEvent) {
-    e?.preventDefault();
-    if (!walletA.trim() || !walletB.trim()) {
+  async function runCompareFromInputs(
+    inputA: string,
+    inputB: string,
+    options: { replaceUrl?: boolean } = {}
+  ) {
+    if (!inputA.trim() || !inputB.trim()) {
       setError("Enter two wallet addresses or ENS names to compare.");
       return;
     }
@@ -1457,8 +1463,8 @@ function ComparePageContent() {
 
     try {
       const [resolvedA, resolvedB] = await Promise.all([
-        resolveWalletIdentity(walletA.trim()),
-        resolveWalletIdentity(walletB.trim()),
+        resolveWalletIdentity(inputA.trim()),
+        resolveWalletIdentity(inputB.trim()),
       ]);
 
       if (!resolvedA.ok || !resolvedB.ok) {
@@ -1466,15 +1472,24 @@ function ComparePageContent() {
         return;
       }
 
-      router.push(
-        `/compare?a=${encodeURIComponent(resolvedA.address)}&b=${encodeURIComponent(resolvedB.address)}`
-      );
+      const nextUrl = `/compare?a=${encodeURIComponent(resolvedA.address)}&b=${encodeURIComponent(resolvedB.address)}`;
+      if (options.replaceUrl) {
+        router.replace(nextUrl);
+      } else {
+        router.push(nextUrl);
+      }
+
       await runCompareWith(resolvedA.address, resolvedB.address);
     } catch {
       setError("Couldn’t resolve that wallet.");
     } finally {
       setLoading(false);
     }
+  }
+
+  async function runCompare(e?: FormEvent) {
+    e?.preventDefault();
+    await runCompareFromInputs(walletA, walletB);
   }
 
   function resetAll() {
@@ -1589,6 +1604,29 @@ function ComparePageContent() {
                 {recognition?.summary ? (
                   <p className="cc-score-summary">{recognition.summary}</p>
                 ) : null}
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "flex-end", padding: "2px 4px 0" }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(window.location.href).then(() => {
+                      setLinkCopied(true);
+                      setTimeout(() => setLinkCopied(false), 2000);
+                    });
+                  }}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    fontSize: "11px",
+                    color: linkCopied ? "#7ab87a" : "#666",
+                    padding: "0",
+                    letterSpacing: "0.02em",
+                  }}
+                >
+                  {linkCopied ? "Copied" : "Copy link"}
+                </button>
               </div>
 
               <div className="cc-editorial-footer cc-editorial-footer-primary">
