@@ -1128,24 +1128,36 @@ function pickBestTitle(nft: NFT, resolved?: ResolvedDisplayMetadata) {
   return makeFallbackTitle(nft, resolved?.collectionName);
 }
 
-function extractArtistFromTraits(
-  traits?: Array<{ trait_type?: string; value?: string | number }>
-) {
-  if (!traits?.length) return "";
+function extractArtistFromTraits(traits: unknown) {
+  if (!Array.isArray(traits)) return "";
 
-  const match = traits.find((attr) => {
-    const trait = (attr.trait_type || "").toLowerCase();
-    return (
-      trait.includes("artist") ||
-      trait.includes("creator") ||
-      trait.includes("author") ||
-      trait.includes("illustrator") ||
-      trait.includes("photographer") ||
-      trait === "by"
-    );
-  });
+  for (const attr of traits) {
+    if (!attr || typeof attr !== "object" || Array.isArray(attr)) continue;
 
-  return String(match?.value || "").trim();
+    const record = attr as Record<string, unknown>;
+    const rawTrait =
+      record.trait_type ??
+      record.traitType ??
+      record.type ??
+      record.name;
+    const trait = String(rawTrait ?? "").trim().toLowerCase();
+
+    if (
+      !trait.includes("artist") &&
+      !trait.includes("creator") &&
+      !trait.includes("author") &&
+      !trait.includes("illustrator") &&
+      !trait.includes("photographer") &&
+      trait !== "by"
+    ) {
+      continue;
+    }
+
+    const value = String(record.value ?? record.name ?? "").trim();
+    if (value) return value;
+  }
+
+  return "";
 }
 
 function inferArtistFromText(nft: NFT) {
