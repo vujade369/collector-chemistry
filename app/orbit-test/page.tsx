@@ -1402,13 +1402,14 @@ export default function OrbitTestPage() {
 
         <div
           style={{
-            border: "1px solid rgba(255,255,255,0.085)",
-            background:
-              "radial-gradient(circle at 18% 0%, rgba(34,211,238,0.055), transparent 34%), linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.018))",
-            borderRadius: 24,
-            padding: 18,
-            marginBottom: 32,
-            boxShadow: "0 18px 42px rgba(0,0,0,0.18)",
+            border: data ? "1px solid rgba(255,255,255,0.055)" : "1px solid rgba(255,255,255,0.085)",
+            background: data
+              ? "rgba(255,255,255,0.014)"
+              : "radial-gradient(circle at 18% 0%, rgba(34,211,238,0.055), transparent 34%), linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.018))",
+            borderRadius: data ? 18 : 24,
+            padding: data ? 14 : 18,
+            marginBottom: data ? 20 : 32,
+            boxShadow: data ? "none" : "0 18px 42px rgba(0,0,0,0.18)",
           }}
         >
           <div style={{ marginBottom: 14 }}>
@@ -1420,10 +1421,12 @@ export default function OrbitTestPage() {
                 fontWeight: 700,
               }}
             >
-              Start with your wallet
+              {data ? "Change seed wallet" : "Start with your wallet"}
             </p>
             <p style={{ margin: 0, color: "#a99daa", fontSize: 13 }}>
-              Add one or more wallets. Their visible collection rooms shape the search.
+              {data
+                ? "Use another wallet to build a different collector orbit."
+                : "Add one or more wallets. Their visible collection rooms shape the search."}
             </p>
           </div>
 
@@ -1514,7 +1517,7 @@ export default function OrbitTestPage() {
                   cursor: loading ? "not-allowed" : "pointer",
                 }}
               >
-                {loading ? "Reading…" : "Read my orbit"}
+                {loading ? "Reading…" : data ? "Update orbit" : "Read my orbit"}
               </button>
               {loading && loadingSource === "wallet" && (
                 <OrbitLoadingBlock align="right" />
@@ -1828,7 +1831,7 @@ export default function OrbitTestPage() {
                   >
                     <div>
                       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                        <h2 style={{ margin: 0, fontSize: 17 }}>Search collections</h2>
+                        <h2 style={{ margin: 0, fontSize: 17 }}>Choose the rooms</h2>
                         <span
                           style={{
                             display: "inline-flex",
@@ -1858,7 +1861,7 @@ export default function OrbitTestPage() {
                         </span>
                       </div>
                       <p style={{ margin: "6px 0 0", color: "#a99daa", fontSize: 13 }}>
-                        The default orbit uses visible collection rooms from the seed wallet. Use this section to choose the rooms this remix should follow.
+                        Add, remove, or focus the rooms that shape this orbit.
                       </p>
                     </div>
 
@@ -2001,7 +2004,7 @@ export default function OrbitTestPage() {
                 <div style={{ marginBottom: 14 }}>
                   <h2 style={{ margin: 0, fontSize: 17 }}>Add a collection</h2>
                   <p style={{ margin: "6px 0 0", color: "#a99daa", fontSize: 13 }}>
-                    Search any collection to add it to this remix, whether or not it appears in the seed wallet.
+                    Bring in another collection if this remix should follow a room beyond the seed wallet.
                   </p>
                 </div>
 
@@ -2480,7 +2483,7 @@ export default function OrbitTestPage() {
                         </div>
 
                         <div
-                          title="Signal is directional: shared selected rooms, holding depth, and room specificity. It is not a ranking of taste, status, or wallet value."
+                          title="Based on shared rooms and holding depth. It is not a ranking of taste, status, or wallet value."
                           style={{
                             display: "flex",
                             alignItems: "center",
@@ -2512,7 +2515,7 @@ export default function OrbitTestPage() {
                               textTransform: "uppercase",
                             }}
                           >
-                            Signal
+                            Shared signal
                           </div>
                           <div style={{
                             fontSize: 30,
