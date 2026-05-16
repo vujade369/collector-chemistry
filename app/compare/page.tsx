@@ -159,6 +159,11 @@ type InterpretRequest = {
   nameB: string;
   archetypeA: string;
   archetypeB: string;
+  interpretationMode?: "compare";
+  recognitionLabel?: string;
+  recognitionSummary?: string;
+  recognitionProof?: string[];
+  divergenceNotes?: string[];
   chemistryLabel: string;
   chemistryScore: number;
   profileLineA: string;
@@ -172,6 +177,10 @@ type InterpretRequest = {
   sharedCollections: string[];
   sharedArtists: string[];
   exactCount: number;
+  sharedCollectionCount?: number;
+  sharedArtistCount?: number;
+  sameNftCount?: number;
+  sharedTasteTags?: string[];
 };
 
 type WalletResolveResponse =
@@ -277,6 +286,13 @@ function getOpenSeaUrl(nft: NFT) {
 
 function safeEntries<T>(obj?: Record<string, T>) {
   return obj ? Object.entries(obj) : [];
+}
+
+function sortSharedBucketEntries(entries: SharedBucketEntry[]) {
+  return [...entries].sort(
+    (a, b) =>
+      b[1].walletACount + b[1].walletBCount - (a[1].walletACount + a[1].walletBCount)
+  );
 }
 
 function sortTasteKeys(a: Record<string, number>, b: Record<string, number>) {
@@ -1263,20 +1279,12 @@ function ComparePageContent() {
   }, [data]);
 
   const sharedCollections = useMemo(
-    () =>
-      safeEntries(data?.shared?.collections).sort(
-        (a, b) =>
-          b[1].walletACount + b[1].walletBCount - (a[1].walletACount + a[1].walletBCount)
-      ),
+    () => sortSharedBucketEntries(safeEntries(data?.shared?.collections)),
     [data]
   );
 
   const sharedArtists = useMemo(
-    () =>
-      safeEntries(data?.shared?.artists).sort(
-        (a, b) =>
-          b[1].walletACount + b[1].walletBCount - (a[1].walletACount + a[1].walletBCount)
-      ),
+    () => sortSharedBucketEntries(safeEntries(data?.shared?.artists)),
     [data]
   );
 
@@ -1315,6 +1323,14 @@ function ComparePageContent() {
   ): InterpretRequest {
     const sharedCollectionKeys = Object.keys(json.shared.collections || {});
     const sharedArtistKeys = Object.keys(json.shared.artists || {});
+    const sortedSharedCollections = sortSharedBucketEntries(safeEntries(json.shared.collections));
+    const sortedSharedArtists = sortSharedBucketEntries(safeEntries(json.shared.artists));
+    const recognitionRead = buildRecognitionRead(
+      json,
+      sortedSharedCollections,
+      sortedSharedArtists
+    );
+    const sharedTasteTags = getSharedTasteTags(json.walletA.taste, json.walletB.taste).slice(0, 6);
     const interpretNameA = getCollectorDisplayName(json.walletA.profile, walletInputA, walletInputA);
     const interpretNameB = getCollectorDisplayName(json.walletB.profile, walletInputB, walletInputB);
 
@@ -1350,6 +1366,11 @@ function ComparePageContent() {
       nameB: interpretNameB,
       archetypeA: json.walletA.profile.archetype || "",
       archetypeB: json.walletB.profile.archetype || "",
+      interpretationMode: "compare",
+      recognitionLabel: recognitionRead.label,
+      recognitionSummary: recognitionRead.summary,
+      recognitionProof: recognitionRead.proof,
+      divergenceNotes: recognitionRead.divergence,
       chemistryLabel: (json.scoring as { chemistryLabel?: string }).chemistryLabel || json.scoring.label || "",
       chemistryScore: json.scoring.chemistryScore || 0,
       profileLineA: json.walletA.profile.profileLine || "",
@@ -1360,9 +1381,13 @@ function ComparePageContent() {
       contrastB,
       topCollectionsA: sortedCollectionsForA.slice(0, 3),
       topCollectionsB: sortedCollectionsForB.slice(0, 3),
-      sharedCollections: sharedCollectionKeys.slice(0, 5),
-      sharedArtists: sharedArtistKeys.slice(0, 3),
+      sharedCollections: sortedSharedCollections.map(([name]) => name).slice(0, 5),
+      sharedArtists: sortedSharedArtists.map(([name]) => name).slice(0, 3),
       exactCount: json.shared.exactCount || 0,
+      sharedCollectionCount: sharedCollectionKeys.length,
+      sharedArtistCount: sharedArtistKeys.length,
+      sameNftCount: json.shared.exactCount || 0,
+      sharedTasteTags,
     };
   }
 

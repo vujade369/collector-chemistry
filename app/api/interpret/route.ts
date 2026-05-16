@@ -5,6 +5,11 @@ type InterpretRequest = {
   nameB?: unknown;
   archetypeA?: unknown;
   archetypeB?: unknown;
+  interpretationMode?: unknown;
+  recognitionLabel?: unknown;
+  recognitionSummary?: unknown;
+  recognitionProof?: unknown;
+  divergenceNotes?: unknown;
   chemistryLabel?: unknown;
   chemistryScore?: unknown;
   profileLineA?: unknown;
@@ -18,6 +23,10 @@ type InterpretRequest = {
   sharedCollections?: unknown;
   sharedArtists?: unknown;
   exactCount?: unknown;
+  sharedCollectionCount?: unknown;
+  sharedArtistCount?: unknown;
+  sameNftCount?: unknown;
+  sharedTasteTags?: unknown;
 };
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -26,102 +35,46 @@ const OPENAI_MODEL = process.env.OPENAI_INTERPRETATION_MODEL || "gpt-4o";
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const GROQ_MODEL = process.env.GROQ_INTERPRETATION_MODEL || "llama-3.3-70b-versatile";
 
-const INTERPRETATION_SYSTEM_PROMPT = `You are writing a "why this match" interpretation for Collector Chemistry, a cultural compatibility tool that compares two public NFT collector profiles.
+const INTERPRETATION_SYSTEM_PROMPT = `You are writing the Relationship Read for Constellate, a product that helps collectors see where two public wallet patterns overlap and separate.
 
-Your job is not to summarize overlap.
-Your job is to help each collector understand something true about themselves through the lens of someone who made similar choices.
+The recognition state is already decided. Do not choose, rename, override, or score it.
 
-The comparison is the mechanism. Self-recognition is the outcome.
-
----
-
-BEFORE YOU WRITE:
-
-Identify the relationship dynamic between the two collectors. Choose one:
-- Same instinct, different expression
-- Different instincts, shared sensitivity
-- Distant, but connected by a deeper thread
-- Parallel, but rarely intersecting
-
-This dynamic shapes everything. Do not write until you know which one you are working with.
-
----
-
-STRUCTURE:
-
-Follow these parts in order. No headers. No bullets. Plain prose only.
-
-1. HEADLINE
-One line. Names the dynamic, not the data. Creates tension or curiosity before the explanation arrives. Never describes overlap directly.
-
-Good: "One moves fast to find it. One moves slow to keep it."
-Bad: "Two collectors with significant ecosystem overlap."
-
-2. SEPARATION
-Two short paragraphs, one per collector. Describes how each one moves through culture. Identity language, not category language. The difference should feel real before you attempt to resolve it.
-
-Do not describe what they collect. Describe how they decide.
-Each paragraph should work if you removed every collection name from it.
-
-Good: "You arrive before the name exists for it."
-Bad: "You collect across generative art and meme culture."
-
-3. THE GAP
-One short paragraph. Acknowledge the real difference directly. Do not paper over it. The lower the chemistry score, the more weight this needs. This earns the right to land the turn.
-
-4. THE TURN
-The shared instinct one level beneath the surface difference.
-
-Not: "you both collect generative art."
-But: what that choice reveals about both of them as people.
-
-This must name something specific to these two collectors that the data made visible but only interpretation can articulate.
-
-Bad turn: "They both seek meaning through collecting."
-Bad turn: "A shared desire to engage with digital culture."
-Bad turn: "Both are drawn to work that speaks to something deeper."
-
-5. CLOSING LINE
-One short paragraph. Resonant. Not conclusive. Leaves space.
+Your job is to write from the fixed recognition frame and visible proof. The result should feel human, editorial, specific, and grounded in what is shown on the Compare page.
 
 ---
 
 VOICE RULES:
 
-- Identity language, not category language
+- Relationship read, not analytics report
+- Behavior-led, not personality diagnosis
 - Interpretive, not analytical
 - Specific, not generic
 - Honest about difference
+- Confident without overclaiming
 - No financial language
 - No rarity language
 - No investment language
 - No market language
+- No compatibility, dating-app, ranking, status, alpha, or portfolio framing
 - No bullets
 - No markdown
 - No headers
-- No labels like "Separation" or "The Turn"
 - Do not say "Wallet A" or "Wallet B"
-- Do not say "NFTs" unless unavoidable
+- Avoid saying "NFTs" unless referring to exact same pieces
 - Do not overuse collection names
 - Collection names are evidence, not the story
 - Do not invent traits or psychology not supported by the provided inputs
-- Do not flatten everyone into "curious," "intentional," or "community-driven"
+- Do not apologize for the data
+- Avoid: "not enough reliable context", "cannot conclude", "perfect match", "compatible", "elite taste", "high-value collector", "alpha", "insane overlap", "vibes", "tribe", "journey"
+- Prefer: "suggests", "appears", "surfaces", "meets in", "separates around", "shared rooms", "holding depth", "artist signal", "category weight", "collecting rhythm"
 
----
-
-EMOTIONAL TEMPERATURE:
-
-Strong Signal (80+):
-Warm, kinetic, high recognition. The writing should feel like two people recognizing each other quickly.
-
-Kindred (60-79):
-Grounded, considered, quiet recognition. The writing should feel like adjacent instincts.
-
-Interesting Tension (40-59):
-Cooler, more unresolved, slightly melancholic. The writing should honor the distance.
-
-Distant But Related (below 40):
-Direct, restrained, honest. Do not force closeness.
+Recognition-state guidance:
+- Deeply Aligned: strong shared rooms, artist signals, and category shape. Use rarely and keep it grounded.
+- Same Rooms, Different Depths: the overlap is real, but the asymmetry is the story.
+- Adjacent Scenes: there are crossing points, but the centers of gravity differ.
+- Distant But Related: limited but real signal; do not force closeness.
+- Mirror Signal: resonance without much direct collection intersection.
+- Different Constellations: the distance itself is the read.
 
 ---
 
@@ -134,7 +87,8 @@ Return JSON only.
   "summary": "plain prose paragraphs separated by double newlines"
 }
 
-The summary should usually be 250-400 words.`;
+The headline should be one short line, maximum 90 characters.
+The summary should be 1-2 concise paragraphs, 80-140 words total.`;
 
 function sanitizeString(value: unknown, maxLength = 400): string {
   if (typeof value !== "string") return "";
@@ -158,12 +112,56 @@ function sanitizeList(value: unknown, maxItems = 8): string[] {
     .slice(0, maxItems);
 }
 
-function safeOutput() {
+function hasBlockedLanguage(value: string) {
+  const blockedPatterns = [
+    /\bcompatible\b/i,
+    /\bcompatibility\b/i,
+    /\bperfect match\b/i,
+    /\belite taste\b/i,
+    /\bhigh-value\b/i,
+    /\balpha\b/i,
+    /\binsane overlap\b/i,
+    /\bvibes\b/i,
+    /\btribe\b/i,
+    /\bjourney\b/i,
+    /\bnot enough reliable context\b/i,
+    /\bcannot conclude\b/i,
+  ];
+
+  return blockedPatterns.some((pattern) => pattern.test(value));
+}
+
+function safeOutput(payload?: InterpretRequest) {
+  const recognitionLabel = sanitizeString(payload?.recognitionLabel, 80);
+  const recognitionSummary = sanitizeString(payload?.recognitionSummary, 600);
+  const divergenceNotes = sanitizeList(payload?.divergenceNotes, 2);
+  const sharedCollections = sanitizeList(payload?.sharedCollections, 3);
+  const sharedArtists = sanitizeList(payload?.sharedArtists, 2);
+  const sharedTasteTags = sanitizeList(payload?.sharedTasteTags, 3);
+
+  const headline = recognitionLabel
+    ? `${recognitionLabel}, read through visible proof.`
+    : "A shared signal, seen from different angles.";
+
+  const proofParts = [
+    sharedCollections.length ? `shared rooms like ${sharedCollections.join(", ")}` : "",
+    sharedArtists.length ? `artist signals around ${sharedArtists.join(", ")}` : "",
+    sharedTasteTags.length ? `category weight in ${sharedTasteTags.join(", ")}` : "",
+  ].filter(Boolean);
+
+  const proofLine = proofParts.length
+    ? `The visible proof surfaces ${proofParts.join("; ")}.`
+    : "The visible proof surfaces a real point of contact between the wallets.";
+
+  const divergenceLine = divergenceNotes[0]
+    ? ` ${divergenceNotes[0]}`
+    : " The relationship stays grounded in what overlaps and where the patterns separate.";
+
   return NextResponse.json(
     {
-      headline: "A shared signal, seen from different angles.",
+      headline,
       summary:
-        "There is enough overlap here to suggest a real point of contact, but not enough reliable context to turn that signal into a full interpretation. What stands out is not a single shared category or collection, but the possibility that both collectors are responding to a similar cultural frequency from different positions.\n\nThat kind of match is often more interesting than simple sameness. It leaves room for difference, distance, and recognition without forcing the comparison to say more than the data can support.",
+        `${recognitionSummary || "The overlap suggests a real relationship between the two visible collecting patterns."} ${proofLine}${divergenceLine}`,
     },
     { status: 200 },
   );
@@ -174,6 +172,11 @@ function buildPrompt(payload: InterpretRequest): string {
   const nameB = sanitizeString(payload.nameB, 80) || "Collector B";
   const archetypeA = sanitizeString(payload.archetypeA, 120);
   const archetypeB = sanitizeString(payload.archetypeB, 120);
+  const interpretationMode = sanitizeString(payload.interpretationMode, 40);
+  const recognitionLabel = sanitizeString(payload.recognitionLabel, 80);
+  const recognitionSummary = sanitizeString(payload.recognitionSummary, 600);
+  const recognitionProof = sanitizeList(payload.recognitionProof, 6);
+  const divergenceNotes = sanitizeList(payload.divergenceNotes, 4);
   const chemistryLabel = sanitizeString(payload.chemistryLabel, 80);
   const chemistryScore = sanitizeNumber(payload.chemistryScore);
   const profileLineA = sanitizeString(payload.profileLineA, 300);
@@ -187,17 +190,33 @@ function buildPrompt(payload: InterpretRequest): string {
   const sharedCollections = sanitizeList(payload.sharedCollections);
   const sharedArtists = sanitizeList(payload.sharedArtists);
   const exactCount = sanitizeNumber(payload.exactCount);
+  const sharedCollectionCount = sanitizeNumber(payload.sharedCollectionCount);
+  const sharedArtistCount = sanitizeNumber(payload.sharedArtistCount);
+  const sameNftCount = sanitizeNumber(payload.sameNftCount) ?? exactCount;
+  const sharedTasteTags = sanitizeList(payload.sharedTasteTags, 6);
 
-  return `Write a Collector Chemistry interpretation using only the inputs below.
+  return `Write a Constellate Compare Relationship Read using only the inputs below.
+
+Mode:
+- ${interpretationMode || "compare"}
+
+Fixed recognition frame:
+- Recognition label: ${recognitionLabel || "Unknown"}
+- Recognition summary: ${recognitionSummary || "Unknown"}
+- Recognition proof: ${recognitionProof.join("; ") || "None provided"}
+
+Important:
+- The recognition state is already decided.
+- Do not choose, rename, override, or score the recognition label.
+- Use the recognition label as the frame for the read.
 
 Collectors:
 - ${nameA}
 - ${nameB}
 
-Chemistry:
-- Label: ${chemistryLabel || "Unknown"}
-- Score: ${chemistryScore ?? "Unknown"}
-- Exact shared collection count: ${exactCount ?? "Unknown"}
+Legacy scoring context:
+- Chemistry label: ${chemistryLabel || "Unknown"}
+- Chemistry score: ${chemistryScore ?? "Unknown"}
 
 ${nameA}:
 - Archetype: ${archetypeA || "Unknown"}
@@ -213,11 +232,22 @@ ${nameB}:
 - Contrast: ${contrastB || "Unknown"}
 - Top collections: ${topCollectionsB.join(", ") || "Unknown"}
 
-Shared evidence:
+Visible proof:
+- Shared collection count: ${sharedCollectionCount ?? sharedCollections.length}
 - Shared collections: ${sharedCollections.join(", ") || "None provided"}
+- Shared artist signal count: ${sharedArtistCount ?? sharedArtists.length}
 - Shared artists/creators: ${sharedArtists.join(", ") || "None provided"}
+- Same NFT count: ${sameNftCount ?? "Unknown"}
+- Shared taste/category tags: ${sharedTasteTags.join(", ") || "None provided"}
+- Divergence notes: ${divergenceNotes.join(" | ") || "None provided"}
 
-Do not overstate the evidence. If the match is thin, write with restraint.
+Write:
+- headline: one short line, maximum 90 characters
+- summary: 1-2 concise paragraphs, 80-140 words total
+- no bullets, no markdown
+- proof-aware, but not mechanical
+- confident without overclaiming
+
 Return JSON only.`;
 }
 
@@ -236,7 +266,7 @@ export async function POST(request: Request) {
         ? "https://api.groq.com/openai/v1/chat/completions"
         : "https://api.openai.com/v1/chat/completions";
 
-      if (!apiKey) return safeOutput();
+      if (!apiKey) return safeOutput(payload);
 
       const response = await fetch(endpoint, {
         method: "POST",
@@ -258,7 +288,7 @@ export async function POST(request: Request) {
 
       if (!response.ok) {
         console.log("INTERPRET_API_ERROR", response.status, await response.text());
-        return safeOutput();
+        return safeOutput(payload);
       }
 
       const json = (await response.json()) as {
@@ -288,12 +318,13 @@ export async function POST(request: Request) {
 
         summary = typeof rawSummary === "string" ? rawSummary : "";
       } catch {
-        return safeOutput();
+        return safeOutput(payload);
       }
 
       console.log("INTERPRET_RESULT", { headline, summary: summary.slice(0, 100) });
 
-      if (!headline && !summary) return safeOutput();
+      if (!headline && !summary) return safeOutput(payload);
+      if (hasBlockedLanguage(`${headline}\n${summary}`)) return safeOutput(payload);
       return NextResponse.json({ headline, summary }, { status: 200 });
     } finally {
       clearTimeout(timeoutId);
