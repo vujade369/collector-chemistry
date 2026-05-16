@@ -45,6 +45,7 @@ type RoomMode = "focus" | "exclude" | "ignore";
 type RoomStateMap = Record<string, RoomMode>;
 
 type OrbitDisplayMode = "wallet-seeded" | "named-remix";
+type ShareStatus = "idle" | "copied-link" | "copied-caption" | "error";
 
 type OrbitResponse = {
   wallets?: string[];
@@ -707,6 +708,44 @@ function buildOrbitSummary(
   return `${collectorText} through the visible collection rooms in this orbit.`;
 }
 
+function formatSeedList(seedNames: string[]) {
+  const names = seedNames.map(cleanOrbitName).filter(Boolean);
+
+  if (names.length === 0) return "these seed collections";
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  if (names.length === 3) return `${names[0]}, ${names[1]}, and ${names[2]}`;
+
+  return `${names[0]}, ${names[1]}, ${names[2]}, and more`;
+}
+
+function buildOrbitCaption({
+  orbitName,
+  seeds,
+  collectorCount,
+  remixFromLabel,
+}: {
+  orbitName: string;
+  seeds: string[];
+  collectorCount: number;
+  remixFromLabel?: string;
+}) {
+  const seedList = formatSeedList(seeds);
+  const count = Math.max(collectorCount, 0);
+  const surfacedLine = `It surfaced ${count} collector${count === 1 ? "" : "s"} moving through the same rooms.`;
+
+  if (remixFromLabel) {
+    return `Remixed from ${remixFromLabel}. I rebuilt it with ${seedList}. ${surfacedLine}`;
+  }
+
+  return `I built ${orbitName} from ${seedList}. ${surfacedLine}`;
+}
+
+function currentOrbitShareUrl() {
+  if (typeof window === "undefined") return "";
+  return window.location.href;
+}
+
 function candidateCardKey(candidate: OrbitCandidate) {
   return candidate.wallet || candidate.openseaUrl || candidate.username || candidate.displayName || "unknown";
 }
@@ -776,6 +815,7 @@ export default function OrbitTestPage() {
   const [remixFromParam, setRemixFromParam] = useState("");
   const [lastSuccessfulOrbitName, setLastSuccessfulOrbitName] = useState("");
   const [hasRunRemix, setHasRunRemix] = useState(false);
+  const [shareStatus, setShareStatus] = useState<ShareStatus>("idle");
   const [loading, setLoading] = useState(false);
   const [loadingSource, setLoadingSource] = useState<"wallet" | "custom" | null>(null);
   const [error, setError] = useState("");
@@ -993,6 +1033,40 @@ export default function OrbitTestPage() {
     setRoomStates(buildDefaultRoomStates(availableRooms));
   }
 
+  async function copyText(value: string, successState: ShareStatus) {
+    const text = value.trim();
+    if (!text || typeof window === "undefined") {
+      setShareStatus("error");
+      return;
+    }
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        setShareStatus(successState);
+        return;
+      }
+    } catch {
+      // Fall through to textarea fallback.
+    }
+
+    try {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "true");
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      textarea.style.top = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      const copied = document.execCommand("copy");
+      document.body.removeChild(textarea);
+      setShareStatus(copied ? successState : "error");
+    } catch {
+      setShareStatus("error");
+    }
+  }
+
   const findCollectors = useCallback(async (
     mode: "wallet" | "custom" = "wallet",
     explicitWalletRows?: string[],
@@ -1001,6 +1075,7 @@ export default function OrbitTestPage() {
     setLoading(true);
     setLoadingSource(mode);
     setError("");
+    setShareStatus("idle");
 
     const sourceWalletRows = explicitWalletRows || walletRows;
     const queryWallets = sourceWalletRows
@@ -1262,6 +1337,23 @@ export default function OrbitTestPage() {
   const orbitSummary = isNamedRemix
     ? buildOrbitSummary(activeSeedCollections, visibleCandidates.length, totalCandidateCount)
     : "Built from this wallet's strongest collection rooms. These collectors surfaced through shared rooms and holding depth.";
+  const shareSeedNames = activeSeedCollections
+    .map((collection) => cleanOrbitName(collection.name || label(collection.slug)))
+    .filter(Boolean);
+  const shareCollectorCount = totalCandidateCount || visibleCandidates.length;
+  const orbitCaption = buildOrbitCaption({
+    orbitName,
+    seeds: shareSeedNames,
+    collectorCount: shareCollectorCount,
+    remixFromLabel,
+  });
+  const shareFeedback = shareStatus === "copied-link"
+    ? "Orbit link copied."
+    : shareStatus === "copied-caption"
+      ? "Caption copied."
+      : shareStatus === "error"
+        ? "Copy failed. Select the URL manually."
+        : "";
 
   return (
     <main
@@ -1553,6 +1645,65 @@ export default function OrbitTestPage() {
               >
                 {orbitSummary}
               </p>
+
+              {isNamedRemix && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                    gap: 9,
+                    marginTop: 16,
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => void copyText(currentOrbitShareUrl(), "copied-link")}
+                    style={{
+                      background: "#f4edf4",
+                      color: "#08070a",
+                      border: "none",
+                      borderRadius: 999,
+                      padding: "8px 12px",
+                      fontSize: 12,
+                      fontWeight: 750,
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Copy orbit link
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void copyText(orbitCaption, "copied-caption")}
+                    style={{
+                      background: "rgba(255,255,255,0.035)",
+                      color: "#f4edf4",
+                      border: "1px solid rgba(255,255,255,0.14)",
+                      borderRadius: 999,
+                      padding: "8px 12px",
+                      fontSize: 12,
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Copy caption
+                  </button>
+                  {shareFeedback && (
+                    <p
+                      aria-live="polite"
+                      style={{
+                        margin: 0,
+                        color: shareStatus === "error" ? "#ff9ab0" : "#a99daa",
+                        fontSize: 11,
+                        lineHeight: 1.35,
+                      }}
+                    >
+                      {shareFeedback}
+                    </p>
+                  )}
+                </div>
+              )}
             </section>
         )}
 
