@@ -38,6 +38,16 @@ Always start with:
 4. Only the docs required for that task type
 5. The specific files likely to change
 
+### V1 product-flow work
+
+For any v1 product-flow, social-loop, route-bridge, sharing, Wallet Read, Compare, or Orbit work, read:
+
+- `docs/V1_PRODUCT_FLOW.md`
+- `docs/BUILD_PRINCIPLES.md`
+- `docs/PRODUCT_SOUL.md`
+
+Treat `docs/V1_PRODUCT_FLOW.md` as the v1 source of truth. Do not relitigate decisions already marked as made there unless the user explicitly reopens them.
+
 Read more only when the first pass proves it is needed.
 
 ### Context tiers
