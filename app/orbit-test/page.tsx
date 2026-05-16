@@ -44,6 +44,8 @@ type RoomMode = "focus" | "exclude" | "ignore";
 
 type RoomStateMap = Record<string, RoomMode>;
 
+type OrbitDisplayMode = "wallet-seeded" | "named-remix";
+
 type OrbitResponse = {
   wallets?: string[];
   displayTopCollections?: OrbitCollection[];
@@ -589,6 +591,122 @@ function parseSeedSlugsParam(value: string | null) {
   ).slice(0, 10);
 }
 
+function titleizeSlug(value?: string | null) {
+  return String(value || "")
+    .trim()
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function slugifyOrbitName(value?: string | null) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function cleanOrbitName(value?: string | null) {
+  return String(value || "").trim().replace(/\s+/g, " ");
+}
+
+function orbitNameFromLocationSearch() {
+  if (typeof window === "undefined") return "";
+  return cleanOrbitName(new URLSearchParams(window.location.search).get("name"));
+}
+
+function remixFromLocationSearch() {
+  if (typeof window === "undefined") return "";
+  return (new URLSearchParams(window.location.search).get("from") || "").trim();
+}
+
+function seedCollectionsForDisplay(
+  collections: OrbitCollection[],
+  preferredSlugs: string[] = []
+) {
+  const preferredSet = new Set(preferredSlugs.map(normalizeSeedSlug).filter(Boolean));
+  const selected = preferredSet.size
+    ? collections.filter((collection) => preferredSet.has(normalizeSeedSlug(collection.slug)))
+    : collections;
+
+  return mergeUniqueRooms(selected.length ? selected : collections).slice(0, 10);
+}
+
+function cleanCollectionNameForOrbit(value?: string | null) {
+  return cleanOrbitName(value)
+    .replace(/\s+by\s+.+$/i, "")
+    .replace(/\bby\s+Orbit\b/gi, "")
+    .replace(/\b(vibes|tribe|journey|mixed|various)\b/gi, "")
+    .replace(/\byour\s+custom\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function generateFallbackOrbitName(seedCollections: OrbitCollection[]) {
+  const names = seedCollections
+    .map((collection) => cleanCollectionNameForOrbit(collection.name || label(collection.slug)))
+    .filter(Boolean);
+
+  if (names.length >= 2) {
+    const first = names[0].split(/\s+/).slice(0, 1).join(" ");
+    const second = names[1].split(/\s+/).slice(0, 1).join(" ");
+    return cleanOrbitName(`The ${first}-${second} Orbit`);
+  }
+
+  if (names.length === 1) {
+    const anchor = names[0].split(/\s+/).slice(0, 2).join(" ");
+    return cleanOrbitName(`The ${anchor} Circle`);
+  }
+
+  return "The Shared Rooms Orbit";
+}
+
+function resolveOrbitDisplayMode({
+  wallet,
+  seedSlugs,
+  name,
+  from,
+  hasRunRemix,
+}: {
+  wallet: string;
+  seedSlugs: string[];
+  name: string;
+  from: string;
+  hasRunRemix: boolean;
+}): OrbitDisplayMode {
+  if (name || from || hasRunRemix) return "named-remix";
+  if (!wallet && seedSlugs.length > 0) return "named-remix";
+  return "wallet-seeded";
+}
+
+function buildOrbitSummary(
+  seedCollections: OrbitCollection[],
+  visibleCollectorCount: number,
+  totalCollectorCount: number
+) {
+  const seedCount = seedCollections.length;
+  const seedNames = seedCollections
+    .slice(0, 3)
+    .map((collection) => collection.name || label(collection.slug))
+    .filter(Boolean);
+  const collectorText = totalCollectorCount > 0
+    ? `${visibleCollectorCount} of ${totalCollectorCount} collectors surfaced`
+    : `${visibleCollectorCount} collectors surfaced`;
+
+  if (seedNames.length >= 2) {
+    return `Built from ${seedCount} seed collection${seedCount === 1 ? "" : "s"}, led by ${seedNames.join(", ")}. ${collectorText} through shared collection rooms and holding depth.`;
+  }
+
+  if (seedNames.length === 1) {
+    return `Built from ${seedNames[0]}. ${collectorText} through shared collection rooms and holding depth.`;
+  }
+
+  return `${collectorText} through the visible collection rooms in this orbit.`;
+}
+
 function candidateCardKey(candidate: OrbitCandidate) {
   return candidate.wallet || candidate.openseaUrl || candidate.username || candidate.displayName || "unknown";
 }
@@ -600,13 +718,24 @@ function walletFromLocationSearch() {
 
 function seedSlugsFromLocationSearch() {
   if (typeof window === "undefined") return [];
-  return parseSeedSlugsParam(new URLSearchParams(window.location.search).get("seedSlugs"));
+  const params = new URLSearchParams(window.location.search);
+  const primary = parseSeedSlugsParam(params.get("seedSlugs"));
+  const alias = parseSeedSlugsParam(params.get("seed"));
+  return primary.length ? primary : alias;
 }
 
-function buildOrbitUrl(wallet: string, seedSlugs: string[] = []) {
+function buildOrbitUrl(
+  wallet: string,
+  seedSlugs: string[] = [],
+  options: { name?: string; from?: string } = {}
+) {
   const params = new URLSearchParams();
-  params.set("wallet", wallet);
+  if (wallet) params.set("wallet", wallet);
   if (seedSlugs.length > 0) params.set("seedSlugs", seedSlugs.join(","));
+  const name = cleanOrbitName(options.name);
+  const from = String(options.from || "").trim();
+  if (name) params.set("name", name);
+  if (from) params.set("from", from);
   return `/orbit?${params.toString()}`;
 }
 
@@ -643,6 +772,10 @@ export default function OrbitTestPage() {
   const [activeExcludeCount, setActiveExcludeCount] = useState(0);
   const [activeVaultTooltipWallet, setActiveVaultTooltipWallet] = useState<string | null>(null);
   const [lastUrlWalletSeed, setLastUrlWalletSeed] = useState("");
+  const [orbitNameParam, setOrbitNameParam] = useState("");
+  const [remixFromParam, setRemixFromParam] = useState("");
+  const [lastSuccessfulOrbitName, setLastSuccessfulOrbitName] = useState("");
+  const [hasRunRemix, setHasRunRemix] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingSource, setLoadingSource] = useState<"wallet" | "custom" | null>(null);
   const [error, setError] = useState("");
@@ -921,28 +1054,80 @@ export default function OrbitTestPage() {
 
       setData(json);
       initializeRoomStatesFromData(json, currentFocusedSlugs);
+
+      const nextSeedCollections = seedCollectionsForDisplay(
+        [
+          ...(json.orbitSeedCollections || []),
+          ...(json.displayTopCollections || []),
+          ...(json.showMoreCollections || []),
+          ...outsideRooms,
+        ],
+        currentFocusedSlugs
+      );
+      const nextOrbitName = orbitNameParam || generateFallbackOrbitName(nextSeedCollections);
+
+      if (mode === "custom" && typeof window !== "undefined") {
+        const previousSeedCollections = seedCollectionsForDisplay(
+          [
+            ...(data?.orbitSeedCollections || []),
+            ...(data?.displayTopCollections || []),
+            ...(data?.showMoreCollections || []),
+            ...outsideRooms,
+          ],
+          focusedSlugs
+        );
+        const previousOrbitName =
+          lastSuccessfulOrbitName ||
+          orbitNameParam ||
+          generateFallbackOrbitName(previousSeedCollections);
+        const previousWasNamed = Boolean(orbitNameParam || remixFromParam || hasRunRemix);
+        const remixFrom = remixFromParam || (previousWasNamed ? slugifyOrbitName(previousOrbitName) : "");
+        const nextUrl = buildOrbitUrl(queryWallets, currentFocusedSlugs, {
+          name: nextOrbitName,
+          from: remixFrom,
+        });
+
+        window.history.pushState(null, "", nextUrl);
+        setLastUrlWalletSeed(nextUrl);
+        setOrbitNameParam(nextOrbitName);
+        setRemixFromParam(remixFrom);
+        setHasRunRemix(true);
+      }
+
+      setLastSuccessfulOrbitName(nextOrbitName);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setLoading(false);
       setLoadingSource(null);
     }
-  }, [availableRooms, focusedSlugs, outsideRooms, roomStates, walletRows]);
+  }, [availableRooms, data, focusedSlugs, hasRunRemix, lastSuccessfulOrbitName, orbitNameParam, outsideRooms, remixFromParam, roomStates, walletRows]);
 
   const loadOrbitSeed = useCallback((wallet: string, options: OrbitSeedLoadOptions = {}) => {
     const seedWallet = wallet.trim();
     if (!seedWallet) return;
     const seedSlugs = (options.seedSlugs || []).map(normalizeSeedSlug).filter(Boolean);
+    const orbitName = orbitNameFromLocationSearch();
+    const remixFrom = remixFromLocationSearch();
 
     if (options.updateUrl) {
-      const nextUrl = buildOrbitUrl(seedWallet, seedSlugs);
+      const nextUrl = buildOrbitUrl(seedWallet, seedSlugs, {
+        name: orbitName,
+        from: remixFrom,
+      });
       const currentUrl = `${window.location.pathname}${window.location.search}`;
       if (currentUrl !== nextUrl) {
         window.history.pushState(null, "", nextUrl);
       }
     }
 
-    setLastUrlWalletSeed(buildOrbitUrl(seedWallet, seedSlugs));
+    setLastUrlWalletSeed(buildOrbitUrl(seedWallet, seedSlugs, {
+      name: orbitName,
+      from: remixFrom,
+    }));
+    setOrbitNameParam(orbitName);
+    setRemixFromParam(remixFrom);
+    setHasRunRemix(false);
     setWalletRows([seedWallet]);
     setData(null);
     setExpandedSharedRoomCards({});
@@ -958,10 +1143,21 @@ export default function OrbitTestPage() {
     function syncWalletFromUrl() {
       const walletFromQuery = walletFromLocationSearch();
       const seedSlugsFromQuery = seedSlugsFromLocationSearch();
-      const urlSeedKey = walletFromQuery ? buildOrbitUrl(walletFromQuery, seedSlugsFromQuery) : "";
+      const orbitNameFromQuery = orbitNameFromLocationSearch();
+      const remixFromQuery = remixFromLocationSearch();
+      const urlSeedKey = walletFromQuery
+        ? buildOrbitUrl(walletFromQuery, seedSlugsFromQuery, {
+            name: orbitNameFromQuery,
+            from: remixFromQuery,
+          })
+        : "";
       if (!walletFromQuery) {
         if (!lastUrlWalletSeed) return;
         setLastUrlWalletSeed("");
+        setOrbitNameParam("");
+        setRemixFromParam("");
+        setLastSuccessfulOrbitName("");
+        setHasRunRemix(false);
         setWalletRows(storedWalletRows());
         setData(null);
         setExpandedSharedRoomCards({});
@@ -1034,6 +1230,38 @@ export default function OrbitTestPage() {
     ? "Institutional wallets hidden"
     : "Institutional wallets included";
   const collectorCountLabel = `${visibleCandidates.length}${totalCandidateCount > 0 ? ` of ${totalCandidateCount}` : ""} collectors surfaced`;
+  const urlWallet = typeof window === "undefined" ? "" : walletFromLocationSearch();
+  const urlSeedSlugs = typeof window === "undefined" ? [] : seedSlugsFromLocationSearch();
+  const urlSeedCollections: OrbitCollection[] = urlSeedSlugs.map((slug) => ({
+    slug,
+    name: label(slug),
+  }));
+  const sourceSeedCollections = [
+    ...(data?.orbitSeedCollections || []),
+    ...(data?.displayTopCollections || []),
+    ...(data?.showMoreCollections || []),
+    ...outsideRooms,
+  ];
+  const activeSeedCollections = seedCollectionsForDisplay(
+    sourceSeedCollections.length ? sourceSeedCollections : urlSeedCollections,
+    focusedSlugs.length ? focusedSlugs : urlSeedSlugs
+  );
+  const displayMode = resolveOrbitDisplayMode({
+    wallet: urlSeedSlugs.length > 0 && !urlWallet ? "" : urlWallet || joinedWallets,
+    seedSlugs: urlSeedSlugs.length ? urlSeedSlugs : focusedSlugs,
+    name: orbitNameParam,
+    from: remixFromParam,
+    hasRunRemix,
+  });
+  const isNamedRemix = displayMode === "named-remix";
+  const showOrbitIdentity = Boolean(data) || (!urlWallet && urlSeedSlugs.length > 0);
+  const orbitName = isNamedRemix
+    ? orbitNameParam || generateFallbackOrbitName(activeSeedCollections)
+    : "Collectors near this wallet";
+  const remixFromLabel = remixFromParam ? titleizeSlug(remixFromParam) : "";
+  const orbitSummary = isNamedRemix
+    ? buildOrbitSummary(activeSeedCollections, visibleCandidates.length, totalCandidateCount)
+    : "Built from this wallet's strongest collection rooms. These collectors surfaced through shared rooms and holding depth.";
 
   return (
     <main
@@ -1218,6 +1446,116 @@ export default function OrbitTestPage() {
           </div>
         )}
 
+        {showOrbitIdentity && (
+            <section
+              style={{
+                border: "1px solid rgba(255,255,255,0.08)",
+                background:
+                  "linear-gradient(180deg, rgba(255,255,255,0.038), rgba(255,255,255,0.014))",
+                borderRadius: 22,
+                padding: "22px 22px 20px",
+                marginBottom: 22,
+                boxShadow: "0 16px 34px rgba(0,0,0,0.16)",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  justifyContent: "space-between",
+                  gap: 18,
+                  flexWrap: "wrap",
+                }}
+              >
+                <div style={{ minWidth: 0, flex: "1 1 560px" }}>
+                  <p
+                    style={{
+                      margin: "0 0 8px",
+                      color: "#9f92a4",
+                      fontSize: 11,
+                      fontWeight: 750,
+                      letterSpacing: "0.14em",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    {isNamedRemix ? "Named Orbit" : "From this wallet"}
+                  </p>
+                  <h2
+                    style={{
+                      margin: 0,
+                      color: "#f4edf4",
+                      fontSize: 38,
+                      lineHeight: 1,
+                      letterSpacing: "-0.035em",
+                      overflowWrap: "anywhere",
+                    }}
+                  >
+                    {orbitName}
+                  </h2>
+                  {remixFromLabel && (
+                    <p style={{ margin: "9px 0 0", color: "#c8bdca", fontSize: 14 }}>
+                      Remixed from {remixFromLabel}
+                    </p>
+                  )}
+                </div>
+
+                <div
+                  style={{
+                    border: "1px solid rgba(255,255,255,0.11)",
+                    background: "rgba(8,7,10,0.34)",
+                    borderRadius: 16,
+                    padding: "10px 12px",
+                    color: "#e8dce8",
+                    minWidth: 180,
+                    textAlign: "right",
+                  }}
+                >
+                  <p style={{ margin: 0, color: "#a99daa", fontSize: 11 }}>
+                    Collectors surfaced
+                  </p>
+                  <p style={{ margin: "4px 0 0", fontSize: 22, lineHeight: 1, fontWeight: 750 }}>
+                    {visibleCandidates.length}
+                    {totalCandidateCount > 0 && (
+                      <span style={{ color: "#8f8292", fontSize: 14 }}> / {totalCandidateCount}</span>
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              {activeSeedCollections.length > 0 && (
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 8,
+                    marginTop: 16,
+                  }}
+                  aria-label="Seed collections"
+                >
+                  {activeSeedCollections.map((collection) => (
+                    <RoomChip
+                      key={collection.slug || collection.name}
+                      slug={collection.slug}
+                      collection={collection}
+                    />
+                  ))}
+                </div>
+              )}
+
+              <p
+                style={{
+                  margin: "16px 0 0",
+                  maxWidth: 820,
+                  color: "#bfb3c1",
+                  fontSize: 15,
+                  lineHeight: 1.55,
+                }}
+              >
+                {orbitSummary}
+              </p>
+            </section>
+        )}
+
         {data && (
           <>
             <section
@@ -1240,9 +1578,9 @@ export default function OrbitTestPage() {
                 }}
               >
                 <div>
-                  <h2 style={{ margin: 0, fontSize: 16 }}>Refine the search</h2>
+                  <h2 style={{ margin: 0, fontSize: 16 }}>Remix this orbit</h2>
                   <p style={{ margin: "5px 0 0", color: "#8f8292", fontSize: 12 }}>
-                    Optional tuning for custom collection rooms.
+                    Swap, add, or remove seed collections and run this orbit again.
                   </p>
                 </div>
 
@@ -1301,7 +1639,7 @@ export default function OrbitTestPage() {
                       textAlign: "center",
                     }}
                   >
-                    Refine
+                    Remix
                   </span>
                 </button>
               </div>
@@ -1369,7 +1707,7 @@ export default function OrbitTestPage() {
                         </span>
                       </div>
                       <p style={{ margin: "6px 0 0", color: "#a99daa", fontSize: 13 }}>
-                        The default orbit read uses your top 50 visible collection rooms. Use this section only when you want to tune the signal manually.
+                        The default orbit uses visible collection rooms from the seed wallet. Use this section to choose the rooms this remix should follow.
                       </p>
                     </div>
 
@@ -1512,7 +1850,7 @@ export default function OrbitTestPage() {
                 <div style={{ marginBottom: 14 }}>
                   <h2 style={{ margin: 0, fontSize: 17 }}>Add a collection</h2>
                   <p style={{ margin: "6px 0 0", color: "#a99daa", fontSize: 13 }}>
-                    Search any collection to add it to the tuned signal, whether or not it appears in your top holdings.
+                    Search any collection to add it to this remix, whether or not it appears in the seed wallet.
                   </p>
                 </div>
 
@@ -1659,7 +1997,7 @@ export default function OrbitTestPage() {
               >
                   <div>
                     <p style={{ margin: "5px 0 0", color: "#c8bdca", fontSize: 13 }}>
-                      Ready to tune the signal with these collections?
+                      Ready to run this remix with these seed collections?
                     </p>
                   </div>
 
@@ -1679,7 +2017,7 @@ export default function OrbitTestPage() {
                       cursor: loading || focusedSlugs.length === 0 ? "not-allowed" : "pointer",
                     }}
                   >
-                    {loading ? "Refining…" : "Refine search"}
+                    {loading ? "Remixing…" : "Run remix"}
                   </button>
                   {loading && loadingSource === "custom" && <OrbitLoadingBlock align="right" />}
               </div>
@@ -1701,7 +2039,7 @@ export default function OrbitTestPage() {
                   <p style={{ margin: "7px 0 0", color: "#a99daa", fontSize: 13 }}>
                     {loading ? "Reading the shared rooms…" : focusedSlugs.length > 0
                       ? "These collectors surfaced through shared visible rooms, holding depth, and room specificity."
-                      : "These collectors surfaced through your refined room selection."}
+                      : "These collectors surfaced through this remixed room selection."}
                   </p>
                 </div>
 
