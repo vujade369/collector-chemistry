@@ -302,7 +302,7 @@ function OrbitLoadingBlock({ align = "left" }: { align?: "left" | "right" }) {
         Reading the shared rooms…
       </p>
       <p style={{ margin: 0, color: "#a99daa", fontSize: 13, lineHeight: 1.5 }}>
-        We’re tracing the collections this wallet returns to, then looking for nearby collectors.
+        We’re tracing the collections in this seed field, then looking for nearby collectors.
       </p>
       <div
         aria-label="Orbit progress"
@@ -1479,11 +1479,11 @@ export default function OrbitTestPage({
   const showOrbitIdentity = Boolean(data) || (!urlWallet && urlSeedSlugs.length > 0);
   const orbitName = isNamedRemix
     ? orbitNameParam || generateFallbackOrbitName(identitySeedCollections)
-    : "Collectors near this wallet";
+    : "Collectors near this seed field";
   const remixFromLabel = remixFromParam ? titleizeSlug(remixFromParam) : "";
   const orbitSummary = isNamedRemix
     ? buildOrbitSummary(identitySeedCollections, visibleCandidates.length, totalCandidateCount)
-    : "Built from this wallet's strongest collection rooms. These collectors surfaced through shared rooms and holding depth.";
+    : "Built from the strongest collection rooms in this seed field. These collectors surfaced through shared rooms and holding depth.";
   const shareSeedNames = identitySeedCollections
     .map((collection) => cleanOrbitName(collection.name || label(collection.slug)))
     .filter(Boolean);
@@ -1586,7 +1586,7 @@ export default function OrbitTestPage({
               </h1>
 
               <p style={{ margin: 0, maxWidth: 760, color: "#bdb0bd", lineHeight: 1.55 }}>
-                Find nearby collectors whose wallets move through the same rooms as yours.
+                Find nearby collectors whose visible collections move through the same rooms as your seed field.
               </p>
             </div>
           </div>
@@ -1613,11 +1613,11 @@ export default function OrbitTestPage({
                 fontWeight: 700,
               }}
             >
-              {data ? "Change seed wallet" : "Start with your wallet"}
+              {data ? "Change seed field" : "Start with a seed field"}
             </p>
             <p style={{ margin: 0, color: "#a99daa", fontSize: 13 }}>
               {data
-                ? "Use another wallet to build a different collector orbit."
+                ? "Use another wallet set or seed field to build a different collector orbit."
                 : "Add one or more wallets. Their visible collection rooms shape the search."}
             </p>
           </div>
@@ -1709,7 +1709,7 @@ export default function OrbitTestPage({
                   cursor: loading ? "not-allowed" : "pointer",
                 }}
               >
-                {loading ? "Reading…" : data ? "Update orbit" : "Read my orbit"}
+                {loading ? "Reading…" : data ? "Update orbit" : "Build orbit"}
               </button>
               {loading && loadingSource === "wallet" && (
                 <OrbitLoadingBlock align="right" />
@@ -1765,7 +1765,7 @@ export default function OrbitTestPage({
                       textTransform: "uppercase",
                     }}
                   >
-                    {isNamedRemix ? "Named Orbit" : "From this wallet"}
+                    {isNamedRemix ? "Named Orbit" : "From this seed field"}
                   </p>
                   {isEditingOrbitName ? (
                     <form onSubmit={saveOrbitName} style={{ display: "grid", gap: 9, maxWidth: 620 }}>
@@ -2331,7 +2331,7 @@ export default function OrbitTestPage({
                 <div style={{ marginBottom: 14 }}>
                   <h2 style={{ margin: 0, fontSize: 17 }}>Add a collection</h2>
                   <p style={{ margin: "6px 0 0", color: "#a99daa", fontSize: 13 }}>
-                    Bring in another collection if this remix should follow a room beyond the seed wallet.
+                    Bring in another collection if this remix should follow a room beyond the current seed field.
                   </p>
                 </div>
 

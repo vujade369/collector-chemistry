@@ -66,7 +66,7 @@ export default function WalletBanner({
     <section className={`wallet-banner wallet-banner--${variant}`}>
       <div className="wallet-banner-row">
         <p className="wallet-banner-label">
-          {variant === "compact" ? "Wallets in this read" : "Add another wallet"}
+          {variant === "compact" ? "Wallets in this read" : "Add wallet to this read"}
         </p>
         {wallets.length > 1 && (
           <p className="wallet-banner-count">{wallets.length} wallets combined</p>

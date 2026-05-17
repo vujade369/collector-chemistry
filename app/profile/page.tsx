@@ -281,14 +281,14 @@ function buildOrbitBridgeUrl(walletQuery: string, topCollections: TopCollection[
 }
 
 function getEntryPatternRead(mintedPercent: number, purchasedPercent = 0): string {
-  if (mintedPercent >= 50) return "This wallet shows a strong primary-entry pattern.";
-  if (purchasedPercent >= 40) return "This wallet reads more like a later-curated collection than a mostly primary-mint wallet.";
+  if (mintedPercent >= 50) return "This read shows a strong primary-entry pattern.";
+  if (purchasedPercent >= 40) return "This read looks more like a later-curated collection than a mostly primary-mint set.";
   if (mintedPercent >= 10 && purchasedPercent >= 10) {
-    return "This wallet has some early-entry signals, with a meaningful share built through later curation.";
+    return "This read has some early-entry signals, with a meaningful share built through later curation.";
   }
   if (mintedPercent >= 25) return "You mix early discovery with selective collecting.";
-  if (mintedPercent >= 10) return "You have some early-entry signals, but most of the wallet was built after mint.";
-  return "This wallet reads like a curator's eye, not an early mover.";
+  if (mintedPercent >= 10) return "You have some early-entry signals, but most of the set was built after mint.";
+  return "This read looks like a curator's eye, not an early mover.";
 }
 
 function formatQuarterLabel(row: ActivityQuarter): string {
@@ -557,7 +557,7 @@ export default function ProfilePage() {
       ) {
         profileRequestIdRef.current += 1;
         inFlightProfileQueryRef.current = null;
-        setError("Nothing found for this wallet.");
+        setError("Nothing found for this read.");
         setResult(null);
         setShowResults(false);
         return;
@@ -587,7 +587,7 @@ export default function ProfilePage() {
         if (!isCurrent) return;
 
         if (!res.ok || !("profile" in json) || !json.profile) {
-          setError("Nothing found for this wallet.");
+          setError("Nothing found for this read.");
           setResult(null);
           return;
         }
@@ -601,7 +601,7 @@ export default function ProfilePage() {
         ) {
           return;
         }
-        setError("Nothing found for this wallet.");
+        setError("Nothing found for this read.");
         setResult(null);
       } finally {
         if (
@@ -681,6 +681,9 @@ export default function ProfilePage() {
     result?.wallets?.length ? result.wallets.join(",") : walletFromQuery,
     topCollections,
   );
+  const activeProfileWallets = result?.wallets?.length ? result.wallets : initialWalletsFromQuery;
+  const singleProfileWallet =
+    activeProfileWallets.length === 1 ? activeProfileWallets[0].trim() : "";
   const canCompare = compareWallet.trim().length > 0 && !resolvingCompare;
   const identityArchetypeLabel =
     profile?.collectorIdentityLabel || profile?.focusLabel || "Collector";
@@ -945,9 +948,9 @@ export default function ProfilePage() {
           <section className="profile-loading-panel" aria-live="polite">
             <div className="loading-lens-copy">
               <p className="profile-eyebrow">Wallet Read</p>
-              <h2>Reading the wallet…</h2>
+              <h2>Reading the wallet set…</h2>
               <p className="loading-lens-secondary">
-                We’re tracing what this wallet keeps, where it returns, and which signals stand out.
+                We’re tracing what this set keeps, where it returns, and which signals stand out.
               </p>
             </div>
 
@@ -975,7 +978,7 @@ export default function ProfilePage() {
                   </button>
                 </div>
               ) : (
-                <div className="loading-progress-phrases" aria-label="Wallet read progress">
+                <div className="loading-progress-phrases" aria-label="Read progress">
                   <span>Finding signal points</span>
                   <span>Mapping collection patterns</span>
                   <span>Preparing the read</span>
@@ -989,7 +992,7 @@ export default function ProfilePage() {
         {!loading && error && (
           <div className="profile-center">
             <p className="profile-error">
-              Nothing found for this wallet.{" "}
+              Nothing found for this read.{" "}
               <button
                 className="profile-error-link"
                 onClick={() => router.push("/")}
@@ -1029,14 +1032,14 @@ export default function ProfilePage() {
                   {headerAvatarUrl ? (
                     <img
                       src={headerAvatarUrl}
-                      alt={`${headerDisplayName} wallet profile`}
+                      alt={`${headerDisplayName} read profile`}
                       className="profile-hero-image"
                       onError={handleImageError}
                     />
                   ) : (
                     <div
                       className="profile-hero-image profile-hero-placeholder"
-                      aria-label="Wallet image fallback"
+                      aria-label="Read image fallback"
                     >
                       {headerDisplayName.slice(0, 1).toUpperCase()}
                     </div>
@@ -1107,6 +1110,14 @@ export default function ProfilePage() {
                 <Link href="/" className="profile-btn-primary profile-visitor-primary">
                   Read your own wallet
                 </Link>
+                {singleProfileWallet && (
+                  <Link
+                    href={`/compare?a=${encodeURIComponent(singleProfileWallet)}`}
+                    className="profile-visitor-compare"
+                  >
+                    Compare with this wallet
+                  </Link>
+                )}
                 <button
                   type="button"
                   onClick={() => void copyCurrentUrl()}
@@ -1242,7 +1253,7 @@ export default function ProfilePage() {
                       )}
                       {latestArrival?.timestamp && (
                         <p className="signal-support">
-                          Entered the wallet {formatMintDate(latestArrival.timestamp)}
+                          Entered this set {formatMintDate(latestArrival.timestamp)}
                         </p>
                       )}
                       {latestArrival?.openseaUrl && (
@@ -1281,7 +1292,7 @@ export default function ProfilePage() {
                 <div className="entry-pattern-body">
                   <p className="profile-eyebrow">Entry Pattern</p>
                   <p className="entry-pattern-main">{Math.round(acquisitionDNA.minted.percent)}% minted directly</p>
-                  <p className="entry-pattern-proof">{acquisitionDNA.minted.count} Ethereum mints matched to this wallet</p>
+                  <p className="entry-pattern-proof">{acquisitionDNA.minted.count} Ethereum mints matched to this read</p>
                   {(acquisitionDNA.purchased?.count || 0) > 0 && (
                     <div className="entry-pattern-secondary" aria-label="Additional entry pattern signals">
                       <p>
@@ -1310,7 +1321,7 @@ export default function ProfilePage() {
                     A quarter-by-quarter read of matched visible collecting activity.
                   </p>
                   <p className="collecting-rhythm-note">
-                    Based on matched visible OpenSea activity for NFTs currently in this wallet. Older or hidden activity may be incomplete.
+                    Based on matched visible OpenSea activity for NFTs currently in this read. Older or hidden activity may be incomplete.
                   </p>
                 </div>
 
@@ -1384,7 +1395,7 @@ export default function ProfilePage() {
                 <div className="taste-module-head">
                   <p className="profile-section-label">Taste Map</p>
                   <p className="profile-muted-copy">
-                    Where this profile keeps returning, grouped by the pieces already in view.
+                    Where this read keeps returning, grouped by the pieces already in view.
                   </p>
                 </div>
 
@@ -1506,7 +1517,7 @@ export default function ProfilePage() {
 
             {/* ── Top Collections ── */}
             <section className="profile-panel">
-              <p className="profile-section-label">Where This Wallet Returns</p>
+              <p className="profile-section-label">Where This Read Returns</p>
               <div className="profile-collection-list">
                 {topCollectionsWithImages.map((collection, index) => {
                   const thumbUrl = collection.resolvedImageUrl;
@@ -1541,7 +1552,7 @@ export default function ProfilePage() {
                           <p className="profile-collection-title">{collection.name}</p>
                           <p className="profile-muted-copy">
                             <span className="profile-collection-count">{collection.count}</span>
-                            {" held · "}{walletPct}% of wallet
+                            {" held · "}{walletPct}% of read
                           </p>
                           {openseaUrl && (
                             <a
@@ -1567,9 +1578,9 @@ export default function ProfilePage() {
               </div>
               <div className="profile-orbit-bridge">
                 <div>
-                  <p className="profile-section-label">Find Collectors Near This Wallet</p>
+                  <p className="profile-section-label">Find Collectors Near This Read</p>
                   <p className="profile-muted-copy">
-                    Build an orbit from the collection signals this wallet returns to most.
+                    Build an orbit from the collection signals this read returns to most.
                   </p>
                 </div>
                 <Link className="profile-btn-primary profile-orbit-bridge-link" href={orbitBridgeUrl}>
@@ -1655,7 +1666,7 @@ export default function ProfilePage() {
                   disabled={!canCompare}
                   type="submit"
                 >
-                  Compare Wallet
+                  Compare
                 </button>
               </form>
               {compareResolveError && <p className="profile-error">{compareResolveError}</p>}
@@ -1663,7 +1674,7 @@ export default function ProfilePage() {
                 href={`/profile?wallet=${encodeURIComponent(resolvedWallet)}`}
                 className="profile-inline-link"
               >
-                View this profile link
+                View this read link
               </Link>
             </section>
 
