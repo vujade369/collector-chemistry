@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 type OrbitSocialLink = {
   label: string;
@@ -726,19 +726,19 @@ function buildOrbitSummary(
 ) {
   const seedCount = seedCollections.length;
   const seedNames = seedCollections
-    .slice(0, 3)
     .map((collection) => collection.name || label(collection.slug))
     .filter(Boolean);
+  const seedList = formatSeedList(seedNames);
   const collectorText = totalCollectorCount > 0
     ? `${visibleCollectorCount} of ${totalCollectorCount} collectors surfaced`
     : `${visibleCollectorCount} collectors surfaced`;
 
   if (seedNames.length >= 2) {
-    return `Built from ${seedCount} seed collection${seedCount === 1 ? "" : "s"}, led by ${seedNames.join(", ")}. ${collectorText} through shared collection rooms and holding depth.`;
+    return `Built from ${seedCount} seed collection${seedCount === 1 ? "" : "s"}, led by ${seedList}. ${collectorText} through shared collection rooms and holding depth.`;
   }
 
   if (seedNames.length === 1) {
-    return `Built from ${seedNames[0]}. ${collectorText} through shared collection rooms and holding depth.`;
+    return `Built from ${seedList}. ${collectorText} through shared collection rooms and holding depth.`;
   }
 
   return `${collectorText} through the visible collection rooms in this orbit.`;
@@ -751,8 +751,9 @@ function formatSeedList(seedNames: string[]) {
   if (names.length === 1) return names[0];
   if (names.length === 2) return `${names[0]} and ${names[1]}`;
   if (names.length === 3) return `${names[0]}, ${names[1]}, and ${names[2]}`;
+  if (names.length === 4) return `${names[0]}, ${names[1]}, ${names[2]}, and ${names[3]}`;
 
-  return `${names[0]}, ${names[1]}, ${names[2]}, and more`;
+  return `${names[0]}, ${names[1]}, ${names[2]}, and ${names.length - 3} more`;
 }
 
 function buildOrbitCaption({
@@ -771,7 +772,7 @@ function buildOrbitCaption({
   const surfacedLine = `It surfaced ${count} collector${count === 1 ? "" : "s"} moving through the same rooms.`;
 
   if (remixFromLabel) {
-    return `Remixed from ${remixFromLabel}. I rebuilt it with ${seedList}. ${surfacedLine}`;
+    return `${orbitName} — remixed from ${remixFromLabel} with ${seedList}. ${surfacedLine}`;
   }
 
   return `I built ${orbitName} from ${seedList}. ${surfacedLine}`;
@@ -843,6 +844,8 @@ export default function OrbitTestPage() {
   const [activeVaultTooltipWallet, setActiveVaultTooltipWallet] = useState<string | null>(null);
   const [lastUrlWalletSeed, setLastUrlWalletSeed] = useState("");
   const [orbitNameParam, setOrbitNameParam] = useState("");
+  const [isEditingOrbitName, setIsEditingOrbitName] = useState(false);
+  const [orbitNameDraft, setOrbitNameDraft] = useState("");
   const [remixFromParam, setRemixFromParam] = useState("");
   const [lastSuccessfulOrbitName, setLastSuccessfulOrbitName] = useState("");
   const [hasRunRemix, setHasRunRemix] = useState(false);
@@ -1472,6 +1475,42 @@ export default function OrbitTestPage() {
       : shareStatus === "error"
         ? "Copy failed. Select the URL manually."
         : "";
+  const cleanedOrbitNameDraft = cleanOrbitName(orbitNameDraft);
+
+  function startEditingOrbitName() {
+    setOrbitNameDraft(orbitName);
+    setIsEditingOrbitName(true);
+    setShareStatus("idle");
+  }
+
+  function cancelEditingOrbitName() {
+    setOrbitNameDraft(orbitName);
+    setIsEditingOrbitName(false);
+  }
+
+  function saveOrbitName(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
+
+    const nextOrbitName = cleanOrbitName(orbitNameDraft);
+    if (!nextOrbitName) return;
+
+    setOrbitNameParam(nextOrbitName);
+    setLastSuccessfulOrbitName(nextOrbitName);
+    setIsEditingOrbitName(false);
+    setOrbitNameDraft(nextOrbitName);
+    setShareStatus("idle");
+
+    if (typeof window === "undefined") return;
+
+    const currentUrlState = readOrbitUrlState();
+    const nextUrl = buildOrbitUrl(currentUrlState.wallet, currentUrlState.seedSlugs, {
+      name: nextOrbitName,
+      from: currentUrlState.from,
+    });
+
+    window.history.replaceState(null, "", nextUrl);
+    setLastUrlWalletSeed(nextUrl);
+  }
 
   return (
     <main
@@ -1695,18 +1734,115 @@ export default function OrbitTestPage() {
                   >
                     {isNamedRemix ? "Named Orbit" : "From this wallet"}
                   </p>
-                  <h1
-                    style={{
-                      margin: 0,
-                      color: "#f4edf4",
-                      fontSize: 38,
-                      lineHeight: 1,
-                      letterSpacing: "-0.035em",
-                      overflowWrap: "anywhere",
-                    }}
-                  >
-                    {orbitName}
-                  </h1>
+                  {isEditingOrbitName ? (
+                    <form onSubmit={saveOrbitName} style={{ display: "grid", gap: 9, maxWidth: 620 }}>
+                      <label
+                        htmlFor="orbit-share-name"
+                        style={{
+                          color: "#c8bdca",
+                          fontSize: 12,
+                          fontWeight: 700,
+                        }}
+                      >
+                        Orbit share name
+                      </label>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <input
+                          id="orbit-share-name"
+                          value={orbitNameDraft}
+                          onChange={(event) => setOrbitNameDraft(event.target.value)}
+                          autoFocus
+                          style={{
+                            flex: "1 1 320px",
+                            minWidth: 0,
+                            background: "rgba(8,7,10,0.72)",
+                            color: "#f4edf4",
+                            border: "1px solid rgba(255,255,255,0.16)",
+                            borderRadius: 14,
+                            padding: "11px 13px",
+                            fontSize: 16,
+                            outline: "none",
+                          }}
+                        />
+                        <button
+                          type="submit"
+                          disabled={!cleanedOrbitNameDraft}
+                          style={{
+                            background: cleanedOrbitNameDraft ? "#f4edf4" : "#312636",
+                            color: cleanedOrbitNameDraft ? "#08070a" : "#978a99",
+                            border: "none",
+                            borderRadius: 999,
+                            padding: "9px 12px",
+                            fontSize: 12,
+                            fontWeight: 750,
+                            cursor: cleanedOrbitNameDraft ? "pointer" : "not-allowed",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelEditingOrbitName}
+                          style={{
+                            background: "rgba(255,255,255,0.035)",
+                            color: "#f4edf4",
+                            border: "1px solid rgba(255,255,255,0.14)",
+                            borderRadius: 999,
+                            padding: "9px 12px",
+                            fontSize: 12,
+                            cursor: "pointer",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                      <p style={{ margin: 0, color: "#8f8292", fontSize: 12, lineHeight: 1.4 }}>
+                        Changes the share name only. Seed collections and results stay the same.
+                      </p>
+                    </form>
+                  ) : (
+                    <>
+                      <h1
+                        style={{
+                          margin: 0,
+                          color: "#f4edf4",
+                          fontSize: 38,
+                          lineHeight: 1,
+                          letterSpacing: "-0.035em",
+                          overflowWrap: "anywhere",
+                        }}
+                      >
+                        {orbitName}
+                      </h1>
+                      {isNamedRemix && (
+                        <button
+                          type="button"
+                          onClick={startEditingOrbitName}
+                          style={{
+                            marginTop: 10,
+                            background: "transparent",
+                            color: "#c8bdca",
+                            border: "1px solid rgba(255,255,255,0.14)",
+                            borderRadius: 999,
+                            padding: "7px 10px",
+                            fontSize: 12,
+                            cursor: "pointer",
+                          }}
+                        >
+                          Edit share name
+                        </button>
+                      )}
+                    </>
+                  )}
                   {remixFromLabel && (
                     <p style={{ margin: "9px 0 0", color: "#c8bdca", fontSize: 14 }}>
                       Remixed from {remixFromLabel}
