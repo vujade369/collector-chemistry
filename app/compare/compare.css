@@ -70,11 +70,50 @@
   gap: 6px;
 }
 
+.cc-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .cc-label {
   font-size: 11px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: #555;
+}
+
+.cc-anchor-badge {
+  color: #8f8a83;
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.cc-anchored-prompt {
+  display: grid;
+  gap: 5px;
+  padding: 14px 16px;
+  border: 0.5px solid rgba(240, 237, 230, 0.08);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(149, 117, 255, 0.08), transparent 42%),
+    rgba(17, 17, 17, 0.72);
+}
+
+.cc-anchored-title {
+  margin: 0;
+  color: #f0ede6;
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.cc-anchored-copy {
+  margin: 0;
+  color: #8f8a83;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .cc-input {

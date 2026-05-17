@@ -1264,12 +1264,22 @@ function ComparePageContent() {
 
   const searchParams = useSearchParams();
 
+  const initialWalletAParam = (searchParams.get("a") || searchParams.get("walletA") || "").trim();
+  const initialWalletBParam = (searchParams.get("b") || searchParams.get("walletB") || "").trim();
+  const anchoredSide = !data && initialWalletAParam && !initialWalletBParam
+    ? "a"
+    : !data && initialWalletBParam && !initialWalletAParam
+      ? "b"
+      : null;
+
   useEffect(() => {
-    const a = searchParams.get("a") || searchParams.get("walletA") || "";
-    const b = searchParams.get("b") || searchParams.get("walletB") || "";
+    const a = (searchParams.get("a") || searchParams.get("walletA") || "").trim();
+    const b = (searchParams.get("b") || searchParams.get("walletB") || "").trim();
+
+    if (a) setWalletA(a);
+    if (b) setWalletB(b);
+
     if (a && b) {
-      setWalletA(a);
-      setWalletB(b);
       setTimeout(() => {
         void runCompareFromInputs(a, b, {
           replaceUrl: true,
@@ -1585,14 +1595,29 @@ function ComparePageContent() {
             </p>
           </div>
 
+          {anchoredSide && (
+            <div className="cc-anchored-prompt" aria-live="polite">
+              <p className="cc-anchored-title">Compare with this wallet.</p>
+              <p className="cc-anchored-copy">
+                Add your wallet to see where the patterns overlap.
+              </p>
+            </div>
+          )}
+
           <form className="cc-form" onSubmit={runCompare}>
             <div className="cc-inputs">
               <div className="cc-input-wrap">
-                <label className="cc-label" htmlFor="walletA">Collector one</label>
+                <div className="cc-label-row">
+                  <label className="cc-label" htmlFor="walletA">
+                    {anchoredSide === "a" ? "Anchored wallet" : "Collector one"}
+                  </label>
+                  {anchoredSide === "a" && <span className="cc-anchor-badge">Already in view</span>}
+                  {anchoredSide === "b" && <span className="cc-anchor-badge">Add yours</span>}
+                </div>
                 <WalletTypeaheadInput
                   id="walletA"
                   className="cc-input"
-                  placeholder="0x... or ENS"
+                  placeholder={anchoredSide === "b" ? "Your wallet or ENS" : "0x... or ENS"}
                   value={walletA}
                   onValueChange={(nextValue) => {
                     setWalletA(nextValue);
@@ -1604,11 +1629,17 @@ function ComparePageContent() {
                 />
               </div>
               <div className="cc-input-wrap">
-                <label className="cc-label" htmlFor="walletB">Collector two</label>
+                <div className="cc-label-row">
+                  <label className="cc-label" htmlFor="walletB">
+                    {anchoredSide === "b" ? "Anchored wallet" : "Collector two"}
+                  </label>
+                  {anchoredSide === "b" && <span className="cc-anchor-badge">Already in view</span>}
+                  {anchoredSide === "a" && <span className="cc-anchor-badge">Add yours</span>}
+                </div>
                 <WalletTypeaheadInput
                   id="walletB"
                   className="cc-input"
-                  placeholder="0x... or ENS"
+                  placeholder={anchoredSide === "a" ? "Your wallet or ENS" : "0x... or ENS"}
                   value={walletB}
                   onValueChange={(nextValue) => {
                     setWalletB(nextValue);
