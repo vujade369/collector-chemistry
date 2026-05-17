@@ -21,6 +21,13 @@ function buildUrl(pathname: string, params: Record<string, string>) {
   return query ? `${pathname}?${query}` : pathname;
 }
 
+function parseWalletParam(value: string) {
+  return value
+    .split(",")
+    .map((wallet) => wallet.trim())
+    .filter(Boolean);
+}
+
 export default function TopNav() {
   const pathname = usePathname() || "";
   const searchParams = useSearchParams();
@@ -34,6 +41,12 @@ export default function TopNav() {
     searchParams.get("seed")?.trim() || searchParams.get("seedSlugs")?.trim() || "";
   const orbitNameParam = searchParams.get("name")?.trim() || "";
   const orbitFromParam = searchParams.get("from")?.trim() || "";
+  const walletParamParts = parseWalletParam(walletParam);
+  const singleContextWallet =
+    (pathname.startsWith("/profile") || pathname.startsWith("/orbit")) &&
+    walletParamParts.length === 1
+      ? walletParamParts[0]
+      : "";
 
   const readWallet = pathname.startsWith("/compare") ? compareA || compareB : walletParam;
   const readHref = readWallet ? buildUrl("/profile", { wallet: readWallet }) : "/profile";
@@ -51,6 +64,8 @@ export default function TopNav() {
       : "/orbit";
   const compareHref = compareA && compareB
     ? buildUrl("/compare", { a: compareA, b: compareB })
+    : singleContextWallet
+      ? buildUrl("/compare", { a: singleContextWallet })
     : "/compare";
 
   const navItems = [

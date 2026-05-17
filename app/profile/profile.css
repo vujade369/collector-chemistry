@@ -160,6 +160,8 @@
 .profile-orbit-bridge-link { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; text-decoration: none; }
 .profile-visitor-actions { display: flex; justify-content: flex-end; align-items: center; gap: 12px; flex-wrap: wrap; padding: 2px 4px 0; }
 .profile-visitor-primary { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; padding: 8px 14px; font-size: 12px; }
+.profile-visitor-compare { color: #a8a49d; border: 0.5px solid #2e2e2e; border-radius: 999px; padding: 8px 14px; font-size: 12px; text-decoration: none; }
+.profile-visitor-compare:hover, .profile-visitor-compare:focus-visible { color: #f0ede6; border-color: #555; outline: none; }
 .profile-copy-link { background: none; border: none; cursor: pointer; font-size: 11px; color: #666; padding: 0; letter-spacing: 0.02em; }
 .profile-copy-link:hover, .profile-copy-link:focus-visible { color: #a8a49d; outline: none; }
 .profile-copy-link.is-copied { color: #7ab87a; }
