@@ -1511,6 +1511,44 @@ function ComparePageContent() {
     setIsArtistsExpanded(false);
   }
 
+  async function copyCurrentUrl() {
+    if (typeof window === "undefined") return;
+
+    const url = window.location.href;
+    let copied = false;
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+        copied = true;
+      }
+    } catch {
+      copied = false;
+    }
+
+    if (!copied) {
+      try {
+        const textarea = document.createElement("textarea");
+        textarea.value = url;
+        textarea.setAttribute("readonly", "true");
+        textarea.style.position = "fixed";
+        textarea.style.left = "-9999px";
+        textarea.style.top = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        copied = document.execCommand("copy");
+        document.body.removeChild(textarea);
+      } catch {
+        copied = false;
+      }
+    }
+
+    if (copied) {
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    }
+  }
+
   const canCompare = walletA.trim().length > 0 && walletB.trim().length > 0;
   const collectorNameA = getCollectorDisplayName(data?.walletA?.profile, submittedA, submittedA);
   const collectorNameB = getCollectorDisplayName(data?.walletB?.profile, submittedB, submittedB);
@@ -1620,12 +1658,7 @@ function ComparePageContent() {
               <div style={{ display: "flex", justifyContent: "flex-end", padding: "2px 4px 0" }}>
                 <button
                   type="button"
-                  onClick={() => {
-                    navigator.clipboard?.writeText(window.location.href).then(() => {
-                      setLinkCopied(true);
-                      setTimeout(() => setLinkCopied(false), 2000);
-                    });
-                  }}
+                  onClick={() => void copyCurrentUrl()}
                   style={{
                     background: "none",
                     border: "none",
