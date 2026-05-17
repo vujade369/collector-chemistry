@@ -523,3 +523,14 @@ Resume with public deployment or production share verification before expanding 
 - Manual Compare form submissions still normalize the URL to resolved addresses.
 - Verified Profile and Compare in fresh browser contexts after hard refresh.
 - Verification: `npx tsc --noEmit` passed for both changes.
+
+## 2026-05-16 — Compare to Orbit route bridge
+
+- Added a Compare result CTA: “Find collectors near both wallets.”
+- The CTA preserves human-readable Compare inputs and opens `/orbit?wallet=<walletA>,<walletB>`.
+- Updated `/api/profile/orbit` wallet mode to resolve comma-separated wallet inputs through the shared wallet resolver, matching Compare behavior.
+- OpenSea handles like `mode80` now work in Orbit wallet mode.
+- Dedupes resolved wallet addresses before running Orbit.
+- Verified `/compare?a=vuja-de.eth&b=mode80` → CTA → `/orbit?wallet=vuja-de.eth,mode80` loads Orbit candidates.
+- Verified plain address Orbit requests and seed-only Orbit requests still return 200.
+- Verification: `npx tsc --noEmit` passed.
