@@ -134,6 +134,55 @@
   color: #999;
 }
 
+.cc-visitor-actions {
+  display: grid;
+  gap: 10px;
+  padding: 10px 18px 0;
+}
+
+.cc-visitor-copy {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.cc-copy-link {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  color: #666;
+  padding: 0;
+  letter-spacing: 0.02em;
+}
+
+.cc-copy-link:hover,
+.cc-copy-link:focus-visible {
+  color: #999;
+  outline: none;
+}
+
+.cc-copy-link.is-copied {
+  color: #7ab87a;
+}
+
+.cc-visitor-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 12px 4px;
+  border-top: 0.5px solid #1e1e1e;
+}
+
+.cc-visitor-cta p {
+  margin: 0;
+  max-width: 38ch;
+  color: #666;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .cc-error {
   font-size: 13px;
   color: #ff6b6b;

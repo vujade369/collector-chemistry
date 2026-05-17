@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type OrbitSocialLink = {
   label: string;
@@ -850,6 +850,7 @@ export default function OrbitTestPage({
   initialOrbitUrlState?: InitialOrbitUrlState;
 }) {
   const initialUrlState = initialOrbitUrlState || emptyOrbitUrlState();
+  const remixEditorRef = useRef<HTMLElement | null>(null);
   const [walletRows, setWalletRows] = useState<string[]>(
     initialUrlState.wallet ? [initialUrlState.wallet] : DEFAULT_WALLET_ROWS
   );
@@ -1537,6 +1538,13 @@ export default function OrbitTestPage({
     setLastUrlWalletSeed(nextUrl);
   }
 
+  function openRemixEditor() {
+    setSignalEditorOpen(true);
+    window.setTimeout(() => {
+      remixEditorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+  }
+
   return (
     <main
       style={{
@@ -1946,6 +1954,38 @@ export default function OrbitTestPage({
               >
                 <button
                   type="button"
+                  onClick={openRemixEditor}
+                  style={{
+                    background: "#f4edf4",
+                    color: "#08070a",
+                    border: "none",
+                    borderRadius: 999,
+                    padding: "8px 12px",
+                    fontSize: 12,
+                    fontWeight: 750,
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Remix this orbit
+                </button>
+                <a
+                  href="/"
+                  style={{
+                    background: "rgba(255,255,255,0.035)",
+                    color: "#f4edf4",
+                    border: "1px solid rgba(255,255,255,0.14)",
+                    borderRadius: 999,
+                    padding: "8px 12px",
+                    fontSize: 12,
+                    textDecoration: "none",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Read your wallet
+                </a>
+                <button
+                  type="button"
                   onClick={() => void copyText(currentOrbitShareUrl(), "copied-link")}
                   style={{
                     background: "#f4edf4",
@@ -1999,6 +2039,7 @@ export default function OrbitTestPage({
         {data && (
           <>
             <section
+              ref={remixEditorRef}
               style={{
                 border: "1px solid rgba(255,255,255,0.055)",
                 background: "rgba(255,255,255,0.012)",

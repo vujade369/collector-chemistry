@@ -158,6 +158,11 @@
 .collection-rank-fill--4 { background: #444; }
 .profile-orbit-bridge { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding-top: 16px; border-top: 0.5px solid #222; }
 .profile-orbit-bridge-link { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; text-decoration: none; }
+.profile-visitor-actions { display: flex; justify-content: flex-end; align-items: center; gap: 12px; flex-wrap: wrap; padding: 2px 4px 0; }
+.profile-visitor-primary { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; padding: 8px 14px; font-size: 12px; }
+.profile-copy-link { background: none; border: none; cursor: pointer; font-size: 11px; color: #666; padding: 0; letter-spacing: 0.02em; }
+.profile-copy-link:hover, .profile-copy-link:focus-visible { color: #a8a49d; outline: none; }
+.profile-copy-link.is-copied { color: #7ab87a; }
 
 .profile-compare-cta { border-color: rgba(255,51,153,0.22); background: radial-gradient(circle at 80% 20%, rgba(149,117,255,0.09), transparent 45%), #111; }
 .profile-compare-cta h2 { margin: 0; font-size: 32px; font-weight: 300; color: #f0ede6; letter-spacing: -0.03em; }

@@ -1,7 +1,7 @@
 // app/compare/page.tsx
 "use client";
 
-import { FormEvent, Suspense, useEffect, useMemo, useState } from "react";
+import { FormEvent, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import WalletTypeaheadInput from "@/components/shared/WalletTypeaheadInput";
@@ -1248,6 +1248,7 @@ function TasteSignature({
 
 function ComparePageContent() {
   const router = useRouter();
+  const inputSectionRef = useRef<HTMLElement | null>(null);
   const [walletA, setWalletA] = useState("");
   const [walletB, setWalletB] = useState("");
   const [submittedA, setSubmittedA] = useState("");
@@ -1549,6 +1550,13 @@ function ComparePageContent() {
     }
   }
 
+  function focusCompareForm() {
+    inputSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    window.setTimeout(() => {
+      document.getElementById("walletA")?.focus();
+    }, 250);
+  }
+
   const canCompare = walletA.trim().length > 0 && walletB.trim().length > 0;
   const collectorNameA = getCollectorDisplayName(data?.walletA?.profile, submittedA, submittedA);
   const collectorNameB = getCollectorDisplayName(data?.walletB?.profile, submittedB, submittedB);
@@ -1568,7 +1576,7 @@ function ComparePageContent() {
       <div className="cc-shell">
 
         {/* Input form */}
-        <section className="cc-input-section">
+        <section className="cc-input-section" ref={inputSectionRef}>
           <div className="cc-input-header">
             <p className="cc-eyebrow">Constellate</p>
             <h1 className="cc-hero-title">Compare two wallets.</h1>
@@ -1655,22 +1663,26 @@ function ComparePageContent() {
                 ) : null}
               </div>
 
-              <div style={{ display: "flex", justifyContent: "flex-end", padding: "2px 4px 0" }}>
-                <button
-                  type="button"
-                  onClick={() => void copyCurrentUrl()}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    fontSize: "11px",
-                    color: linkCopied ? "#7ab87a" : "#666",
-                    padding: "0",
-                    letterSpacing: "0.02em",
-                  }}
-                >
-                  {linkCopied ? "Copied" : "Copy link"}
-                </button>
+              <div className="cc-visitor-actions">
+                <div className="cc-visitor-copy">
+                  <button
+                    type="button"
+                    onClick={() => void copyCurrentUrl()}
+                    className={`cc-copy-link${linkCopied ? " is-copied" : ""}`}
+                  >
+                    {linkCopied ? "Copied" : "Copy link"}
+                  </button>
+                </div>
+                <div className="cc-visitor-cta">
+                  <button
+                    type="button"
+                    onClick={focusCompareForm}
+                    className="cc-btn-primary"
+                  >
+                    Compare your wallet
+                  </button>
+                  <p>Use the form above to replace one collector and run a new comparison.</p>
+                </div>
               </div>
 
               <div className="cc-editorial-footer cc-editorial-footer-primary">

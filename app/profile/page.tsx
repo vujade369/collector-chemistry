@@ -1103,19 +1103,14 @@ export default function ProfilePage() {
                 </section>
               )}
 
-              <div style={{ display: "flex", justifyContent: "flex-end", padding: "2px 4px 0" }}>
+              <div className="profile-visitor-actions">
+                <Link href="/" className="profile-btn-primary profile-visitor-primary">
+                  Read your own wallet
+                </Link>
                 <button
                   type="button"
                   onClick={() => void copyCurrentUrl()}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    fontSize: "11px",
-                    color: linkCopied ? "#7ab87a" : "#666",
-                    padding: "0",
-                    letterSpacing: "0.02em",
-                  }}
+                  className={`profile-copy-link${linkCopied ? " is-copied" : ""}`}
                 >
                   {linkCopied ? "Copied" : "Copy link"}
                 </button>
