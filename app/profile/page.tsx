@@ -274,7 +274,7 @@ function buildOrbitBridgeUrl(walletQuery: string, topCollections: TopCollection[
   ).slice(0, 5);
 
   if (seedSlugs.length >= 2) {
-    params.set("seedSlugs", seedSlugs.join(","));
+    params.set("seed", seedSlugs.join(","));
   }
 
   return `/orbit?${params.toString()}`;
