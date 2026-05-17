@@ -69,6 +69,8 @@ type OrbitUrlState = {
   from: string;
 };
 
+export type InitialOrbitUrlState = OrbitUrlState;
+
 const DEFAULT_WALLET_ROWS = [
   "0x5ffd8de19910efff95df729c54699aebcee8f747",
 ];
@@ -621,9 +623,13 @@ function cleanOrbitName(value?: string | null) {
   return String(value || "").trim().replace(/\s+/g, " ");
 }
 
-function readOrbitUrlState(): OrbitUrlState {
+function emptyOrbitUrlState(): OrbitUrlState {
+  return { wallet: "", seedSlugs: [], name: "", from: "" };
+}
+
+function readOrbitUrlState(initialOrbitUrlState?: OrbitUrlState): OrbitUrlState {
   if (typeof window === "undefined") {
-    return { wallet: "", seedSlugs: [], name: "", from: "" };
+    return initialOrbitUrlState || emptyOrbitUrlState();
   }
 
   const params = new URLSearchParams(window.location.search);
@@ -787,12 +793,12 @@ function candidateCardKey(candidate: OrbitCandidate) {
   return candidate.wallet || candidate.openseaUrl || candidate.username || candidate.displayName || "unknown";
 }
 
-function walletFromLocationSearch() {
-  return readOrbitUrlState().wallet;
+function walletFromLocationSearch(initialOrbitUrlState?: OrbitUrlState) {
+  return readOrbitUrlState(initialOrbitUrlState).wallet;
 }
 
-function seedSlugsFromLocationSearch() {
-  return readOrbitUrlState().seedSlugs;
+function seedSlugsFromLocationSearch(initialOrbitUrlState?: OrbitUrlState) {
+  return readOrbitUrlState(initialOrbitUrlState).seedSlugs;
 }
 
 function buildOrbitUrl(
@@ -826,8 +832,15 @@ function storedWalletRows() {
   return DEFAULT_WALLET_ROWS;
 }
 
-export default function OrbitTestPage() {
-  const [walletRows, setWalletRows] = useState<string[]>(DEFAULT_WALLET_ROWS);
+export default function OrbitTestPage({
+  initialOrbitUrlState,
+}: {
+  initialOrbitUrlState?: InitialOrbitUrlState;
+}) {
+  const initialUrlState = initialOrbitUrlState || emptyOrbitUrlState();
+  const [walletRows, setWalletRows] = useState<string[]>(
+    initialUrlState.wallet ? [initialUrlState.wallet] : DEFAULT_WALLET_ROWS
+  );
   const [data, setData] = useState<OrbitResponse | null>(null);
   const [expandedCollections, setExpandedCollections] = useState(false);
   const [hideInstitutional, setHideInstitutional] = useState(false);
@@ -839,15 +852,15 @@ export default function OrbitTestPage() {
   const [collectionSearchResults, setCollectionSearchResults] = useState<OrbitCollection[]>([]);
   const [collectionSearchLoading, setCollectionSearchLoading] = useState(false);
   const [collectionSearchMessage, setCollectionSearchMessage] = useState("");
-  const [activeFocusCount, setActiveFocusCount] = useState(0);
+  const [activeFocusCount, setActiveFocusCount] = useState(initialUrlState.seedSlugs.length);
   const [activeExcludeCount, setActiveExcludeCount] = useState(0);
   const [activeVaultTooltipWallet, setActiveVaultTooltipWallet] = useState<string | null>(null);
   const [lastUrlWalletSeed, setLastUrlWalletSeed] = useState("");
-  const [orbitNameParam, setOrbitNameParam] = useState("");
+  const [orbitNameParam, setOrbitNameParam] = useState(initialUrlState.name);
   const [isEditingOrbitName, setIsEditingOrbitName] = useState(false);
   const [orbitNameDraft, setOrbitNameDraft] = useState("");
-  const [remixFromParam, setRemixFromParam] = useState("");
-  const [lastSuccessfulOrbitName, setLastSuccessfulOrbitName] = useState("");
+  const [remixFromParam, setRemixFromParam] = useState(initialUrlState.from);
+  const [lastSuccessfulOrbitName, setLastSuccessfulOrbitName] = useState(initialUrlState.name);
   const [hasRunRemix, setHasRunRemix] = useState(false);
   const [shareStatus, setShareStatus] = useState<ShareStatus>("idle");
   const [loading, setLoading] = useState(false);
@@ -1422,7 +1435,7 @@ export default function OrbitTestPage() {
     ? "Institutional wallets hidden"
     : "Institutional wallets included";
   const collectorCountLabel = `${visibleCandidates.length}${totalCandidateCount > 0 ? ` of ${totalCandidateCount}` : ""} collectors surfaced`;
-  const orbitUrlState = readOrbitUrlState();
+  const orbitUrlState = readOrbitUrlState(initialUrlState);
   const urlWallet = orbitUrlState.wallet;
   const urlSeedSlugs = orbitUrlState.seedSlugs;
   const urlSeedCollections: OrbitCollection[] = urlSeedSlugs.map((slug) => ({

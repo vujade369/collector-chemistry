@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import OrbitTestPage, { type InitialOrbitUrlState } from "../orbit-test/page";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -136,4 +137,24 @@ export async function generateMetadata({
   };
 }
 
-export { default } from "../orbit-test/page";
+function readInitialOrbitUrlState(params: Awaited<SearchParams>): InitialOrbitUrlState {
+  const rawSeed = firstParam(params.seed);
+  const rawLegacySeed = firstParam(params.seedSlugs);
+
+  return {
+    wallet: cleanOrbitName(firstParam(params.wallet)),
+    seedSlugs: parseSeedSlugsParam(rawSeed || rawLegacySeed),
+    name: cleanOrbitName(firstParam(params.name)),
+    from: cleanOrbitName(firstParam(params.from)),
+  };
+}
+
+export default async function OrbitPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  const params = await searchParams;
+
+  return <OrbitTestPage initialOrbitUrlState={readInitialOrbitUrlState(params)} />;
+}
