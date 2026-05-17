@@ -84,6 +84,18 @@ function label(slug?: string | null) {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+const KNOWN_COLLECTION_LABELS: Record<string, string> = {
+  mfers: "mfers",
+  milady: "Milady",
+  goblintownwtf: "goblintown.wtf",
+  supducks: "SupDucks",
+};
+
+function labelKnownSeedSlug(slug?: string | null) {
+  const normalized = normalizeSeedSlug(slug);
+  return KNOWN_COLLECTION_LABELS[normalized] || label(slug);
+}
+
 function shortWallet(wallet?: string | null) {
   if (!wallet) return "Unknown wallet";
   return `${wallet.slice(0, 6)}...${wallet.slice(-4)}`;
@@ -672,7 +684,7 @@ function mergeUrlSeedCollectionsForDisplay(
   return normalizedUrlSlugs.map((slug) => (
     collectionBySlug.get(slug) || {
       slug,
-      name: label(slug),
+      name: labelKnownSeedSlug(slug),
       heldCount: 0,
     }
   ));
@@ -1440,7 +1452,7 @@ export default function OrbitTestPage({
   const urlSeedSlugs = orbitUrlState.seedSlugs;
   const urlSeedCollections: OrbitCollection[] = urlSeedSlugs.map((slug) => ({
     slug,
-    name: label(slug),
+    name: labelKnownSeedSlug(slug),
   }));
   const sourceSeedCollections = [
     ...(data?.orbitSeedCollections || []),
