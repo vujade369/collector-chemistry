@@ -593,6 +593,7 @@ export default function ProfilePage() {
         }
 
         setResult(json as ProfileResponse);
+        setShowResults(true);
       } catch {
         if (
           profileRequestIdRef.current !== requestId ||
