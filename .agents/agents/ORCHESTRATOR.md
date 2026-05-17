@@ -55,6 +55,8 @@ Then read the specialist agent and only the relevant docs below.
 | 2 | API shape, data source, converter, interpretation, or page hierarchy | boot context + relevant docs + target files, then plan first |
 | 3 | architecture or workflow redesign | broad docs, no edits until plan approved |
 
+For detailed compact, clear, restart, MCP loading, and agent-prompt templates, read `.agents/skills/context-discipline/SKILL.md` only when the task calls for context discipline guidance.
+
 ---
 
 ## Source-of-truth priority
@@ -70,6 +72,7 @@ Then read the specialist agent and only the relevant docs below.
 | File ownership/app structure | `docs/ARCHITECTURE.md`, `docs/COMPONENT_MAP.md` |
 | API shape/data contracts | `docs/DATA_MODEL.md`, `docs/API_PATTERNS.md` |
 | Data source boundaries | `docs/DATA_SOURCES.md`, `docs/ALCHEMY_CAPABILITIES.md`, `docs/OPENSEA_INTEGRATION.md`, `.agents/skills/constellate-data-sources/SKILL.md` |
+| Context/token discipline | `.agents/skills/context-discipline/SKILL.md` |
 | Profile behavior | `docs/PROFILE_SPEC.md`, `docs/PROFILE_EXPERIENCE_SPEC.md` |
 | Compare behavior | `docs/COMPARE_SPEC.md` |
 | Multi-wallet behavior | `docs/MULTI_WALLET_SPEC.md` |
@@ -128,6 +131,7 @@ Use skills for targeted work, not as a reason to load the whole repo.
 Known active Constellate skills:
 - `.agents/skills/constellate-data-sources/SKILL.md` — source boundaries, Alchemy/OpenSea responsibilities, converter data boundaries, link rules, debug expectations
 - `.agents/skills/constellate-verification/SKILL.md` — task-specific proof commands, governance checks, UI/API/converter verification recipes
+- `.agents/skills/context-discipline/SKILL.md` — token-efficient context loading, compact/clear/restart rules, scoped Codex/Claude prompts, MCP/skill loading discipline
 
 Use the matching skill only when the task calls for it. Do not assume generic downloaded skills are product authority.
 
@@ -147,6 +151,7 @@ Use the matching skill only when the task calls for it. Do not assume generic do
 | Interpretation prompt/archetype/AI-generated claims | Interpretation / AI Copy | product soul + insight engine + ethical AI | Evidence first; no unsupported claims. |
 | Refactor/extraction/file size cleanup | Code Health | code-health agent + architecture + component map | No behavior, API, visual, or copy changes. |
 | Agent/docs workflow | Docs / Agents | AGENTS + registry + orchestrator + changed files + Constellate verification | Docs-only. No app behavior changes. |
+| Context/token workflow, stale chat cleanup, Codex/Claude prompt scoping | Docs / Agents | AGENTS + orchestrator + context-discipline skill | Keep guidance as pointers/templates, not broad doc duplication. |
 | CI failure | Code Health | failure logs + relevant docs + Constellate verification | Diagnose first; implement only approved fix. |
 
 ---
@@ -299,6 +304,7 @@ Read:
 - `.agents/skills/constellate-verification/SKILL.md`
 - changed agent/doc files
 - `docs/README.md` when doc structure changes
+- `.agents/skills/context-discipline/SKILL.md` when the task changes context/token workflow, prompt templates, MCP loading, compact/clear/restart rules, or skill discovery
 
 Keep docs-only work docs-only.
 
