@@ -494,3 +494,16 @@ The local `/orbit` share URL now:
 ### Next time
 
 Resume with public deployment or production share verification before expanding social share work to Compare or Wallet Read.
+
+## 2026-05-16 — Profile cold-load reveal fix
+
+- Fixed `/profile?wallet=...` cold-load behavior so successful URL-driven profile loads reveal results automatically instead of stopping at the ready gate.
+- Verified `/profile?wallet=vuja-de.eth` in a fresh browser context after hard refresh.
+- URL stayed preserved as `/profile?wallet=vuja-de.eth`.
+- `/api/profile?wallet=vuja-de.eth` returned 200.
+- localStorage/sessionStorage were empty.
+- Profile result rendered automatically.
+- Ready gate and “See results” state no longer appeared.
+- Manual home entry still reached a Profile result without the ready gate.
+- Files changed: `app/profile/page.tsx`.
+- Verification: `npx tsc --noEmit` passed.
