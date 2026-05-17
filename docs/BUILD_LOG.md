@@ -507,3 +507,19 @@ Resume with public deployment or production share verification before expanding 
 - Manual home entry still reached a Profile result without the ready gate.
 - Files changed: `app/profile/page.tsx`.
 - Verification: `npx tsc --noEmit` passed.
+
+## 2026-05-16 — Profile and Compare URL cold-load verification
+
+- Fixed `/profile?wallet=...` cold-load behavior so successful URL-driven profile loads reveal results automatically instead of stopping at the ready gate.
+- Updated Compare cold-load behavior so `/compare?a=vuja-de.eth&b=mode80` resolves internally and renders results while preserving the original human-readable URL params.
+- Manual Compare form submissions still normalize the URL to resolved addresses.
+- Verified Profile and Compare in fresh browser contexts after hard refresh.
+- Verification: `npx tsc --noEmit` passed for both changes.
+
+## 2026-05-16 — Profile and Compare URL cold-load verification
+
+- Fixed `/profile?wallet=...` cold-load behavior so successful URL-driven profile loads reveal results automatically instead of stopping at the ready gate.
+- Updated Compare cold-load behavior so `/compare?a=vuja-de.eth&b=mode80` resolves internally and renders results while preserving the original human-readable URL params.
+- Manual Compare form submissions still normalize the URL to resolved addresses.
+- Verified Profile and Compare in fresh browser contexts after hard refresh.
+- Verification: `npx tsc --noEmit` passed for both changes.
