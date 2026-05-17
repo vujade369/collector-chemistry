@@ -38,6 +38,8 @@ Always start with:
 4. Only the docs required for that task type
 5. The specific files likely to change
 
+For detailed token/context discipline, compact/restart rules, MCP loading rules, and scoped Codex/Claude prompt templates, read `.agents/skills/context-discipline/SKILL.md` only when the task calls for it.
+
 ### V1 product-flow work
 
 For any v1 product-flow, social-loop, route-bridge, sharing, Wallet Read, Compare, or Orbit work, read:
@@ -83,6 +85,7 @@ Use the right source for the job. Do not make one source do another source's wor
 | Schema discovery during development | OpenSea docs/API references, only as needed | `.agents/skills/constellate-data-sources/SKILL.md`, `docs/OPENSEA_INTEGRATION.md` |
 | Interpretation, archetypes, summaries, taste reads | Constellate logic and prompts | `docs/PRODUCT_SOUL.md`, `docs/INSIGHT_ENGINE.md`, `docs/ETHICAL_AI_BUILDING.md` |
 | Visual hierarchy, UI, page modules | Product UI agent | `docs/DESIGN_SYSTEM.md`, `docs/PROFILE_VISUAL_BRIEF.md`, relevant page spec |
+| Context/token discipline | Repo-local context discipline skill | `.agents/skills/context-discipline/SKILL.md` |
 
 ### Alchemy boundary
 
