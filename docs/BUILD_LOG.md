@@ -456,3 +456,40 @@ The product should remain:
 - Alchemy animation object is still under-typed and not checked deeply enough.
 - Cold profile load can still be around 7 seconds due to wallet fetching and OpenSea visibility filtering.
 - Market attention currently returns `null` in the main profile response until the lazy implementation is added.
+
+---
+
+## 2026-05-16 — Social Share V1 paused
+
+### Completed
+
+- Defined `docs/SOCIAL_SHARE_V1_SCOPE.md`
+- Added Named Orbit share preview
+- Added editable Orbit share name
+- Preserved seed-only remix URLs
+- Fixed shared `/orbit` URL hydration mismatch
+- Aligned local page, metadata, and OG seed labels for known collections
+
+### Current status
+
+Named Orbit is locally share-ready.
+
+The local `/orbit` share URL now:
+- preserves `seed`, `name`, and `from`
+- server-renders the Named Orbit state
+- avoids the previous hydration mismatch
+- includes Open Graph and X/Twitter metadata
+- renders the `/orbit/og` preview image locally
+- uses consistent labels such as `mfers`, `Milady`, and `goblintown.wtf`
+
+### Not yet done
+
+- Public deployment
+- X/Farcaster unfurl testing
+- Production-domain OG image verification
+- Compare share preview
+- Wallet Read share preview
+
+### Next time
+
+Resume with public deployment or production share verification before expanding social share work to Compare or Wallet Read.
