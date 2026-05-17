@@ -1108,13 +1108,18 @@ export default function OrbitTestPage() {
     setError("");
     setShareStatus("idle");
 
+    const currentUrlState = readOrbitUrlState();
+    const isSeedOnlyRemix =
+      mode === "custom" &&
+      !currentUrlState.wallet &&
+      currentUrlState.seedSlugs.length > 0;
     const sourceWalletRows = explicitWalletRows || walletRows;
     const queryWallets = sourceWalletRows
       .map((value) => value.trim())
       .filter(Boolean)
       .join(",");
 
-    if (!queryWallets) {
+    if (!queryWallets && !isSeedOnlyRemix) {
       setError("Enter at least one wallet.");
       setLoading(false);
       setLoadingSource(null);
@@ -1129,19 +1134,21 @@ export default function OrbitTestPage() {
     }
 
     try {
-      const params = new URLSearchParams({
-        wallet: queryWallets,
-        debug: "1",
-        resultLimit: "20",
-      });
-
       const currentFocusedSlugs = mode === "custom"
         ? getFocusedSlugs(roomStates)
         : explicitSeedSlugs.map(normalizeSeedSlug).filter(Boolean);
       const currentExcludedSlugs = mode === "custom" ? getExcludedSlugs(roomStates) : [];
+      const params = new URLSearchParams({
+        debug: "1",
+        resultLimit: "20",
+      });
+
+      if (queryWallets && !isSeedOnlyRemix) {
+        params.set("wallet", queryWallets);
+      }
 
       if (currentFocusedSlugs.length > 0) {
-        params.set("seedSlugs", currentFocusedSlugs.join(","));
+        params.set(isSeedOnlyRemix ? "seed" : "seedSlugs", currentFocusedSlugs.join(","));
       }
 
       if (mode === "custom" && currentExcludedSlugs.length > 0) {
@@ -1188,7 +1195,7 @@ export default function OrbitTestPage() {
           generateFallbackOrbitName(previousSeedCollections);
         const previousWasNamed = Boolean(orbitNameParam || remixFromParam || hasRunRemix);
         const remixFrom = remixFromParam || (previousWasNamed ? slugifyOrbitName(previousOrbitName) : "");
-        const nextUrl = buildOrbitUrl(queryWallets, currentFocusedSlugs, {
+        const nextUrl = buildOrbitUrl(isSeedOnlyRemix ? "" : queryWallets, currentFocusedSlugs, {
           name: nextOrbitName,
           from: remixFrom,
         });
@@ -1731,23 +1738,28 @@ export default function OrbitTestPage() {
               </div>
 
               {identitySeedCollections.length > 0 && (
-                <div
-                  style={{
-                    display: "flex",
-                    flexWrap: "wrap",
-                    gap: 8,
-                    marginTop: 16,
-                  }}
-                  aria-label="Seed collections"
-                >
-                  {identitySeedCollections.map((collection) => (
-                    <RoomChip
-                      key={collection.slug || collection.name}
-                      slug={collection.slug}
-                      collection={collection}
-                    />
-                  ))}
-                </div>
+                <>
+                  <p style={{ margin: "16px 0 0", color: "#a99daa", fontSize: 12 }}>
+                    Seed collections shaping this orbit
+                  </p>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 8,
+                      marginTop: 8,
+                    }}
+                    aria-label="Seed collections shaping this orbit"
+                  >
+                    {identitySeedCollections.map((collection) => (
+                      <RoomChip
+                        key={collection.slug || collection.name}
+                        slug={collection.slug}
+                        collection={collection}
+                      />
+                    ))}
+                  </div>
+                </>
               )}
 
               <p
@@ -2265,6 +2277,9 @@ export default function OrbitTestPage() {
                   <div>
                     <p style={{ margin: "5px 0 0", color: "#c8bdca", fontSize: 13 }}>
                       Ready to run this remix with these seed collections?
+                    </p>
+                    <p style={{ margin: "5px 0 0", color: "#8f8292", fontSize: 12, lineHeight: 1.45 }}>
+                      This reruns the orbit and updates the share URL for the remixed seed set.
                     </p>
                   </div>
 
