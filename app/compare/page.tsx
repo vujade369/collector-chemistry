@@ -1270,7 +1270,10 @@ function ComparePageContent() {
       setWalletA(a);
       setWalletB(b);
       setTimeout(() => {
-        void runCompareFromInputs(a, b, { replaceUrl: true });
+        void runCompareFromInputs(a, b, {
+          replaceUrl: true,
+          writeResolvedUrl: false,
+        });
       }, 0);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1451,7 +1454,7 @@ function ComparePageContent() {
   async function runCompareFromInputs(
     inputA: string,
     inputB: string,
-    options: { replaceUrl?: boolean } = {}
+    options: { replaceUrl?: boolean; writeResolvedUrl?: boolean } = {}
   ) {
     if (!inputA.trim() || !inputB.trim()) {
       setError("Enter two wallet addresses or ENS names to compare.");
@@ -1472,11 +1475,13 @@ function ComparePageContent() {
         return;
       }
 
-      const nextUrl = `/compare?a=${encodeURIComponent(resolvedA.address)}&b=${encodeURIComponent(resolvedB.address)}`;
-      if (options.replaceUrl) {
-        router.replace(nextUrl);
-      } else {
-        router.push(nextUrl);
+      if (options.writeResolvedUrl !== false) {
+        const nextUrl = `/compare?a=${encodeURIComponent(resolvedA.address)}&b=${encodeURIComponent(resolvedB.address)}`;
+        if (options.replaceUrl) {
+          router.replace(nextUrl);
+        } else {
+          router.push(nextUrl);
+        }
       }
 
       await runCompareWith(resolvedA.address, resolvedB.address);
