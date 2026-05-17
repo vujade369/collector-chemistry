@@ -481,6 +481,7 @@ The local `/orbit` share URL now:
 - includes Open Graph and X/Twitter metadata
 - renders the `/orbit/og` preview image locally
 - uses consistent labels such as `mfers`, `Milady`, and `goblintown.wtf`
+- Verified canonical `/orbit?seed=mfers,milady,goblintownwtf&name=The%20Chaos%20Canon%20Orbit` cold-loads from URL state after hard refresh, preserves URL params, renders Named Orbit identity, seed pills, and candidate cards, and requests `/api/profile/orbit` with the seed set. No code changes needed.
 
 ### Not yet done
 
