@@ -1518,6 +1518,12 @@ function ComparePageContent() {
   const collectorSecondaryB = getCollectorSecondaryAddress(collectorNameB, submittedB);
   const entryPillNameA = getEntryPillName(data?.walletA?.profile, submittedA);
   const entryPillNameB = getEntryPillName(data?.walletB?.profile, submittedB);
+  const orbitWalletA = (searchParams.get("a") || searchParams.get("walletA") || submittedA).trim();
+  const orbitWalletB = (searchParams.get("b") || searchParams.get("walletB") || submittedB).trim();
+  const orbitBridgeHref =
+    orbitWalletA && orbitWalletB
+      ? `/orbit?wallet=${encodeURIComponent(orbitWalletA)},${encodeURIComponent(orbitWalletB)}`
+      : "";
 
   return (
     <main className="compare-page">
@@ -1673,6 +1679,14 @@ function ComparePageContent() {
                   </div>
                 ) : null}
               </div>
+
+              {orbitBridgeHref && (
+                <div style={{ display: "flex", justifyContent: "center", padding: "0 4px 18px" }}>
+                  <Link href={orbitBridgeHref} className="cc-btn-primary">
+                    Find collectors near both wallets
+                  </Link>
+                </div>
+              )}
 
               <div className="cc-identity-row">
                 <div className="cc-identity cc-identity-a">
